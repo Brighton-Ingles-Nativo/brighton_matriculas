@@ -1,0 +1,299 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  
+  /* Brighton Inglés Nativo — institutional palette */
+  --brand-blue: #204bb3;
+  --brand-navy: #000051;
+  --brand-deep-blue: #0a1a5c;
+  --brand-red: #c8102e;
+  --brand-red-dark: #a50f27;
+  --brand-red-soft: #fff1f3;
+  --brand-blue-soft: #ebf5ff;
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.141 0.005 285.823);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.141 0.005 285.823);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.141 0.005 285.823);
+  --primary: var(--brand-red);
+  --primary-foreground: #ffffff;
+  --secondary: var(--brand-blue);
+  --secondary-foreground: #ffffff;
+  --muted: #f3f6fb;
+  --muted-foreground: #334155;
+  --accent: var(--brand-red-soft);
+  --accent-foreground: var(--brand-red-dark);
+  --destructive: #b4232f;
+  --border: #d8e1f2;
+  --input: #c8d5ec;
+  --ring: var(--brand-red);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: var(--brand-red);
+  --sidebar-foreground: #f7f9ff;
+  --sidebar-primary: var(--brand-red-dark);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--brand-red-dark);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: var(--brand-red-dark);
+  --sidebar-ring: #ffb3bd;
+}
+
+.dark {
+  --background: #101216;
+  --foreground: #eef1f5;
+  --card: #181b21;
+  --card-foreground: #eef1f5;
+  --popover: #1b1f26;
+  --popover-foreground: #eef1f5;
+  --primary: #dc2626;
+  --primary-foreground: #ffffff;
+  --secondary: #1d4ed8;
+  --secondary-foreground: #eef1f5;
+  --muted: #1d222a;
+  --muted-foreground: #aab3c0;
+  --accent: #3b1d27;
+  --accent-foreground: #fecdd3;
+  --destructive: #f87171;
+  --border: #303640;
+  --input: #343b47;
+  --ring: #ff7183;
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: #991b1b;
+  --sidebar-foreground: #f7f9ff;
+  --sidebar-primary: #b91c1c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #7f1d1d;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #b91c1c;
+  --sidebar-ring: #fda4af;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    box-sizing: border-box;
+  }
+  *, *::before, *::after {
+    box-sizing: inherit;
+  }
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .app-sidebar {
+    @apply fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-sidebar-border bg-sidebar lg:flex;
+    width: var(--app-sidebar-width, 16rem);
+    transition: width 200ms ease-in-out;
+  }
+  .app-sidebar-header {
+    @apply relative my-6 flex h-16 items-center justify-center px-5;
+  }
+  .app-sidebar-brand {
+    @apply grid h-full flex-1 place-items-center;
+  }
+  .app-sidebar-brand-collapsed {
+    @apply flex-none;
+  }
+  .sidebar-toggle {
+    @apply absolute right-3 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg transition-colors;
+    border: 1px solid color-mix(in srgb, var(--sidebar-foreground) 28%, transparent);
+    background: color-mix(in srgb, var(--sidebar-foreground) 12%, transparent);
+    color: var(--sidebar-foreground);
+  }
+  .sidebar-toggle:hover {
+    border-color: color-mix(in srgb, var(--sidebar-foreground) 42%, transparent);
+    background: color-mix(in srgb, var(--sidebar-foreground) 22%, transparent);
+    color: var(--sidebar-foreground);
+  }
+  .app-sidebar-collapsed .sidebar-toggle {
+    @apply -right-4 z-50 shadow-sm;
+    border-color: var(--sidebar-foreground);
+    background: var(--sidebar);
+    color: var(--sidebar-foreground);
+  }
+  .sidebar-link {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground;
+  }
+  .sidebar-link-collapsed {
+    @apply justify-center px-2;
+    justify-content: center;
+  }
+  .sidebar-link-active {
+    @apply bg-sidebar-primary text-sidebar-primary-foreground shadow-sm ring-1 ring-white/10 hover:bg-sidebar-primary hover:text-sidebar-primary-foreground;
+  }
+  .app-shell-content {
+    @apply min-h-screen;
+    padding-left: 0;
+    transition: padding-left 200ms ease-in-out;
+  }
+  .app-shell-content {
+    @media (min-width: 1024px) {
+      padding-left: var(--app-sidebar-width, 16rem);
+    }
+  }
+}
+
+/* Matrículas: acciones de fila con jerarquía y estados explícitos. */
+button[aria-label="Ver detalle"],
+button[aria-label="Editar matrícula"],
+button[aria-label="Generar recibo"],
+button[aria-label="Ver recibo"] {
+  width: 2.25rem;
+  min-width: 2.25rem;
+  border: 1px solid transparent;
+  padding-inline: 0;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, opacity 160ms ease;
+}
+
+button[aria-label="Ver detalle"] {
+  border-color: color-mix(in srgb, var(--brand-red) 22%, transparent);
+  background: color-mix(in srgb, var(--brand-red) 9%, transparent);
+  color: var(--brand-red-dark);
+}
+
+.dark button[aria-label="Ver detalle"] { border-color: #405782; background: #202b40; color: #9eb8f5; }
+.dark button[aria-label="Editar matrícula"] { border-color: #6d5b32; background: #2d291e; color: #e5c875; }
+.dark button[aria-label="Generar recibo"] { border-color: #35606a; background: #1b3035; color: #8bd0da; }
+.dark button[aria-label="Ver recibo"] { border-color: var(--border); background: var(--muted); color: var(--muted-foreground); }
+
+button[aria-label="Editar matrícula"] {
+  border-color: #f2d59b;
+  background: #fff8e8;
+  color: #9a6b16;
+}
+
+button[aria-label="Generar recibo"] {
+  border-color: #b9dfe8;
+  background: #effbfc;
+  color: #267888;
+}
+
+button[aria-label="Ver recibo"] {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--muted) 65%, white);
+  color: var(--muted-foreground);
+}
+
+button[aria-label="Editar matrícula"]:disabled,
+button[aria-label="Generar recibo"]:disabled,
+button[aria-label="Ver recibo"]:disabled {
+  color: var(--muted-foreground);
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+button[aria-label="Editar matrícula"]:disabled { border-color: #f2d59b; background: #fff8e8; color: #9a6b16; }
+button[aria-label="Generar recibo"]:disabled { border-color: #b9dfe8; background: #effbfc; color: #267888; }
+button[aria-label="Ver recibo"]:disabled { border-color: var(--border); background: color-mix(in srgb, var(--muted) 65%, white); }
+
+button[aria-label="Ver detalle"]:hover:not(:disabled) {
+  border-color: var(--brand-red);
+  background: var(--brand-red);
+  color: white;
+}
+
+button[aria-label="Editar matrícula"]:hover:not(:disabled) {
+  border-color: #d39b2c;
+  background: #fff0c7;
+  color: #7d5410;
+}
+
+button[aria-label="Ver detalle"]:focus-visible,
+button[aria-label="Editar matrícula"]:focus-visible,
+button[aria-label="Generar recibo"]:focus-visible,
+button[aria-label="Ver recibo"]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* En modo oscuro las acciones de tabla usan superficies sólidas, no transparencias. */
+.dark button[aria-label="Ver detalle"] {
+  border-color: #f87171;
+  background-color: #4c1d24;
+  color: #fecdd3;
+}
+
+.dark button[aria-label="Editar matrícula"] {
+  border-color: #806b36;
+  background-color: #3a321f;
+  color: #f0d17b;
+}
+
+.dark button[aria-label="Generar recibo"] {
+  border-color: #38727a;
+  background-color: #203d42;
+  color: #a5e2e8;
+}
+
+.dark button[aria-label="Ver recibo"] {
+  border-color: #46505f;
+  background-color: #29313d;
+  color: #c1cad8;
+}
+
+.dark button[aria-label="Ver detalle"]:hover:not(:disabled) { background-color: #dc2626; color: #ffffff; }
+.dark button[aria-label="Editar matrícula"]:hover:not(:disabled) { background-color: #544522; color: #ffe39a; }
+.dark button[aria-label="Generar recibo"]:hover:not(:disabled) { background-color: #2c5960; color: #d4f7fa; }
+.dark button[aria-label="Ver recibo"]:hover:not(:disabled) { background-color: #394555; color: #ffffff; }

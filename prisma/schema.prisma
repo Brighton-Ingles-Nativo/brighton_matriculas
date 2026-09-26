@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  permissions Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  users       User[]
+
+  @@map("roles")
+}
+
+model User {
+  id            String        @id @default(uuid()) @db.Uuid
+  username      String        @unique
+  email         String        @unique
+  password      String
+  name          String
+  picUser       String?       @map("pic_user")
+  active        Boolean       @default(true)
+  emailVerified Boolean       @default(false) @map("email_verified")
+  roleId        String        @map("role_id") @db.Uuid
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  role          Role          @relation(fields: [roleId], references: [id])
+  sessions      UserSession[]
+  contracts     Contract[]
+  receipts      Receipt[]
+
+  @@index([roleId])
+  @@map("users")
+}
+
+model UserSession {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  tokenHash  String   @unique @map("token_hash")
+  expiresAt  DateTime @map("expires_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  rememberMe Boolean  @default(false) @map("remember_me")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("user_sessions")
+}
+
+model Contract {
+  id                    String    @id @default(uuid()) @db.Uuid
+  userId                String    @map("usuario_id") @db.Uuid
+  registeredAt          DateTime  @map("fecha_registro")
+  contractDepartment    String?   @map("contrato_dep") @db.VarChar(100)
+  contractProvince      String?   @map("contrato_prov") @db.VarChar(100)
+  contractDistrict      String?   @map("contrato_dist") @db.VarChar(100)
+  contractNumber        String    @unique @map("nro_contrato") @db.VarChar(20)
+  holderName            String    @map("titular_nombre") @db.VarChar(200)
+  holderBirthDate       DateTime  @map("titular_fecha_nacimiento") @db.Date
+  holderDni             String    @map("titular_dni") @db.VarChar(20)
+  holderEmail           String    @map("titular_email") @db.VarChar(100)
+  holderAddress         String    @map("titular_direccion") @db.VarChar(250)
+  holderDepartment      String?   @map("titular_dep") @db.VarChar(100)
+  holderProvince        String?   @map("titular_prov") @db.VarChar(100)
+  holderDistrict        String?   @map("titular_dist") @db.VarChar(100)
+  holderPhone           String    @map("titular_celular") @db.VarChar(20)
+  beneficiary1Name      String?   @map("beneficiario1_nombre") @db.VarChar(200)
+  beneficiary1BirthDate DateTime? @map("beneficiario1_fecha_nacimiento") @db.Date
+  beneficiary1Dni       String?   @map("beneficiario1_dni") @db.VarChar(20)
+  beneficiary1Email     String?   @map("beneficiario1_email") @db.VarChar(100)
+  beneficiary1Phone     String?   @map("beneficiario1_celular") @db.VarChar(20)
+  beneficiary2Name      String?   @map("beneficiario2_nombre") @db.VarChar(200)
+  beneficiary2BirthDate DateTime? @map("beneficiario2_fecha_nacimiento") @db.Date
+  beneficiary2Dni       String?   @map("beneficiario2_dni") @db.VarChar(20)
+  beneficiary2Email     String?   @map("beneficiario2_email") @db.VarChar(100)
+  beneficiary2Phone     String?   @map("beneficiario2_celular") @db.VarChar(20)
+  currentSituation      String    @map("situacion_actual") @db.VarChar(20)
+  housingType           String    @map("tipo_vivienda") @db.VarChar(20)
+  dataAuthorization     Boolean   @default(false) @map("autorizacion_datos")
+  accepted              Boolean   @default(false) @map("acepto")
+  strategy              String    @map("estrategia") @db.VarChar(50)
+  paymentStartDate      String?   @map("fecha_inicio_pago") @db.VarChar(20)
+  modality              String?   @map("modalidad") @db.VarChar(20)
+  program               String    @map("programa") @db.VarChar(20)
+  plan                  String?   @db.VarChar(50)
+  cashPayment           Boolean   @default(false) @map("modalidad_contado")
+  financedPayment       Boolean   @default(false) @map("modalidad_financiado")
+  programValue          Decimal   @map("valor_programa") @db.Decimal(10, 2)
+  initialPayment        Decimal?  @default(0) @map("cuota_inicial") @db.Decimal(10, 2)
+  balance               Decimal?  @map("saldo") @db.Decimal(10, 2)
+  installmentCount      Int?      @map("nro_cuotas")
+  installmentValue      Decimal?  @map("valor_cuota") @db.Decimal(10, 2)
+  otherPayment          String?   @map("otro_pago") @db.VarChar(100)
+  notes                 String?   @map("observaciones") @db.Text
+  status                String?   @map("estado") @db.VarChar(50)
+  testimonials          Boolean   @default(false) @map("testimonios")
+  dataUsage             Boolean?  @map("uso_datos")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  acceptedAt            DateTime? @map("acepto_fecha")
+  acceptedIp            String?   @map("acepto_ip") @db.VarChar(45)
+  accessToken           String?   @unique @map("access_token") @db.VarChar(64)
+  tokenExpiresAt        DateTime? @map("token_expiration")
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  receipts              Receipt[]
+
+  @@index([userId])
+  @@index([tokenExpiresAt])
+  @@map("contratos")
+}
+
+model Receipt {
+  id              String    @id @default(uuid()) @db.Uuid
+  contractId      String    @map("contrato_id") @db.Uuid
+  userId          String    @map("usuario_id") @db.Uuid
+  registeredRole  String?   @map("rol_registro") @db.VarChar(20)
+  amount          Decimal?  @map("cuota_inicial") @db.Decimal(10, 2)
+  concepts        String?   @map("conceptos") @db.VarChar(255)
+  otherConcept    String?   @map("otros_concepto") @db.VarChar(255)
+  paymentMethod   String?   @map("forma_pago") @db.VarChar(50)
+  operationNumber String?   @map("nro_operacion") @db.VarChar(50)
+  bank            String?   @map("banco") @db.VarChar(50)
+  transactionDate DateTime? @map("fecha_transaccion") @db.Date
+  registeredAt    DateTime  @default(now()) @map("fecha_registro")
+  contract        Contract  @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([contractId])
+  @@index([userId])
+  @@map("recibos")
+}
