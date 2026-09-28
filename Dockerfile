@@ -33,9 +33,10 @@ WORKDIR /app
 
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/prisma/schema.prisma ./prisma/schema.prisma
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/backup_database.sql ./backup_database.sql
 COPY --from=build /app/.output ./.output
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "pnpm exec prisma db push --skip-generate && exec node .output/server/index.mjs"]
+CMD ["sh", "-c", "pnpm exec prisma db push --skip-generate && if [ \"${SEED_DATABASE:-false}\" = \"true\" ]; then pnpm exec prisma db seed; fi && exec node .output/server/index.mjs"]
