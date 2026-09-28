@@ -1,84 +1,78 @@
 import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
-import bcrypt from 'bcryptjs'
 import { Prisma, PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
-const dumpPath = resolve(process.cwd(), 'old_system/matriculas310720260951.sql')
-
-const roles = [
-  { name: 'admin', permissions: { manageUsers: true, manageContracts: true } },
-  { name: 'asesor', permissions: { manageContracts: true } },
-  { name: 'verificador', permissions: { verifyContracts: true } },
-  { name: 'user', permissions: {} }
-] as const
+const dumpPath = resolve(process.cwd(), 'backup_database.sql')
 
 type SqlRow = Record<string, unknown>
 
 // Deterministic UUIDs make the migration repeatable and preserve every relation.
-function legacyUuid(namespace: string, legacyId: number): string {
-  const bytes = createHash('sha1').update(`${namespace}:${legacyId}`).digest()
+function stableUuid(namespace: string, key: string): string {
+  const bytes = createHash('sha1').update(`${namespace}:${key}`).digest()
   bytes[6] = (bytes[6] & 0x0f) | 0x50
   bytes[8] = (bytes[8] & 0x3f) | 0x80
   const hex = bytes.toString('hex').slice(0, 32)
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
 }
 
-function parseSqlValue(value: string): unknown {
-  const trimmed = value.trim()
-  if (trimmed.toUpperCase() === 'NULL') return null
-  if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed)
-  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
-    return trimmed.slice(1, -1).replace(/\\'/g, "'").replace(/''/g, "'")
-  }
-  return trimmed
+function identityKey(value: string): string {
+  return value.trim().toUpperCase().replace(/\s+/g, '')
 }
 
-function parseInsertRows(sql: string, table: string): SqlRow[] {
-  const expression = new RegExp('INSERT\\s+INTO\\s+[^\\w]*' + table + '[^\\w]*\\(([^)]*)\\)\\s+VALUES\\s*([\\s\\S]*?);', 'g')
-  const rows: SqlRow[] = []
-  let match: RegExpExecArray | null
+function decodeCopyField(value: string): unknown {
+  if (value === '\\N') return null
+  let decoded = ''
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index]
+    if (character !== '\\' || index + 1 >= value.length) {
+      decoded += character
+      continue
+    }
 
-  while ((match = expression.exec(sql))) {
-    const columns = match[1].split(',').map((column) => column.trim().replace(/^`|`$/g, ''))
-    const values = match[2]
-    let row: string[] = []
-    let token = ''
-    let inString = false
-    let escaped = false
-    let depth = 0
-    const flush = (): void => { if (token.trim() || row.length) row.push(token.trim()); token = '' }
-
-    for (let index = 0; index < values.length; index += 1) {
-      const character = values[index]
-      const next = values[index + 1]
-      if (inString) {
-        token += character
-        if (escaped) escaped = false
-        else if (character === '\\') escaped = true
-        else if (character === "'" && next === "'") { token += next; index += 1 }
-        else if (character === "'") inString = false
-      } else if (character === "'") { inString = true; token += character }
-      else if (character === '(') depth += 1
-      else if (character === ')') {
-        depth -= 1
-        if (depth === 0) {
-          flush()
-          if (row.length !== columns.length) throw new Error(`Fila inválida en ${table}: esperaba ${columns.length} valores y recibió ${row.length}`)
-          rows.push(Object.fromEntries(columns.map((column, i) => [column, parseSqlValue(row[i] ?? '')])))
-          row = []
-        }
-      } else if (character === ',' && depth === 1) flush()
-      else if (depth > 0) token += character
+    const escaped = value[++index]
+    const simpleEscapes: Record<string, string> = {
+      b: '\b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v', '\\': '\\'
+    }
+    if (escaped in simpleEscapes) {
+      decoded += simpleEscapes[escaped]
+    } else if (/[0-7]/.test(escaped)) {
+      let octal = escaped
+      while (octal.length < 3 && index + 1 < value.length && /[0-7]/.test(value[index + 1])) octal += value[++index]
+      decoded += String.fromCharCode(Number.parseInt(octal, 8))
+    } else if (escaped === 'x' && /[\da-f]/i.test(value[index + 1] || '')) {
+      let hex = ''
+      while (hex.length < 2 && index + 1 < value.length && /[\da-f]/i.test(value[index + 1])) hex += value[++index]
+      decoded += String.fromCharCode(Number.parseInt(hex, 16))
+    } else {
+      decoded += escaped
     }
   }
-  return rows
+  return decoded
+}
+
+function parseCopyRows(sql: string, table: string): SqlRow[] {
+  const header = new RegExp(`^COPY public\\.${table} \\(([^\\n]*)\\) FROM stdin;$`, 'm')
+  const match = header.exec(sql)
+  if (!match || match.index === undefined) throw new Error(`No se encontró COPY public.${table} en ${dumpPath}`)
+  const columns = match[1].split(', ').map((column) => column.trim())
+  const start = match.index + match[0].length + 1
+  const end = sql.indexOf('\n\\.', start)
+  if (end < 0) throw new Error(`La sección COPY de public.${table} está incompleta`)
+  const lines = sql.slice(start, end).split('\n').filter(Boolean)
+  return lines.map((line) => {
+    const values = line.replace(/\r$/, '').split('\t')
+    if (values.length !== columns.length) {
+      throw new Error(`Fila inválida en ${table}: esperaba ${columns.length} valores y recibió ${values.length}`)
+    }
+    return Object.fromEntries(columns.map((column, index) => [column, decodeCopyField(values[index])]))
+  })
 }
 
 function text(value: unknown): string | null {
   if (value === null || value === undefined) return null
-  const result = String(value).replace(/\\'/g, "'").replace(/''/g, "'")
+  const result = String(value)
   return result === '' ? null : result
 }
 
@@ -101,76 +95,225 @@ function decimal(value: unknown): Prisma.Decimal | null {
   return result === null ? null : new Prisma.Decimal(result)
 }
 
-function boolean(value: unknown): boolean { return Number(value || 0) !== 0 }
-function asNumber(value: unknown): number {
-  const result = Number(value)
-  if (!Number.isInteger(result)) throw new Error(`ID legado inválido: ${String(value)}`)
-  return result
+function boolean(value: unknown): boolean { return value === true || value === 't' || value === 'true' || value === 1 || value === '1' }
+
+function json(value: unknown): Prisma.InputJsonValue {
+  if (typeof value !== 'string') return (value ?? {}) as Prisma.InputJsonValue
+  try { return JSON.parse(value) as Prisma.InputJsonValue }
+  catch { throw new Error('JSON inválido en permisos de rol del dump.') }
+}
+
+function integer(value: unknown, field: string): number | null {
+  const raw = text(value)
+  if (raw === null) return null
+  const parsed = Number(raw)
+  if (!Number.isInteger(parsed)) throw new Error(`El campo ${field} no es un entero válido en el dump.`)
+  return parsed
 }
 
 async function main(): Promise<void> {
   const sql = await readFile(dumpPath, 'utf8')
-  const legacyUsers = parseInsertRows(sql, 'usuarios')
-  const legacyContracts = parseInsertRows(sql, 'contratos')
-  const legacyReceipts = parseInsertRows(sql, 'recibos')
-  if (!legacyUsers.length) throw new Error(`No se encontraron usuarios en ${dumpPath}`)
+  const sourceRoles = parseCopyRows(sql, 'roles')
+  const sourceUsers = parseCopyRows(sql, 'users')
+  const sourceContracts = parseCopyRows(sql, 'contratos')
+  const sourceReceipts = parseCopyRows(sql, 'recibos')
+  if (!sourceUsers.length || !sourceContracts.length) throw new Error(`El dump no contiene usuarios y matrículas: ${dumpPath}`)
 
-  for (const role of roles) await prisma.role.upsert({ where: { name: role.name }, update: { permissions: role.permissions }, create: role })
-  const roleIds = new Map((await prisma.role.findMany()).map((role) => [role.name, role.id]))
-  const temporaryPassword = process.env.LEGACY_DEFAULT_PASSWORD
-  if (!temporaryPassword || temporaryPassword.length < 12) throw new Error('Define LEGACY_DEFAULT_PASSWORD con al menos 12 caracteres antes de ejecutar la migración.')
-  const temporaryPasswordHash = await bcrypt.hash(temporaryPassword, 12)
-  const userIds = new Map<number, string>()
-
-  for (const legacy of legacyUsers) {
-    const legacyId = asNumber(legacy.id)
-    const username = requiredText(legacy.usuario, `usuario(${legacyId})`)
-    const roleName = requiredText(legacy.rol, `rol(${legacyId})`)
-    const roleId = roleIds.get(roleName)
-    if (!roleId) throw new Error(`Rol legado no soportado: ${roleName}`)
-    const existing = await prisma.user.findUnique({ where: { username } })
-    const id = existing?.id ?? legacyUuid('user', legacyId)
-    const email = text(legacy.email) ?? `${username}@legacy.invalid`
-    const name = requiredText(legacy.nombre, `nombre(${legacyId})`)
-    await prisma.user.upsert({
-      where: { id },
-      update: { username, email, name, active: boolean(legacy.activo), roleId },
-      create: { id, username, email, password: temporaryPasswordHash, name, active: boolean(legacy.activo), roleId, createdAt: date(legacy.fecha_registro) ?? new Date() }
-    })
-    userIds.set(legacyId, id)
+  // Check all source foreign keys before touching the target database.
+  const sourceRoleIds = new Set(sourceRoles.map((row) => requiredText(row.id, 'roles.id')))
+  const sourceUserIds = new Set(sourceUsers.map((row) => requiredText(row.id, 'users.id')))
+  const sourceContractIds = new Set(sourceContracts.map((row) => requiredText(row.id, 'contratos.id')))
+  const invalidUserRoles = sourceUsers.filter((row) => !sourceRoleIds.has(requiredText(row.role_id, `role_id de ${String(row.username)}`)))
+  const invalidContractUsers = sourceContracts.filter((row) => !sourceUserIds.has(requiredText(row.usuario_id, `usuario_id de ${String(row.nro_contrato)}`)))
+  const invalidReceiptContracts = sourceReceipts.filter((row) => !sourceContractIds.has(requiredText(row.contrato_id, `contrato_id del recibo ${String(row.id)}`)))
+  const invalidReceiptUsers = sourceReceipts.filter((row) => !sourceUserIds.has(requiredText(row.usuario_id, `usuario_id del recibo ${String(row.id)}`)))
+  if (invalidUserRoles.length || invalidContractUsers.length || invalidReceiptContracts.length || invalidReceiptUsers.length) {
+    throw new Error([
+      'El dump contiene relaciones incompletas y no se importará parcialmente.',
+      invalidUserRoles.length ? `Usuarios con rol inexistente: ${invalidUserRoles.map((row) => String(row.id)).join(', ')}` : '',
+      invalidContractUsers.length ? `Matrículas sin asesor: ${invalidContractUsers.map((row) => String(row.id)).join(', ')}` : '',
+      invalidReceiptContracts.length ? `Recibos sin matrícula: ${invalidReceiptContracts.map((row) => String(row.id)).join(', ')}` : '',
+      invalidReceiptUsers.length ? `Recibos sin registrador: ${invalidReceiptUsers.map((row) => String(row.id)).join(', ')}` : ''
+    ].filter(Boolean).join('\n'))
   }
 
-  const contractIds = new Map<number, string>()
-  for (const legacy of legacyContracts) {
-    const legacyId = asNumber(legacy.id)
-    const userId = userIds.get(asNumber(legacy.usuario_id))
-    if (!userId) throw new Error(`El contrato ${legacyId} referencia al usuario inexistente ${String(legacy.usuario_id)}`)
-    const contractNumber = requiredText(legacy.nro_contrato, `nro_contrato(${legacyId})`)
-    const existing = await prisma.contract.findUnique({ where: { contractNumber } })
-    const id = existing?.id ?? legacyUuid('contract', legacyId)
-    const holderBirthDate = date(legacy.titular_fecha_nacimiento)
-    if (!holderBirthDate) throw new Error(`El contrato ${legacyId} no tiene fecha de nacimiento válida`)
-    const data = {
-      id, userId, registeredAt: date(legacy.fecha_registro) ?? new Date(),
-      contractDepartment: text(legacy.contrato_dep), contractProvince: text(legacy.contrato_prov), contractDistrict: text(legacy.contrato_dist), contractNumber,
-      holderName: requiredText(legacy.titular_nombre, `titular_nombre(${legacyId})`), holderBirthDate, holderDni: requiredText(legacy.titular_dni, `titular_dni(${legacyId})`), holderEmail: requiredText(legacy.titular_email, `titular_email(${legacyId})`), holderAddress: requiredText(legacy.titular_direccion, `titular_direccion(${legacyId})`), holderDepartment: text(legacy.titular_dep), holderProvince: text(legacy.titular_prov), holderDistrict: text(legacy.titular_dist), holderPhone: requiredText(legacy.titular_celular, `titular_celular(${legacyId})`),
-      beneficiary1Name: text(legacy.beneficiario1_nombre), beneficiary1BirthDate: date(legacy.beneficiario1_fecha_nacimiento), beneficiary1Dni: text(legacy.beneficiario1_dni), beneficiary1Email: text(legacy.beneficiario1_email), beneficiary1Phone: text(legacy.beneficiario1_celular), beneficiary2Name: text(legacy.beneficiario2_nombre), beneficiary2BirthDate: date(legacy.beneficiario2_fecha_nacimiento), beneficiary2Dni: text(legacy.beneficiario2_dni), beneficiary2Email: text(legacy.beneficiario2_email), beneficiary2Phone: text(legacy.beneficiario2_celular),
-      currentSituation: requiredText(legacy.situacion_actual, `situacion_actual(${legacyId})`), housingType: requiredText(legacy.tipo_vivienda, `tipo_vivienda(${legacyId})`), dataAuthorization: boolean(legacy.autorizacion_datos), accepted: boolean(legacy.acepto), strategy: requiredText(legacy.estrategia, `estrategia(${legacyId})`), paymentStartDate: text(legacy.fecha_inicio_pago), modality: text(legacy.modalidad), program: requiredText(legacy.programa, `programa(${legacyId})`), plan: text(legacy.plan), cashPayment: boolean(legacy.modalidad_contado), financedPayment: boolean(legacy.modalidad_financiado), programValue: decimal(legacy.valor_programa)!, initialPayment: decimal(legacy.cuota_inicial), balance: decimal(legacy.saldo), installmentCount: legacy.nro_cuotas === null ? null : asNumber(legacy.nro_cuotas), installmentValue: decimal(legacy.valor_cuota), otherPayment: text(legacy.otro_pago), notes: text(legacy.observaciones), status: text(legacy.estado), testimonials: boolean(legacy.testimonios), dataUsage: legacy.uso_datos === null ? null : boolean(legacy.uso_datos), createdAt: date(legacy.created_at) ?? new Date(), updatedAt: date(legacy.updated_at) ?? new Date(), acceptedAt: date(legacy.acepto_fecha), acceptedIp: text(legacy.acepto_ip), accessToken: text(legacy.access_token), tokenExpiresAt: date(legacy.token_expiration)
+  const roleIds = new Map<string, string>()
+  for (const source of sourceRoles) {
+    const sourceId = requiredText(source.id, 'roles.id')
+    const name = requiredText(source.name, `name del rol ${sourceId}`)
+    const roleData = {
+      name,
+      permissions: json(source.permissions),
+      createdAt: date(source.created_at) ?? new Date()
     }
-    await prisma.contract.upsert({ where: { id }, update: { userId, updatedAt: data.updatedAt }, create: data })
-    contractIds.set(legacyId, id)
+    const role = await prisma.role.upsert({
+      where: { name },
+      update: roleData,
+      create: { id: sourceId, ...roleData }
+    })
+    roleIds.set(sourceId, role.id)
   }
 
-  for (const legacy of legacyReceipts) {
-    const legacyId = asNumber(legacy.id)
-    const contractId = contractIds.get(asNumber(legacy.contrato_id))
-    const userId = userIds.get(asNumber(legacy.usuario_id))
-    if (!contractId || !userId) { console.warn(`Recibo ${legacyId} omitido: contrato o usuario no encontrado`); continue }
-    const id = legacyUuid('receipt', legacyId)
-    await prisma.receipt.upsert({ where: { id }, update: { contractId, userId }, create: { id, contractId, userId, registeredRole: text(legacy.rol_registro), amount: decimal(legacy.cuota_inicial), concepts: text(legacy.conceptos), otherConcept: text(legacy.otros_concepto), paymentMethod: text(legacy.forma_pago), operationNumber: text(legacy.nro_operacion), bank: text(legacy.banco), transactionDate: date(legacy.fecha_transaccion), registeredAt: date(legacy.fecha_registro) ?? new Date() } })
+  const userIds = new Map<string, string>()
+  for (const source of sourceUsers) {
+    const sourceId = requiredText(source.id, 'users.id')
+    const username = requiredText(source.username, `username del usuario ${sourceId}`)
+    const roleId = roleIds.get(requiredText(source.role_id, `role_id de ${username}`))
+    if (!roleId) throw new Error(`No se pudo resolver el rol del usuario ${username}`)
+    const existing = await prisma.user.findUnique({ where: { username } })
+    const id = existing?.id ?? sourceId
+    const userData = {
+      username,
+      email: requiredText(source.email, `email de ${username}`),
+      password: requiredText(source.password, `password de ${username}`),
+      name: requiredText(source.name, `name de ${username}`),
+      picUser: text(source.pic_user),
+      active: boolean(source.active),
+      emailVerified: boolean(source.email_verified),
+      roleId,
+      createdAt: date(source.created_at) ?? new Date(),
+      updatedAt: date(source.updated_at) ?? new Date()
+    }
+    await prisma.user.upsert({ where: { id }, update: userData, create: { id, ...userData } })
+    userIds.set(sourceId, id)
   }
-  console.log(`Migración completada: ${legacyUsers.length} usuarios, ${legacyContracts.length} contratos y ${legacyReceipts.length} recibos procesados.`)
-  console.warn('Las cuentas migradas usan LEGACY_DEFAULT_PASSWORD. Obliga a cambiarla después del primer acceso.')
+
+  const contractIds = new Map<string, string>()
+  const customerIds = new Set<string>()
+  let studentLinks = 0
+  for (const source of sourceContracts) {
+    const sourceId = requiredText(source.id, 'contratos.id')
+    const userId = userIds.get(requiredText(source.usuario_id, `usuario_id de ${sourceId}`))
+    if (!userId) throw new Error(`La matrícula ${sourceId} referencia a un asesor inexistente.`)
+    const contractNumber = requiredText(source.nro_contrato, `nro_contrato(${sourceId})`)
+    const holderBirthDate = date(source.titular_fecha_nacimiento)
+    if (!holderBirthDate) throw new Error(`La matrícula ${sourceId} no tiene fecha de nacimiento válida.`)
+
+    const customerData = {
+      userId,
+      name: requiredText(source.titular_nombre, `titular_nombre(${sourceId})`),
+      birthDate: holderBirthDate,
+      dni: requiredText(source.titular_dni, `titular_dni(${sourceId})`),
+      email: requiredText(source.titular_email, `titular_email(${sourceId})`),
+      address: requiredText(source.titular_direccion, `titular_direccion(${sourceId})`),
+      department: text(source.titular_dep),
+      province: text(source.titular_prov),
+      district: text(source.titular_dist),
+      phone: requiredText(source.titular_celular, `titular_celular(${sourceId})`)
+    }
+    // The source has no customer history table. Keep each advisor's exact
+    // recorded profile snapshot so later edits do not overwrite older records.
+    const customerId = stableUuid('customer', JSON.stringify([
+      userId, identityKey(customerData.dni), customerData.name, customerData.birthDate.toISOString(),
+      customerData.email, customerData.address, customerData.department, customerData.province,
+      customerData.district, customerData.phone
+    ]))
+    await prisma.customer.upsert({ where: { id: customerId }, update: customerData, create: { id: customerId, ...customerData } })
+    customerIds.add(customerId)
+
+    const existingContract = await prisma.contract.findUnique({ where: { contractNumber } })
+    const id = existingContract?.id ?? sourceId
+    const contractData = {
+      userId,
+      customerId,
+      registeredAt: date(source.fecha_registro) ?? new Date(),
+      contractDepartment: text(source.contrato_dep),
+      contractProvince: text(source.contrato_prov),
+      contractDistrict: text(source.contrato_dist),
+      contractNumber,
+      paymentStartDate: text(source.fecha_inicio_pago),
+      modality: text(source.modalidad),
+      program: requiredText(source.programa, `programa(${sourceId})`),
+      plan: text(source.plan),
+      cashPayment: boolean(source.modalidad_contado),
+      financedPayment: boolean(source.modalidad_financiado),
+      programValue: decimal(source.valor_programa)!,
+      initialPayment: decimal(source.cuota_inicial),
+      balance: decimal(source.saldo),
+      installmentCount: integer(source.nro_cuotas, `nro_cuotas(${sourceId})`),
+      installmentValue: decimal(source.valor_cuota),
+      otherPayment: text(source.otro_pago),
+      status: text(source.estado),
+      accepted: boolean(source.acepto),
+      createdAt: date(source.created_at) ?? new Date(),
+      updatedAt: date(source.updated_at) ?? new Date(),
+      acceptedAt: date(source.acepto_fecha),
+      acceptedIp: text(source.acepto_ip),
+      accessToken: text(source.access_token),
+      tokenExpiresAt: date(source.token_expiration)
+    }
+    await prisma.contract.upsert({ where: { id }, update: contractData, create: { id, ...contractData } })
+    contractIds.set(sourceId, id)
+
+    const otherData = {
+      currentSituation: requiredText(source.situacion_actual, `situacion_actual(${sourceId})`),
+      housingType: requiredText(source.tipo_vivienda, `tipo_vivienda(${sourceId})`),
+      dataAuthorization: boolean(source.autorizacion_datos),
+      strategy: requiredText(source.estrategia, `estrategia(${sourceId})`),
+      notes: text(source.observaciones),
+      testimonials: boolean(source.testimonios),
+      dataUsage: source.uso_datos === null ? null : boolean(source.uso_datos)
+    }
+    await prisma.contractOtherData.upsert({ where: { contractId: id }, update: otherData, create: { contractId: id, ...otherData } })
+
+    for (const slot of [1, 2] as const) {
+      const studentData = {
+        name: text(source[`beneficiario${slot}_nombre`]),
+        birthDate: date(source[`beneficiario${slot}_fecha_nacimiento`]),
+        dni: text(source[`beneficiario${slot}_dni`]),
+        email: text(source[`beneficiario${slot}_email`]),
+        phone: text(source[`beneficiario${slot}_celular`])
+      }
+      if (!studentData.name) {
+        if (studentData.birthDate || studentData.dni || studentData.email || studentData.phone) {
+          throw new Error(`Beneficiario ${slot} de la matrícula ${sourceId} tiene datos, pero no nombre.`)
+        }
+        continue
+      }
+
+      const studentId = stableUuid('student', JSON.stringify([
+        customerId,
+        studentData.dni ? identityKey(studentData.dni) : `${id}:slot-${slot}`,
+        studentData.name,
+        studentData.birthDate?.toISOString() ?? null,
+        studentData.dni,
+        studentData.email,
+        studentData.phone
+      ]))
+      await prisma.student.upsert({ where: { id: studentId }, update: { customerId, ...studentData }, create: { id: studentId, customerId, ...studentData } })
+
+      const enrollmentId = stableUuid('contract-student', `${id}:${studentId}`)
+      await prisma.contractStudent.upsert({
+        where: { contractId_studentId: { contractId: id, studentId } },
+        update: {},
+        create: { id: enrollmentId, contractId: id, studentId }
+      })
+      studentLinks += 1
+    }
+  }
+
+  for (const source of sourceReceipts) {
+    const sourceId = requiredText(source.id, 'recibos.id')
+    const contractId = contractIds.get(requiredText(source.contrato_id, `contrato_id del recibo ${sourceId}`))
+    const userId = userIds.get(requiredText(source.usuario_id, `usuario_id del recibo ${sourceId}`))
+    if (!contractId || !userId) throw new Error(`El recibo ${sourceId} no tiene una matrícula o usuario asociado.`)
+    const receiptData = {
+      contractId,
+      userId,
+      registeredRole: text(source.rol_registro),
+      amount: decimal(source.cuota_inicial),
+      concepts: text(source.conceptos),
+      otherConcept: text(source.otros_concepto),
+      paymentMethod: text(source.forma_pago),
+      operationNumber: text(source.nro_operacion),
+      bank: text(source.banco),
+      transactionDate: date(source.fecha_transaccion),
+      registeredAt: date(source.fecha_registro) ?? new Date()
+    }
+    await prisma.receipt.upsert({ where: { id: sourceId }, update: receiptData, create: { id: sourceId, ...receiptData } })
+  }
+
+  console.log(`Migración completada: ${sourceUsers.length} usuarios, ${customerIds.size} perfiles de cliente, ${sourceContracts.length} matrículas, ${studentLinks} relaciones matrícula-alumno y ${sourceReceipts.length} recibos procesados.`)
 }
 
 main().catch((error: unknown) => { console.error(error); process.exitCode = 1 }).finally(async () => prisma.$disconnect())
