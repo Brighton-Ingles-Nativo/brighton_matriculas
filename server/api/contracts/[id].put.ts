@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, statusMessage: 'ID de matrícula inválido' })
 
-  const contract = await prisma.contract.findUnique({ where: { id }, select: { id: true, userId: true, status: true } })
+  const contract = await prisma.contract.findUnique({ where: { id }, select: { id: true, userId: true, customerId: true, status: true } })
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'Matrícula no encontrada' })
   if (!['admin', 'asesor', 'verificador'].includes(user.role?.name || '')) throw createError({ statusCode: 403, statusMessage: 'No tienes permiso para editar matrículas' })
   if (user.role?.name === 'asesor' && contract.userId !== user.id) throw createError({ statusCode: 403, statusMessage: 'No tienes acceso a esta matrícula' })
@@ -27,11 +27,53 @@ export default defineEventHandler(async (event) => {
   if (text(body.program) !== 'Kids' && !text(body.plan)) throw createError({ statusCode: 400, statusMessage: 'El plan es obligatorio para este programa.' })
 
   const paymentMode = text(body.paymentMode)
-  await prisma.contract.update({ where: { id }, data: {
-    contractDepartment: text(body.contractDepartment), contractProvince: text(body.contractProvince), contractDistrict: text(body.contractDistrict),
-    holderName: text(body.holderName), holderBirthDate: dateValue(body.holderBirthDate)!, holderDni: text(body.holderDni), holderEmail: text(body.holderEmail), holderAddress: text(body.holderAddress), holderDepartment: optionalText(body.holderDepartment), holderProvince: optionalText(body.holderProvince), holderDistrict: optionalText(body.holderDistrict), holderPhone: text(body.holderPhone),
-    beneficiary1Name: optionalText(body.beneficiary1Name), beneficiary1BirthDate: dateValue(body.beneficiary1BirthDate), beneficiary1Dni: optionalText(body.beneficiary1Dni), beneficiary1Email: optionalText(body.beneficiary1Email), beneficiary1Phone: optionalText(body.beneficiary1Phone), beneficiary2Name: optionalText(body.beneficiary2Name), beneficiary2BirthDate: dateValue(body.beneficiary2BirthDate), beneficiary2Dni: optionalText(body.beneficiary2Dni), beneficiary2Email: optionalText(body.beneficiary2Email), beneficiary2Phone: optionalText(body.beneficiary2Phone),
-    currentSituation: text(body.currentSituation) || 'Empleado', housingType: text(body.housingType) || 'Propia', strategy: text(body.strategy), paymentStartDate: optionalText(body.paymentStartDate), modality: text(body.modality), program: text(body.program), plan: text(body.program) === 'Kids' ? null : optionalText(body.plan), cashPayment: paymentMode === 'contado', financedPayment: paymentMode === 'financiado', programValue: money(body.programValue), initialPayment: money(body.initialPayment), balance: money(body.balance), installmentCount: Math.max(0, Math.trunc(Number(body.installmentCount) || 0)), installmentValue: money(body.installmentValue), otherPayment: optionalText(body.otherPayment), notes: optionalText(body.notes), dataAuthorization: Boolean(body.dataAuthorization), testimonials: Boolean(body.testimonials), dataUsage: Boolean(body.dataUsage)
-  }})
+  const studentInputs = Array.isArray(body.students)
+    ? body.students as Array<Record<string, unknown>>
+    : [1, 2].map((number) => ({
+        name: body[`beneficiary${number}Name`], birthDate: body[`beneficiary${number}BirthDate`],
+        dni: body[`beneficiary${number}Dni`], email: body[`beneficiary${number}Email`], phone: body[`beneficiary${number}Phone`]
+      }))
+  const students = studentInputs.map((student) => ({
+    name: text(student.name), birthDate: dateValue(student.birthDate), dni: optionalText(student.dni),
+    email: optionalText(student.email), phone: optionalText(student.phone)
+  })).filter((student) => student.name)
+  const holder = {
+    name: text(body.holderName), birthDate: dateValue(body.holderBirthDate)!, dni: text(body.holderDni),
+    email: text(body.holderEmail), address: text(body.holderAddress), department: optionalText(body.holderDepartment),
+    province: optionalText(body.holderProvince), district: optionalText(body.holderDistrict), phone: text(body.holderPhone)
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.customer.update({ where: { id: contract.customerId }, data: holder })
+    await tx.contract.update({ where: { id }, data: {
+      contractDepartment: text(body.contractDepartment), contractProvince: text(body.contractProvince), contractDistrict: text(body.contractDistrict),
+      paymentStartDate: optionalText(body.paymentStartDate), modality: text(body.modality), program: text(body.program),
+      plan: text(body.program) === 'Kids' ? null : optionalText(body.plan), cashPayment: paymentMode === 'contado',
+      financedPayment: paymentMode === 'financiado', programValue: money(body.programValue), initialPayment: money(body.initialPayment),
+      balance: money(body.balance), installmentCount: Math.max(0, Math.trunc(Number(body.installmentCount) || 0)),
+      installmentValue: money(body.installmentValue), otherPayment: optionalText(body.otherPayment),
+      students: { deleteMany: {} }
+    } })
+    await tx.contractOtherData.upsert({ where: { contractId: id }, create: {
+      contractId: id, currentSituation: text(body.currentSituation) || 'Empleado', housingType: text(body.housingType) || 'Propia',
+      strategy: text(body.strategy), notes: optionalText(body.notes), dataAuthorization: Boolean(body.dataAuthorization),
+      testimonials: Boolean(body.testimonials), dataUsage: Boolean(body.dataUsage)
+    }, update: {
+      currentSituation: text(body.currentSituation) || 'Empleado', housingType: text(body.housingType) || 'Propia',
+      strategy: text(body.strategy), notes: optionalText(body.notes), dataAuthorization: Boolean(body.dataAuthorization),
+      testimonials: Boolean(body.testimonials), dataUsage: Boolean(body.dataUsage)
+    } })
+    const seen = new Set<string>()
+    for (const student of students) {
+      const existing = student.dni ? await tx.student.findFirst({ where: { customerId: contract.customerId, dni: student.dni } }) : null
+      const saved = existing
+        ? await tx.student.update({ where: { id: existing.id }, data: student, select: { id: true } })
+        : await tx.student.create({ data: { customerId: contract.customerId, ...student }, select: { id: true } })
+      if (!seen.has(saved.id)) {
+        await tx.contractStudent.create({ data: { contractId: id, studentId: saved.id } })
+        seen.add(saved.id)
+      }
+    }
+  })
   return { success: true, message: 'Matrícula actualizada correctamente' }
 })

@@ -15,8 +15,8 @@ export default defineEventHandler(async (event) => {
     ...(user.role?.name === 'asesor' ? { contract: { userId: user.id } } : {}),
     ...(search ? { OR: [
       { contract: { contractNumber: { contains: search, mode: 'insensitive' as const } } },
-      { contract: { holderName: { contains: search, mode: 'insensitive' as const } } },
-      { contract: { holderDni: { contains: search, mode: 'insensitive' as const } } },
+      { contract: { customer: { name: { contains: search, mode: 'insensitive' as const } } } },
+      { contract: { customer: { dni: { contains: search, mode: 'insensitive' as const } } } },
       { concepts: { contains: search, mode: 'insensitive' as const } },
       { paymentMethod: { contains: search, mode: 'insensitive' as const } }
     ] } : {})
@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
       skip: (page - 1) * limit,
       take: limit,
       include: {
-        contract: { select: { id: true, contractNumber: true, holderName: true, holderDni: true } },
+        contract: { select: { id: true, contractNumber: true, customer: { select: { name: true, dni: true } } } },
         user: { select: { name: true, username: true } }
       }
     })
@@ -40,7 +40,12 @@ export default defineEventHandler(async (event) => {
     success: true,
     data: receipts.map((receipt) => ({
       ...receipt,
-      amount: receipt.amount?.toString() ?? null
+      amount: receipt.amount?.toString() ?? null,
+      contract: {
+        ...receipt.contract,
+        holderName: receipt.contract.customer.name,
+        holderDni: receipt.contract.customer.dni
+      }
     })),
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
   }

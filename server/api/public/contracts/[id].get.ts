@@ -15,6 +15,9 @@ export default defineEventHandler(async (event) => {
   const contract = await prisma.contract.findFirst({
     where: { id, accessToken: token, tokenExpiresAt: { gt: new Date() } },
     include: {
+      customer: true,
+      students: { include: { student: true }, orderBy: { id: 'asc' } },
+      otherData: true,
       receipts: {
         orderBy: { registeredAt: 'desc' },
         select: { id: true, amount: true, concepts: true, otherConcept: true, paymentMethod: true, operationNumber: true, bank: true, transactionDate: true, registeredAt: true }
@@ -24,11 +27,32 @@ export default defineEventHandler(async (event) => {
 
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'El enlace ha expirado o no es válido' })
 
+  const { accessToken: _accessToken, ...safeContract } = contract
+  const students = contract.students.map(({ student }) => student)
+
   return {
     success: true,
     data: {
-      ...contract,
-      accessToken: undefined,
+      ...safeContract,
+      holderName: contract.customer.name,
+      holderBirthDate: contract.customer.birthDate,
+      holderDni: contract.customer.dni,
+      holderEmail: contract.customer.email,
+      holderPhone: contract.customer.phone,
+      holderAddress: contract.customer.address,
+      holderDepartment: contract.customer.department,
+      holderProvince: contract.customer.province,
+      holderDistrict: contract.customer.district,
+      students,
+      beneficiary1Name: students[0]?.name ?? null,
+      beneficiary2Name: students[1]?.name ?? null,
+      currentSituation: contract.otherData?.currentSituation ?? '—',
+      housingType: contract.otherData?.housingType ?? '—',
+      strategy: contract.otherData?.strategy ?? '—',
+      notes: contract.otherData?.notes ?? null,
+      dataAuthorization: contract.otherData?.dataAuthorization ?? false,
+      testimonials: contract.otherData?.testimonials ?? false,
+      dataUsage: contract.otherData?.dataUsage ?? null,
       programValue: contract.programValue.toString(),
       initialPayment: contract.initialPayment?.toString() ?? null,
       balance: contract.balance?.toString() ?? null,

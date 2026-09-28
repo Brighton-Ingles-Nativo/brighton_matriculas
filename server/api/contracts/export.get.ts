@@ -22,14 +22,24 @@ export default defineEventHandler(async (event) => {
 
   const search = typeof getQuery(event).search === 'string' ? String(getQuery(event).search).trim() : ''
   const contracts = await prisma.contract.findMany({
-    where: search ? { OR: [{ contractNumber: { contains: search, mode: 'insensitive' } }, { holderName: { contains: search, mode: 'insensitive' } }, { holderDni: { contains: search, mode: 'insensitive' } }] } : undefined,
+    where: search ? { OR: [{ contractNumber: { contains: search, mode: 'insensitive' } }, { customer: { name: { contains: search, mode: 'insensitive' } } }, { customer: { dni: { contains: search, mode: 'insensitive' } } }] } : undefined,
     orderBy: { registeredAt: 'desc' },
-    include: { user: { select: { name: true } } }
+    include: { user: { select: { name: true } }, customer: true, otherData: true }
   })
 
   const header = columns.map(([label]) => csv(label)).join(';')
   const rows = contracts.map((contract) => {
-    const row: Record<string, unknown> = { ...contract, advisor: contract.user.name }
+    const row: Record<string, unknown> = {
+      ...contract,
+      holderName: contract.customer.name,
+      holderDni: contract.customer.dni,
+      holderEmail: contract.customer.email,
+      holderPhone: contract.customer.phone,
+      holderAddress: contract.customer.address,
+      strategy: contract.otherData?.strategy,
+      notes: contract.otherData?.notes,
+      advisor: contract.user.name
+    }
     return columns.map(([, key]) => csv(row[key])).join(';')
   })
 

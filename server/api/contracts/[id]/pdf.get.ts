@@ -8,30 +8,10 @@ type PdfContract = {
   contractDepartment: string | null
   contractProvince: string | null
   contractDistrict: string | null
-  holderName: string
-  holderBirthDate: Date
-  holderDni: string
-  holderEmail: string
-  holderAddress: string
-  holderDepartment: string | null
-  holderProvince: string | null
-  holderDistrict: string | null
-  holderPhone: string
-  beneficiary1Name: string | null
-  beneficiary1BirthDate: Date | null
-  beneficiary1Dni: string | null
-  beneficiary1Email: string | null
-  beneficiary1Phone: string | null
-  beneficiary2Name: string | null
-  beneficiary2BirthDate: Date | null
-  beneficiary2Dni: string | null
-  beneficiary2Email: string | null
-  beneficiary2Phone: string | null
-  currentSituation: string
-  housingType: string
-  dataAuthorization: boolean
+  customer: { name: string; birthDate: Date; dni: string; email: string; address: string; department: string | null; province: string | null; district: string | null; phone: string }
+  students: Array<{ student: { name: string; birthDate: Date | null; dni: string | null; email: string | null; phone: string | null } }>
+  otherData: { currentSituation: string; housingType: string; dataAuthorization: boolean; strategy: string; notes: string | null; testimonials: boolean; dataUsage: boolean | null } | null
   accepted: boolean
-  strategy: string
   paymentStartDate: string | null
   modality: string | null
   program: string
@@ -44,10 +24,7 @@ type PdfContract = {
   installmentCount: number | null
   installmentValue: { toString(): string } | null
   otherPayment: string | null
-  notes: string | null
   status: string | null
-  testimonials: boolean
-  dataUsage: boolean | null
   acceptedAt: Date | null
   acceptedIp: string | null
   user: { id: string; name: string; username: string }
@@ -79,16 +56,15 @@ function buildPdf(contract: PdfContract): Buffer {
     `Registrado: ${date(contract.registeredAt)}    Asesor: ${contract.user.name}`,
     '',
     'TITULAR',
-    `Nombre: ${contract.holderName}`,
-    `DNI: ${contract.holderDni}    Nacimiento: ${date(contract.holderBirthDate)}`,
-    `Correo: ${contract.holderEmail}`,
-    `Celular: ${contract.holderPhone}`,
-    `Direccion: ${contract.holderAddress}`,
-    `Ubicacion: ${contract.holderDistrict || '-'}, ${contract.holderProvince || '-'}, ${contract.holderDepartment || '-'}`,
+    `Nombre: ${contract.customer.name}`,
+    `DNI: ${contract.customer.dni}    Nacimiento: ${date(contract.customer.birthDate)}`,
+    `Correo: ${contract.customer.email}`,
+    `Celular: ${contract.customer.phone}`,
+    `Direccion: ${contract.customer.address}`,
+    `Ubicacion: ${contract.customer.district || '-'}, ${contract.customer.province || '-'}, ${contract.customer.department || '-'}`,
     '',
-    'BENEFICIARIOS',
-    `1. ${contract.beneficiary1Name || '-'} | DNI: ${contract.beneficiary1Dni || '-'} | Nacimiento: ${date(contract.beneficiary1BirthDate)} | Correo: ${contract.beneficiary1Email || '-'} | Celular: ${contract.beneficiary1Phone || '-'}`,
-    `2. ${contract.beneficiary2Name || '-'} | DNI: ${contract.beneficiary2Dni || '-'} | Nacimiento: ${date(contract.beneficiary2BirthDate)} | Correo: ${contract.beneficiary2Email || '-'} | Celular: ${contract.beneficiary2Phone || '-'}`,
+    'ALUMNOS / BENEFICIARIOS',
+    ...(contract.students.length ? contract.students.map(({ student }, index) => `${index + 1}. ${student.name} | DNI: ${student.dni || '-'} | Nacimiento: ${date(student.birthDate)} | Correo: ${student.email || '-'} | Celular: ${student.phone || '-'}`) : ['Sin alumnos registrados.']),
     '',
     'PROGRAMA Y PAGOS',
     `Programa: ${contract.program}    Plan: ${contract.plan || '-'}`,
@@ -98,10 +74,10 @@ function buildPdf(contract: PdfContract): Buffer {
     `Contado: ${yesNo(contract.cashPayment)}    Financiado: ${yesNo(contract.financedPayment)}`,
     '',
     'DATOS DEL REGISTRO',
-    `Situacion: ${contract.currentSituation}    Vivienda: ${contract.housingType}`,
-    `Estrategia: ${contract.strategy}    Estado: ${contract.status || '-'}`,
-    `Autorizacion de datos: ${yesNo(contract.dataAuthorization)}    Uso de datos: ${yesNo(contract.dataUsage)}`,
-    `Aceptado: ${yesNo(contract.accepted)}    Testimonios: ${yesNo(contract.testimonials)}`,
+    `Situacion: ${contract.otherData?.currentSituation || '-'}    Vivienda: ${contract.otherData?.housingType || '-'}`,
+    `Estrategia: ${contract.otherData?.strategy || '-'}    Estado: ${contract.status || '-'}`,
+    `Autorizacion de datos: ${yesNo(contract.otherData?.dataAuthorization ?? null)}    Uso de datos: ${yesNo(contract.otherData?.dataUsage ?? null)}`,
+    `Aceptado: ${yesNo(contract.accepted)}    Testimonios: ${yesNo(contract.otherData?.testimonials ?? null)}`,
     `Fecha aceptacion: ${date(contract.acceptedAt)}    IP: ${contract.acceptedIp || '-'}`,
     '',
     'RECIBOS',
@@ -111,7 +87,7 @@ function buildPdf(contract: PdfContract): Buffer {
     ]) : ['No hay recibos registrados.']),
     '',
     'OBSERVACIONES',
-    ...(contract.notes ? contract.notes.split(/\r?\n/) : ['-'])
+    ...(contract.otherData?.notes ? contract.otherData.notes.split(/\r?\n/) : ['-'])
   ]
 
   const wrapped = lines.flatMap((line) => {
@@ -148,11 +124,12 @@ function buildPdf(contract: PdfContract): Buffer {
 
 export default defineEventHandler(async (event) => {
   const user = await getUserBySession(event)
-  const publicToken = getQuery(event).token
-  if (!user && (typeof publicToken !== 'string' || !/^[0-9a-f]{64}$/i.test(publicToken))) throw createError({ statusCode: 401, statusMessage: 'Sesion no valida' })
+  const tokenQuery = getQuery(event).token
+  const publicToken = typeof tokenQuery === 'string' ? tokenQuery : null
+  if (!user && (publicToken === null || !/^[0-9a-f]{64}$/i.test(publicToken))) throw createError({ statusCode: 401, statusMessage: 'Sesion no valida' })
   const id = getRouterParam(event, 'id')
   if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, statusMessage: 'ID de contrato invalido' })
-  const contract = await prisma.contract.findFirst({ where: { id, ...(user ? {} : { accessToken: publicToken, tokenExpiresAt: { gt: new Date() } }) }, include: { user: { select: { id: true, name: true, username: true } }, receipts: { orderBy: { registeredAt: 'desc' }, select: { amount: true, concepts: true, otherConcept: true, paymentMethod: true, operationNumber: true, bank: true, transactionDate: true, registeredAt: true } } } }) as PdfContract | null
+  const contract = await prisma.contract.findFirst({ where: { id, ...(user ? {} : { accessToken: publicToken!, tokenExpiresAt: { gt: new Date() } }) }, include: { user: { select: { id: true, name: true, username: true } }, customer: true, students: { include: { student: true }, orderBy: { id: 'asc' } }, otherData: true, receipts: { orderBy: { registeredAt: 'desc' }, select: { amount: true, concepts: true, otherConcept: true, paymentMethod: true, operationNumber: true, bank: true, transactionDate: true, registeredAt: true } } } }) as PdfContract | null
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'Contrato no encontrado' })
   if (user && user.role?.name === 'asesor' && contract.user.id !== user.id) throw createError({ statusCode: 403, statusMessage: 'No tienes acceso a este contrato' })
   setHeader(event, 'Content-Type', 'application/pdf')

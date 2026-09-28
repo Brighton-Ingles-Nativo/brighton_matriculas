@@ -21,8 +21,8 @@ export default defineEventHandler(async (event) => {
     ...(search ? {
       OR: [
         { contractNumber: { contains: search, mode: 'insensitive' as const } },
-        { holderName: { contains: search, mode: 'insensitive' as const } },
-        { holderDni: { contains: search, mode: 'insensitive' as const } }
+        { customer: { name: { contains: search, mode: 'insensitive' as const } } },
+        { customer: { dni: { contains: search, mode: 'insensitive' as const } } }
       ]
     } : {})
   }
@@ -36,6 +36,7 @@ export default defineEventHandler(async (event) => {
       take: limit,
       include: {
         user: { select: { name: true, username: true } },
+        customer: { select: { name: true, dni: true } },
         receipts: { select: { id: true }, orderBy: { registeredAt: 'desc' }, take: 1 }
       }
     })
@@ -46,8 +47,8 @@ export default defineEventHandler(async (event) => {
     data: contracts.map((contract) => ({
       id: contract.id,
       contractNumber: contract.contractNumber,
-      holderName: contract.holderName,
-      holderDni: contract.holderDni,
+      holderName: contract.customer.name,
+      holderDni: contract.customer.dni,
       program: contract.program,
       plan: contract.plan,
       programValue: contract.programValue.toString(),

@@ -13,6 +13,9 @@ export default defineEventHandler(async (event) => {
     where: { id },
     include: {
       user: { select: { id: true, name: true, username: true, email: true } },
+      customer: true,
+      students: { include: { student: true }, orderBy: { id: 'asc' } },
+      otherData: true,
       receipts: {
         orderBy: { registeredAt: 'desc' },
         select: {
@@ -37,12 +40,48 @@ export default defineEventHandler(async (event) => {
   }
 
   const { accessToken: _accessToken, ...safeContract } = contract
+  const students = contract.students.map(({ student }) => ({
+    id: student.id,
+    name: student.name,
+    birthDate: student.birthDate,
+    dni: student.dni,
+    email: student.email,
+    phone: student.phone
+  }))
+  const otherData = contract.otherData
 
   return {
     success: true,
     data: {
       ...safeContract,
       advisor: contract.user,
+      holderName: contract.customer.name,
+      holderBirthDate: contract.customer.birthDate,
+      holderDni: contract.customer.dni,
+      holderEmail: contract.customer.email,
+      holderAddress: contract.customer.address,
+      holderDepartment: contract.customer.department,
+      holderProvince: contract.customer.province,
+      holderDistrict: contract.customer.district,
+      holderPhone: contract.customer.phone,
+      students,
+      beneficiary1Name: students[0]?.name ?? null,
+      beneficiary1BirthDate: students[0]?.birthDate ?? null,
+      beneficiary1Dni: students[0]?.dni ?? null,
+      beneficiary1Email: students[0]?.email ?? null,
+      beneficiary1Phone: students[0]?.phone ?? null,
+      beneficiary2Name: students[1]?.name ?? null,
+      beneficiary2BirthDate: students[1]?.birthDate ?? null,
+      beneficiary2Dni: students[1]?.dni ?? null,
+      beneficiary2Email: students[1]?.email ?? null,
+      beneficiary2Phone: students[1]?.phone ?? null,
+      currentSituation: otherData?.currentSituation ?? '—',
+      housingType: otherData?.housingType ?? '—',
+      strategy: otherData?.strategy ?? '—',
+      notes: otherData?.notes ?? null,
+      dataAuthorization: otherData?.dataAuthorization ?? false,
+      testimonials: otherData?.testimonials ?? false,
+      dataUsage: otherData?.dataUsage ?? null,
       programValue: contract.programValue.toString(),
       initialPayment: contract.initialPayment?.toString() ?? null,
       balance: contract.balance?.toString() ?? null,

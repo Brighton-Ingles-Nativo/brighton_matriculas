@@ -43,6 +43,13 @@ type ContractPayload = {
   dataAuthorization?: boolean
   testimonials?: boolean
   dataUsage?: boolean
+  students?: Array<{
+    name?: string
+    birthDate?: string
+    dni?: string
+    email?: string
+    phone?: string
+  }>
 }
 
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : ''
@@ -106,58 +113,98 @@ export default defineEventHandler(async (event) => {
   const paymentMode = body.paymentMode
   const token = randomBytes(32).toString('hex')
 
+  const studentInputs = Array.isArray(body.students)
+    ? body.students.map((student) => ({
+        name: text(student.name),
+        birthDate: optionalDate(student.birthDate),
+        dni: optionalText(student.dni),
+        email: optionalText(student.email),
+        phone: optionalText(student.phone)
+      })).filter((student) => student.name)
+    : [1, 2].map((number) => {
+        const value = body as Record<string, unknown>
+        return {
+          name: text(value[`beneficiary${number}Name`]),
+          birthDate: optionalDate(value[`beneficiary${number}BirthDate`]),
+          dni: optionalText(value[`beneficiary${number}Dni`]),
+          email: optionalText(value[`beneficiary${number}Email`]),
+          phone: optionalText(value[`beneficiary${number}Phone`])
+        }
+      })
+  const seenStudentKeys = new Set<string>()
+  const students = studentInputs.filter((student) => {
+    if (!student.name) return false
+    const key = student.dni ? `dni:${student.dni.toLowerCase()}` : `name:${student.name.toLowerCase()}:${student.birthDate?.toISOString() ?? ''}`
+    if (seenStudentKeys.has(key)) return false
+    seenStudentKeys.add(key)
+    return true
+  })
+
   try {
-    const contract = await prisma.contract.create({
-      data: {
-        userId: user.id,
-        registeredAt: new Date(),
-        contractDepartment: text(body.contractDepartment),
-        contractProvince: text(body.contractProvince),
-        contractDistrict: text(body.contractDistrict),
-        contractNumber,
-        holderName: text(body.holderName),
-        holderBirthDate: optionalDate(body.holderBirthDate)!,
-        holderDni: text(body.holderDni),
-        holderEmail: text(body.holderEmail),
-        holderAddress: text(body.holderAddress),
-        holderDepartment: optionalText(body.holderDepartment),
-        holderProvince: optionalText(body.holderProvince),
-        holderDistrict: optionalText(body.holderDistrict),
-        holderPhone: text(body.holderPhone),
-        beneficiary1Name: optionalText(body.beneficiary1Name),
-        beneficiary1BirthDate: optionalDate(body.beneficiary1BirthDate),
-        beneficiary1Dni: optionalText(body.beneficiary1Dni),
-        beneficiary1Email: optionalText(body.beneficiary1Email),
-        beneficiary1Phone: optionalText(body.beneficiary1Phone),
-        beneficiary2Name: optionalText(body.beneficiary2Name),
-        beneficiary2BirthDate: optionalDate(body.beneficiary2BirthDate),
-        beneficiary2Dni: optionalText(body.beneficiary2Dni),
-        beneficiary2Email: optionalText(body.beneficiary2Email),
-        beneficiary2Phone: optionalText(body.beneficiary2Phone),
-        currentSituation: text(body.currentSituation) || 'Empleado',
-        housingType: text(body.housingType) || 'Propia',
-        dataAuthorization: Boolean(body.dataAuthorization),
-        strategy: text(body.strategy),
-        paymentStartDate: optionalText(body.paymentStartDate),
-        modality: text(body.modality),
-        program: text(body.program),
-        plan: text(body.program) === 'Kids' ? null : optionalText(body.plan),
-        cashPayment: paymentMode === 'contado',
-        financedPayment: paymentMode === 'financiado',
-        programValue,
-        initialPayment: money(body.initialPayment),
-        balance: money(body.balance),
-        installmentCount: Math.max(0, Math.trunc(Number(body.installmentCount) || 0)),
-        installmentValue: money(body.installmentValue),
-        otherPayment: optionalText(body.otherPayment),
-        notes: optionalText(body.notes),
-        status: '0',
-        testimonials: Boolean(body.testimonials),
-        dataUsage: Boolean(body.dataUsage),
-        accessToken: token,
-        tokenExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)
-      },
-      select: { id: true, contractNumber: true }
+    const contract = await prisma.$transaction(async (tx) => {
+      const holder = {
+        name: text(body.holderName),
+        birthDate: optionalDate(body.holderBirthDate)!,
+        dni: text(body.holderDni),
+        email: text(body.holderEmail),
+        address: text(body.holderAddress),
+        department: optionalText(body.holderDepartment),
+        province: optionalText(body.holderProvince),
+        district: optionalText(body.holderDistrict),
+        phone: text(body.holderPhone)
+      }
+      const existingCustomer = await tx.customer.findFirst({ where: { userId: user.id, dni: holder.dni } })
+      const customer = existingCustomer
+        ? await tx.customer.update({ where: { id: existingCustomer.id }, data: holder, select: { id: true } })
+        : await tx.customer.create({ data: { userId: user.id, ...holder }, select: { id: true } })
+
+      const created = await tx.contract.create({
+        data: {
+          userId: user.id,
+          customerId: customer.id,
+          registeredAt: new Date(),
+          contractDepartment: text(body.contractDepartment),
+          contractProvince: text(body.contractProvince),
+          contractDistrict: text(body.contractDistrict),
+          contractNumber,
+          paymentStartDate: optionalText(body.paymentStartDate),
+          modality: text(body.modality),
+          program: text(body.program),
+          plan: text(body.program) === 'Kids' ? null : optionalText(body.plan),
+          cashPayment: paymentMode === 'contado',
+          financedPayment: paymentMode === 'financiado',
+          programValue,
+          initialPayment: money(body.initialPayment),
+          balance: money(body.balance),
+          installmentCount: Math.max(0, Math.trunc(Number(body.installmentCount) || 0)),
+          installmentValue: money(body.installmentValue),
+          otherPayment: optionalText(body.otherPayment),
+          status: '0',
+          accessToken: token,
+          tokenExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+          otherData: { create: {
+            currentSituation: text(body.currentSituation) || 'Empleado',
+            housingType: text(body.housingType) || 'Propia',
+            dataAuthorization: Boolean(body.dataAuthorization),
+            strategy: text(body.strategy),
+            notes: optionalText(body.notes),
+            testimonials: Boolean(body.testimonials),
+            dataUsage: Boolean(body.dataUsage)
+          } }
+        },
+        select: { id: true, contractNumber: true }
+      })
+
+      for (const student of students) {
+        const existingStudent = student.dni
+          ? await tx.student.findFirst({ where: { customerId: customer.id, dni: student.dni } })
+          : null
+        const savedStudent = existingStudent
+          ? await tx.student.update({ where: { id: existingStudent.id }, data: student, select: { id: true } })
+          : await tx.student.create({ data: { customerId: customer.id, ...student }, select: { id: true } })
+        await tx.contractStudent.create({ data: { contractId: created.id, studentId: savedStudent.id } })
+      }
+      return created
     })
 
     return { success: true, data: contract }

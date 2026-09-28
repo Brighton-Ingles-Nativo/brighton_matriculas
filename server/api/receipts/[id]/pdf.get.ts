@@ -13,10 +13,10 @@ function buildPdf(receipt: any): Buffer {
     `Fecha: ${new Intl.DateTimeFormat('es-PE', { dateStyle: 'long' }).format(new Date(date))}`,
     '',
     'DATOS DEL TITULAR',
-    `Nombre: ${receipt.contract.holderName}`,
-    `DNI: ${receipt.contract.holderDni}`,
-    `Direccion: ${receipt.contract.holderAddress}`,
-    `Celular: ${receipt.contract.holderPhone}`,
+    `Nombre: ${receipt.contract.customer.name}`,
+    `DNI: ${receipt.contract.customer.dni}`,
+    `Direccion: ${receipt.contract.customer.address}`,
+    `Celular: ${receipt.contract.customer.phone}`,
     '',
     'DETALLE DEL PAGO',
     `Concepto: ${receipt.concepts || '-'}`,
@@ -43,7 +43,7 @@ function buildPdf(receipt: any): Buffer {
 export default defineEventHandler(async (event) => {
   const user = await getUserBySession(event); if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesion no valida' })
   const id = getRouterParam(event, 'id'); if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, statusMessage: 'ID de recibo invalido' })
-  const receipt = await prisma.receipt.findUnique({ where: { id }, include: { contract: true, user: { select: { id: true, name: true } } } }); if (!receipt) throw createError({ statusCode: 404, statusMessage: 'Recibo no encontrado' })
+  const receipt = await prisma.receipt.findUnique({ where: { id }, include: { contract: { include: { customer: true } }, user: { select: { id: true, name: true } } } }); if (!receipt) throw createError({ statusCode: 404, statusMessage: 'Recibo no encontrado' })
   if (user.role?.name === 'asesor' && receipt.contract.userId !== user.id) throw createError({ statusCode: 403, statusMessage: 'No tienes acceso a este recibo' })
   setHeader(event, 'Content-Type', 'application/pdf'); setHeader(event, 'Content-Disposition', `inline; filename="recibo-${receipt.contract.contractNumber}.pdf"`); return buildPdf(receipt)
 })
