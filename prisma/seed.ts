@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { Prisma, PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
-const dumpPath = resolve(process.cwd(), 'backup_database.sql')
+const dumpPath = resolve(process.cwd(), './backup_database.sql')
 
 type SqlRow = Record<string, unknown>
 
