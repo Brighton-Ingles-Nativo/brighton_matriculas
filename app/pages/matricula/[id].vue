@@ -9,10 +9,11 @@ const loading = ref(true);
 const saving = ref(false); 
 const error = ref(''); 
 const success = ref('')
+const isLocked = ref(false)
 
 const departments = ['Amazonas', 'Ancash', 'Apurímac', 'Arequipa', 'Ayacucho', 'Cajamarca', 'Callao', 'Cusco', 'Huancavelica', 'Huánuco', 'Ica', 'Junín', 'La Libertad', 'Lambayeque', 'Lima', 'Loreto', 'Madre de Dios', 'Moquegua', 'Pasco', 'Piura', 'Puno', 'San Martín', 'Tacna', 'Tumbes', 'Ucayali']; 
 const districts = ['Arequipa', 'Alto Selva Alegre', 'Cayma', 'Cerro Colorado', 'Characato', 'Jacobo Hunter', 'José Luis Bustamante y Rivero', 'Mariano Melgar', 'Miraflores', 'Paucarpata', 'Sabandía', 'Sachaca', 'Socabaya', 'Tiabaya', 'Yanahuara', 'Yura', 'La Joya']; 
-const teams = ['Yanahuara', 'José Luis Bustamante y Rivero', 'Virtual'];
+const teams = ref<{ id: string; name: string; site: { id: string; name: string } }[]>([])
 
 const installments = Array.from({ length: 13 }, (_, index) => index + 2)
 const form = reactive<Record<string, any>>({ 
@@ -63,7 +64,22 @@ const isCash = computed(() => form.paymentMode === 'contado');
 const isFinanced = computed(() => form.paymentMode === 'financiado'); 
 const showPlan = computed(() => form.program && form.program !== 'Kids')
 
+const applyDniLookup = (target: 'holder' | 'beneficiary1' | 'beneficiary2', data: { nombres: string; apellidoPaterno: string; apellidoMaterno: string; fechaNacimiento?: string }) => {
+  const name = `${data.nombres} ${data.apellidoPaterno} ${data.apellidoMaterno}`.replace(/\s+/g, ' ').trim()
+  form[`${target}Name`] = name
+  if (data.fechaNacimiento) form[`${target}BirthDate`] = data.fechaNacimiento
+}
+
 const dateInput = (value: string | null) => value ? value.slice(0, 10) : ''
+
+const loadTeams = async () => {
+  try {
+    const response = await $fetch<{ data: typeof teams.value }>('/api/teams', { credentials: 'include' })
+    teams.value = response.data
+  } catch {
+    error.value = 'No se pudieron cargar los equipos comerciales.'
+  }
+}
 
 const money = (value: unknown) => Number(value || 0).toFixed(2)
 
@@ -73,6 +89,7 @@ const loadContract = async () => {
       credentials: 'include' 
     }); 
     const contract = response.data; 
+    isLocked.value = Boolean(contract.accepted) || String(contract.status || '').trim().toLowerCase() === 'firmado'
     contractNumber.value = 
     contract.contractNumber; 
     Object.assign(form, { 
@@ -118,6 +135,10 @@ watch(() => [
 )
 
 const submit = async () => { 
+  if (isLocked.value) {
+    error.value = 'No se puede editar una matrícula firmada.'
+    return
+  }
   saving.value = true; 
   error.value = ''; 
   success.value = ''; 
@@ -136,7 +157,7 @@ const submit = async () => {
   } 
 }
 
-onMounted(loadContract)
+onMounted(async () => { await Promise.all([loadTeams(), loadContract()]) })
 </script>
 
 <template>
@@ -161,6 +182,10 @@ onMounted(loadContract)
         <UiAlertDescription>{{ error }}</UiAlertDescription>
       </UiAlert>
       <form v-else class="space-y-6" @submit.prevent="submit">
+        <UiAlert v-if="isLocked" class="border-amber-200 bg-amber-50 text-amber-900">
+          <UiAlertDescription>Esta matrícula está firmada. El registro es de solo lectura y no admite modificaciones.</UiAlertDescription>
+        </UiAlert>
+        <fieldset :disabled="isLocked" class="space-y-6">
         <UiCard>
           <UiCardHeader>
             <UiCardTitle>Datos del titular</UiCardTitle>
@@ -173,11 +198,11 @@ onMounted(loadContract)
             </div>
             <div class="space-y-2">
               <UiLabel>DNI / CE</UiLabel>
-              <UiInput v-model="form.holderDni" required />
+              <DniLookupField v-model="form.holderDni" required @lookup="applyDniLookup('holder', $event)" />
             </div>
             <div class="space-y-2">
               <UiLabel>Fecha nacimiento</UiLabel>
-              <UiInput v-model="form.holderBirthDate" type="date" required />
+              <UiDatePicker v-model="form.holderBirthDate" required />
             </div>
             <div class="space-y-2">
               <UiLabel>Email</UiLabel>
@@ -192,19 +217,13 @@ onMounted(loadContract)
               <UiInput v-model="form.holderAddress" required />
             </div>
             <div class="space-y-2">
-              <UiLabel>Departamento</UiLabel><select v-model="form.holderDepartment" class="select">
-                <option v-for="item in departments" :key="item">{{ item }}</option>
-              </select>
+              <UiLabel>Departamento</UiLabel><UiSelect v-model="form.holderDepartment"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="item in departments" :key="item" :value="item">{{ item }}</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="space-y-2">
-              <UiLabel>Provincia</UiLabel><select v-model="form.holderProvince" class="select">
-                <option>Arequipa</option>
-              </select>
+              <UiLabel>Provincia</UiLabel><UiSelect v-model="form.holderProvince"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem value="Arequipa">Arequipa</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="space-y-2">
-              <UiLabel>Distrito</UiLabel><select v-model="form.holderDistrict" class="select">
-                <option v-for="item in districts" :key="item">{{ item }}</option>
-              </select>
+              <UiLabel>Distrito</UiLabel><UiSelect v-model="form.holderDistrict"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="item in districts" :key="item" :value="item">{{ item }}</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="space-y-2">
               <UiLabel>Situación laboral</UiLabel>
@@ -226,19 +245,13 @@ onMounted(loadContract)
           </UiCardHeader>
           <UiCardContent class="grid gap-5 p-6 sm:grid-cols-2 lg:grid-cols-4">
             <div class="space-y-2">
-              <UiLabel>Departamento contrato</UiLabel><select v-model="form.contractDepartment" class="select">
-                <option v-for="item in departments" :key="item">{{ item }}</option>
-              </select>
+              <UiLabel>Departamento contrato</UiLabel><UiSelect v-model="form.contractDepartment"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="item in departments" :key="item" :value="item">{{ item }}</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="space-y-2">
-              <UiLabel>Provincia contrato</UiLabel><select v-model="form.contractProvince" class="select">
-                <option>Arequipa</option>
-              </select>
+              <UiLabel>Provincia contrato</UiLabel><UiSelect v-model="form.contractProvince"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem value="Arequipa">Arequipa</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="space-y-2">
-              <UiLabel>Equipo comercial</UiLabel><select v-model="form.contractDistrict" class="select">
-                <option v-for="item in teams" :key="item">{{ item }}</option>
-              </select>
+              <UiLabel>Equipo comercial</UiLabel><UiSelect v-model="form.contractDistrict"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="item in teams" :key="item.id" :value="item.name">{{ item.name }} · {{ item.site.name }}</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="space-y-2">
               <UiLabel>Modalidad</UiLabel>
@@ -257,21 +270,16 @@ onMounted(loadContract)
               <UiInput v-model="form.paymentStartDate" />
             </div>
             <div class="space-y-2">
-              <UiLabel>Modalidad de pago</UiLabel><select v-model="form.paymentMode" class="select">
-                <option value="contado">Contado</option>
-                <option value="financiado">Financiado</option>
-              </select>
+              <UiLabel>Modalidad de pago</UiLabel><UiSelect v-model="form.paymentMode"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem value="contado">Contado</UiSelectItem><UiSelectItem value="financiado">Financiado</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div v-for="number in [1, 2]" :key="number"
               class="grid gap-3 rounded-lg border p-4 sm:col-span-2 sm:grid-cols-2">
               <p class="font-medium sm:col-span-2">Beneficiario {{ number }}</p>
               <UiInput v-model="form[`beneficiary${number}Name` as 'beneficiary1Name' | 'beneficiary2Name']"
                 placeholder="Nombre completo" />
-              <UiInput v-model="form[`beneficiary${number}Dni` as 'beneficiary1Dni' | 'beneficiary2Dni']"
-                placeholder="DNI / CE" />
-              <UiInput
-                v-model="form[`beneficiary${number}BirthDate` as 'beneficiary1BirthDate' | 'beneficiary2BirthDate']"
-                type="date" />
+              <DniLookupField v-model="form[`beneficiary${number}Dni` as 'beneficiary1Dni' | 'beneficiary2Dni']"
+                @lookup="applyDniLookup(`beneficiary${number}`, $event)" />
+              <UiDatePicker v-model="form[`beneficiary${number}BirthDate` as 'beneficiary1BirthDate' | 'beneficiary2BirthDate']" />
               <UiInput v-model="form[`beneficiary${number}Email` as 'beneficiary1Email' | 'beneficiary2Email']"
                 type="email" placeholder="Email" />
               <UiInput v-model="form[`beneficiary${number}Phone` as 'beneficiary1Phone' | 'beneficiary2Phone']"
@@ -297,10 +305,7 @@ onMounted(loadContract)
               <UiInput v-model="form.balance" type="number" readonly />
             </div>
             <div v-if="isFinanced" class="space-y-2">
-              <UiLabel>Nro. cuotas</UiLabel><select v-model="form.installmentCount" class="select">
-                <option value="0">0</option>
-                <option v-for="item in installments" :key="item" :value="String(item)">{{ item }}</option>
-              </select>
+              <UiLabel>Nro. cuotas</UiLabel><UiSelect v-model="form.installmentCount"><UiSelectTrigger class="w-full"><UiSelectValue /></UiSelectTrigger><UiSelectContent><UiSelectItem value="0">0</UiSelectItem><UiSelectItem v-for="item in installments" :key="item" :value="String(item)">{{ item }}</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div v-if="isFinanced" class="space-y-2">
               <UiLabel>Valor cuota</UiLabel>
@@ -323,12 +328,13 @@ onMounted(loadContract)
             </UiAlert>
           </UiCardContent>
         </UiCard>
+        </fieldset>
         <div class="flex justify-end gap-3">
           <UiButton variant="outline" as-child>
             <NuxtLink to="/matriculas">Cancelar</NuxtLink>
           </UiButton>
-          <UiButton type="submit" class="gap-2" :disabled="saving">
-            <Save class="size-4" /> {{ saving ? 'Guardando…' : 'Guardar cambios' }}
+          <UiButton type="submit" class="gap-2" :disabled="saving || isLocked">
+            <Save class="size-4" /> {{ isLocked ? 'Edición bloqueada' : saving ? 'Guardando…' : 'Guardar cambios' }}
           </UiButton>
         </div>
       </form>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ClipboardList, FolderOpen, LayoutDashboard, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, ReceiptText, Settings2, Sun, UserRound } from '@lucide/vue'
+import { Building2, ClipboardList, FolderOpen, LayoutDashboard, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, ReceiptText, Settings2, Sun, UserRound } from '@lucide/vue'
 
 const { user, logout } = useAuth()
 const { isDark, toggleTheme } = useTheme()
@@ -55,6 +55,9 @@ const handleLogout = async () => {
       </NuxtLink>
       <NuxtLink v-if="isAdmin" to="/users" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Administración">
         <Settings2 class="size-4" /> <span v-if="!isCollapsed">Administración</span>
+      </NuxtLink>
+      <NuxtLink v-if="isAdmin" to="/sites" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Sedes y equipos">
+        <Building2 class="size-4" /> <span v-if="!isCollapsed">Sedes y equipos</span>
       </NuxtLink>
     </nav>
     <div class="border-t border-sidebar-border p-3">

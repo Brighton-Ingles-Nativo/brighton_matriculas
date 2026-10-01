@@ -47,9 +47,11 @@
               <UiInput v-model="form.email" type="email" required />
             </div>
             <div>
-              <UiLabel>Rol</UiLabel><select v-model="form.role" class="select">
-                <option v-for="role in roles" :key="role.id" :value="role.name">{{ roleLabel(role.name) }}</option>
-              </select>
+              <UiLabel for="userRole">Rol</UiLabel><UiSelect v-model="form.role"><UiSelectTrigger id="userRole" class="w-full"><UiSelectValue placeholder="Seleccionar rol" /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="role in roles" :key="role.id" :value="role.name">{{ roleLabel(role.name) }}</UiSelectItem></UiSelectContent></UiSelect>
+            </div>
+            <div v-if="form.role !== 'supervisor'" class="sm:col-span-2">
+              <UiLabel for="userSupervisor">Supervisor directo</UiLabel><UiSelect v-model="form.supervisorId"><UiSelectTrigger id="userSupervisor" class="w-full"><UiSelectValue placeholder="Sin supervisor asignado" /></UiSelectTrigger><UiSelectContent><UiSelectItem value="__none__">Sin supervisor asignado</UiSelectItem><UiSelectItem v-for="supervisor in availableSupervisors" :key="supervisor.id" :value="supervisor.id">{{ supervisor.name }} (@{{ supervisor.username }})</UiSelectItem></UiSelectContent></UiSelect>
+              <p class="mt-1 text-xs text-muted-foreground">Permite registrar los subordinados directos de cada supervisor.</p>
             </div>
             <div>
               <UiLabel>{{ editing ? 'Nueva contraseña (opcional)' : 'Contraseña' }}</UiLabel>
@@ -191,6 +193,7 @@
 </template>
 
 <script setup lang="ts">
+import { useDebounceFn } from '@vueuse/core'
 import { Pencil, Plus, RefreshCw, Save, Trash2 } from '@lucide/vue'
 
 definePageMeta({ middleware: ['auth', 'admin'] })
@@ -210,6 +213,9 @@ type ManagedUser = {
   emailVerified: boolean; 
   createdAt: string; 
   role: Role; 
+  supervisorId: string | null;
+  supervisor?: { id: string; name: string; username: string } | null;
+  subordinateCount: number;
   sessionCount: number; 
   contractCount: number 
 }
@@ -239,9 +245,19 @@ const success = ref('');
 const editing = ref<ManagedUser | null>(null); 
 const userFormOpen = ref(false)
 
-const form = reactive({ name: '', username: '', email: '', password: '', role: 'user', active: true })
+const form = reactive({ 
+  name: '', 
+  username: '', 
+  email: '', 
+  password: '', 
+  role: 'user', 
+  supervisorId: '__none__', 
+  active: true 
+})
 
-const permissionKeys = ['admin', 'manageUsers', 'manageContracts', 'verifyContracts']
+const availableSupervisors = computed(() => users.value.filter((managedUser) => managedUser.role.name === 'supervisor' && managedUser.id !== editing.value?.id && managedUser.active))
+
+const permissionKeys = ['admin', 'manageUsers', 'manageContracts', 'verifyContracts', 'viewContracts', 'exportContracts']
 
 const resetMessages = () => { 
   error.value = ''; 
@@ -262,6 +278,8 @@ const loadUsers = async () => { loading.value = true; resetMessages();
     loading.value = false 
   } 
 }
+
+const debouncedLoadUsers = useDebounceFn(() => loadUsers(), 350)
 
 const loadRoles = async () => { 
   try { const response = await $fetch<{ data: Role[] }>('/api/admin/roles', { 
@@ -300,6 +318,7 @@ const openCreate = () => {
     email: '', 
     password: '', 
     role: roles.value[0]?.name || 'user', 
+    supervisorId: '__none__',
     active: true 
   });
 
@@ -314,6 +333,7 @@ const openEdit = (managedUser: ManagedUser) => {
     email: managedUser.email, 
     password: '', 
     role: managedUser.role.name, 
+    supervisorId: managedUser.supervisorId || '__none__',
     active: managedUser.active 
   }); 
   userFormOpen.value = true 
@@ -330,6 +350,7 @@ const saveUser = async () => {
       credentials: 'include', 
       body: { 
         ...form, 
+        supervisorId: form.role === 'supervisor' || form.supervisorId === '__none__' ? null : form.supervisorId,
         ...(editing.value && !form.password ? { 
           password: undefined 
         } : {}) 
@@ -404,11 +425,14 @@ const date = (value: string) => new Intl.DateTimeFormat('es-PE', {
 const roleLabel = (name: string) => ({ 
   admin: 'Administrador', 
   asesor: 'Asesor', 
+  supervisor: 'Supervisor', 
   verificador: 'Verificador', 
+  asistente_comercial: 'Asistente comercial', 
   user: 'Usuario' 
 }[name] || name)
 
 watch(activeTab, loadTab)
+watch(search, () => debouncedLoadUsers())
 
 onMounted(async () => { await loadRoles(); await loadUsers() })
 </script>

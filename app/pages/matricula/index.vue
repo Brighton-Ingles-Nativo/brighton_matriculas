@@ -24,16 +24,12 @@
             <UiCardTitle>Matrículas</UiCardTitle>
             <UiCardDescription>{{ pagination.total }} matrículas encontradas</UiCardDescription>
           </div>
-          <form class="flex w-full gap-2 sm:w-auto" @submit.prevent="submitSearch">
-            <div class="relative w-full sm:w-72">
-              <Search
-                class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <UiInput v-model="search" class="pl-9" placeholder="Buscar matrícula, titular o DNI" />
-            </div>
-            <UiButton type="submit" variant="outline" size="icon" aria-label="Buscar">
-              <SlidersHorizontal class="size-4" />
-            </UiButton>
-          </form>
+          <div class="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:grid-cols-4">
+            <UiInput v-model="holderName" placeholder="Nombre del titular" aria-label="Nombre del titular" />
+            <UiInput v-model="holderDni" placeholder="DNI del titular" aria-label="DNI del titular" />
+            <UiInput v-if="canFilterAdvisor" v-model="advisorName" placeholder="Nombre del asesor" aria-label="Nombre del asesor" />
+            <UiSelect v-model="status"><UiSelectTrigger class="w-full" aria-label="Estado"><UiSelectValue placeholder="Todos los estados" /></UiSelectTrigger><UiSelectContent><UiSelectItem value="revision">En revisión</UiSelectItem><UiSelectItem value="firmado">Firmado</UiSelectItem><UiSelectItem value="revisado">Revisado</UiSelectItem><UiSelectItem value="anulado">Anulado</UiSelectItem></UiSelectContent></UiSelect>
+          </div>
         </UiCardHeader>
         <UiCardContent class="p-0">
           <div v-if="loading" class="space-y-3 p-6">
@@ -91,8 +87,8 @@
                     <UiButton size="icon" title="Ver detalle" aria-label="Ver detalle" @click="openDetail(row)">
                       <Eye class="size-4" />
                     </UiButton>
-                    <UiButton size="icon" :title="canEdit ? 'Editar matrícula' : 'Editar matrícula: sin permisos'"
-                      aria-label="Editar matrícula" :disabled="!canEdit">
+                    <UiButton size="icon" :title="!canEdit ? 'Editar matrícula: sin permisos' : isContractLocked(row) ? 'Matrícula firmada: edición bloqueada' : 'Editar matrícula'"
+                      aria-label="Editar matrícula" :disabled="!canEdit || isContractLocked(row)">
                       <Pencil class="size-4" />
                     </UiButton>
                     <UiButton size="icon" title="Generar recibo: disponible próximamente" aria-label="Generar recibo"
@@ -143,7 +139,8 @@
 </template>
 
 <script setup lang="ts">
-import { ChevronLeft, ChevronRight, Download, Eye, FileCheck2, FilePlus2, Pencil, Plus, Search, SlidersHorizontal } from '@lucide/vue'
+import { useDebounceFn } from '@vueuse/core'
+import { ChevronLeft, ChevronRight, Download, Eye, FileCheck2, FilePlus2, Pencil, Plus } from '@lucide/vue'
 
 interface ContractRow { 
   id: string; 
@@ -240,7 +237,10 @@ definePageMeta({
 
 const { user, verifyToken, csrfHeaders } = useAuth(); 
 
-const search = ref(''); 
+const holderName = ref('');
+const holderDni = ref('');
+const advisorName = ref('');
+const status = ref('');
 const page = ref(1); 
 const loading = ref(true); 
 const error = ref(''); 
@@ -261,8 +261,18 @@ const selectedContract = ref<ContractDetail | null>(null)
 const canExport = computed(() => ['admin', 'verificador'].includes(user.value?.role?.name || '')); 
 const canEdit = computed(() => true); 
 const canApprove = computed(() => ['admin', 'verificador'].includes(user.value?.role?.name || ''))
+const canFilterAdvisor = computed(() => user.value?.role?.name !== 'asesor')
+const isContractLocked = (row?: ContractRow) => Boolean(row?.accepted) || String(row?.status || '').trim().toLowerCase() === 'firmado'
 
-const exportUrl = computed(() => `/api/contracts/export${search.value ? `?search=${encodeURIComponent(search.value)}` : ''}`)
+const exportUrl = computed(() => {
+  const params = new URLSearchParams()
+  if (holderName.value) params.set('holderName', holderName.value)
+  if (holderDni.value) params.set('holderDni', holderDni.value)
+  if (canFilterAdvisor.value && advisorName.value) params.set('advisorName', advisorName.value)
+  if (status.value) params.set('status', status.value)
+  const query = params.toString()
+  return `/api/contracts/export${query ? `?${query}` : ''}`
+})
 
 const loadContracts = async () => { 
   loading.value = true; 
@@ -271,7 +281,11 @@ const loadContracts = async () => {
     const response = await $fetch<ContractsResponse>('/api/contracts', { 
       query: { 
         page: page.value, 
-        search: search.value || undefined } 
+        holderName: holderName.value || undefined,
+        holderDni: holderDni.value || undefined,
+        advisorName: canFilterAdvisor.value ? advisorName.value || undefined : undefined,
+        status: status.value || undefined
+      } 
       }); 
     contracts.value = response.data; 
     pagination.value = response.pagination 
@@ -286,6 +300,8 @@ const submitSearch = async () => {
   page.value = 1; 
   await loadContracts() 
 }; 
+
+const debouncedLoadContracts = useDebounceFn(() => submitSearch(), 350)
 
 const goToPage = async (nextPage: number) => { 
   if (nextPage < 1 || nextPage > pagination.value.totalPages || nextPage === page.value) 
@@ -434,9 +450,9 @@ watch(contracts, async (rows) => {
   const receiptRole = ['admin', 'asesor'].includes(user.value?.role?.name || '');
 
   document.querySelectorAll<HTMLButtonElement>('button[aria-label="Editar matrícula"]')
-    .forEach((button) => { 
-      button.disabled = false 
-    });
+    .forEach((button, index) => {
+      button.disabled = !canEdit.value || isContractLocked(rows[index])
+    }); 
 
   document.querySelectorAll<HTMLButtonElement>('button[aria-label="Ver recibo"]')
     .forEach((button, index) => { 
@@ -466,6 +482,8 @@ onMounted(async () => {
   if (!user.value) await verifyToken(); 
   await loadContracts() 
 })
+
+watch([holderName, holderDni, advisorName, status], () => debouncedLoadContracts())
 
 onBeforeUnmount(() => { 
   document.removeEventListener('click', handleEditAction); 

@@ -1,10 +1,31 @@
 <script setup lang="ts">
 import { ArrowLeft, FileDown } from '@lucide/vue'
-definePageMeta({ middleware: 'auth', ssr: false })
-const route = useRoute(); const loading = ref(true); const error = ref(''); const receipt = ref<any>(null)
+definePageMeta({ 
+  middleware: 'auth', 
+  ssr: false 
+})
+
+const route = useRoute(); 
+const loading = ref(true); 
+const error = ref(''); 
+const receipt = ref<any>(null)
+
 const openPdf = () => window.open(`/api/receipts/${route.params.id}/pdf`, '_blank', 'noopener,noreferrer')
-const formatDate = (value: string | null) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'long' }).format(new Date(value)) : '—'; const formatCurrency = (value: string | null) => value ? new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(value)) : '—'
-onMounted(async () => { try { const response = await $fetch<any>(`/api/receipts/${route.params.id}`, { credentials: 'include' }); receipt.value = response.data } catch (err: any) { error.value = err?.data?.statusMessage || 'No pudimos cargar el recibo.' } finally { loading.value = false } })
+
+const formatDate = (value: string | null) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'long' }).format(new Date(value)) : '—'; 
+const formatCurrency = (value: string | null) => value ? new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(value)) : '—'
+onMounted(async () => { 
+  try { 
+    const response = await $fetch<any>(`/api/receipts/${route.params.id}`, { 
+      credentials: 'include' 
+    }); 
+    receipt.value = response.data 
+  } catch (err: any) { 
+    error.value = err?.data?.statusMessage || 'No pudimos cargar el recibo.' 
+  } finally { 
+    loading.value = false 
+  } 
+})
 </script>
 <template>
   <div class="min-h-[100dvh] bg-muted/20">
