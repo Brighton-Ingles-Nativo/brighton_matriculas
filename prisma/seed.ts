@@ -154,6 +154,18 @@ async function main(): Promise<void> {
     roleIds.set(sourceId, role.id)
   }
 
+  // Roles requeridos por el flujo de matrículas que no existían en el dump legado.
+  await prisma.role.upsert({
+    where: { name: 'supervisor' },
+    update: { permissions: { manageContracts: true } },
+    create: { name: 'supervisor', permissions: { manageContracts: true } }
+  })
+  await prisma.role.upsert({
+    where: { name: 'asistente_comercial' },
+    update: { permissions: { viewContracts: true, exportContracts: true } },
+    create: { name: 'asistente_comercial', permissions: { viewContracts: true, exportContracts: true } }
+  })
+
   const userIds = new Map<string, string>()
   for (const source of sourceUsers) {
     const sourceId = requiredText(source.id, 'users.id')

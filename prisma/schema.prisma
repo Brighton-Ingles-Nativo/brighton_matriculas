@@ -18,24 +18,30 @@ model Role {
 }
 
 model User {
-  id            String        @id @default(uuid()) @db.Uuid
-  username      String        @unique
-  email         String        @unique
-  password      String
-  name          String
-  picUser       String?       @map("pic_user")
-  active        Boolean       @default(true)
-  emailVerified Boolean       @default(false) @map("email_verified")
-  roleId        String        @map("role_id") @db.Uuid
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
-  role          Role          @relation(fields: [roleId], references: [id])
-  sessions      UserSession[]
-  customers     Customer[]    @relation("CustomerAdvisor")
-  contracts     Contract[]
-  receipts      Receipt[]
+  id               String           @id @default(uuid()) @db.Uuid
+  username         String           @unique
+  email            String           @unique
+  password         String
+  name             String
+  picUser          String?          @map("pic_user")
+  active           Boolean          @default(true)
+  emailVerified    Boolean          @default(false) @map("email_verified")
+  roleId           String           @map("role_id") @db.Uuid
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  role             Role             @relation(fields: [roleId], references: [id])
+  supervisorId     String?          @map("supervisor_id") @db.Uuid
+  supervisor       User?            @relation("UserSupervision", fields: [supervisorId], references: [id], onDelete: Restrict)
+  subordinates     User[]           @relation("UserSupervision")
+  sessions         UserSession[]
+  customers        Customer[]       @relation("CustomerAdvisor")
+  contracts        Contract[]
+  receipts         Receipt[]
+  siteSupervisions SiteSupervisor[]
+  teamSupervisions TeamSupervisor[]
 
   @@index([roleId])
+  @@index([supervisorId])
   @@map("users")
 }
 
@@ -54,6 +60,66 @@ model UserSession {
   @@index([userId])
   @@index([expiresAt])
   @@map("user_sessions")
+}
+
+enum TeamModality {
+  PRESENCIAL
+  VIRTUAL
+
+  @@map("modalidad_equipo")
+}
+
+model Site {
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String           @unique @db.VarChar(100)
+  active      Boolean          @default(true)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  teams       Team[]
+  supervisors SiteSupervisor[]
+
+  @@map("sedes")
+}
+
+model Team {
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String           @unique @db.VarChar(100)
+  modality    TeamModality     @map("modalidad")
+  siteId      String           @map("sede_id") @db.Uuid
+  active      Boolean          @default(true)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  site        Site             @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  supervisors TeamSupervisor[]
+
+  @@index([siteId])
+  @@map("equipos")
+}
+
+model SiteSupervisor {
+  id           String   @id @default(uuid()) @db.Uuid
+  siteId       String   @map("sede_id") @db.Uuid
+  supervisorId String   @map("supervisor_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+  site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  supervisor   User     @relation(fields: [supervisorId], references: [id], onDelete: Restrict)
+
+  @@unique([siteId, supervisorId])
+  @@index([supervisorId])
+  @@map("sedes_supervisores")
+}
+
+model TeamSupervisor {
+  id           String   @id @default(uuid()) @db.Uuid
+  teamId       String   @map("equipo_id") @db.Uuid
+  supervisorId String   @map("supervisor_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+  team         Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  supervisor   User     @relation(fields: [supervisorId], references: [id], onDelete: Restrict)
+
+  @@unique([teamId, supervisorId])
+  @@index([supervisorId])
+  @@map("equipos_supervisores")
 }
 
 model Customer {
@@ -129,11 +195,43 @@ model Contract {
   students           ContractStudent[]
   receipts           Receipt[]
   otherData          ContractOtherData?
+  expedient          Expedient?
 
   @@index([userId])
   @@index([customerId])
   @@index([tokenExpiresAt])
   @@map("contratos")
+}
+
+model Expedient {
+  id                   String              @id @default(uuid()) @db.Uuid
+  contractId           String              @unique @map("contrato_id") @db.Uuid
+  status               String              @default("PENDIENTE") @db.VarChar(50)
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+  sentToCommercialAt   DateTime?           @map("enviado_comercial_at")
+  sentToVerificationAt DateTime?           @map("enviado_verificacion_at")
+  verifiedAt           DateTime?           @map("verificado_at")
+  contract             Contract            @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  documents            ExpedientDocument[]
+
+  @@index([status])
+  @@map("expedientes")
+}
+
+model ExpedientDocument {
+  id          String    @id @default(uuid()) @db.Uuid
+  expedientId String    @map("expediente_id") @db.Uuid
+  type        String    @db.VarChar(40)
+  fileName    String    @map("nombre_archivo") @db.VarChar(255)
+  filePath    String    @map("ruta_archivo") @db.VarChar(500)
+  mimeType    String    @map("tipo_mime") @db.VarChar(100)
+  fileSize    Int?      @map("tamano_archivo")
+  uploadedAt  DateTime  @default(now()) @map("cargado_at")
+  expedient   Expedient @relation(fields: [expedientId], references: [id], onDelete: Cascade)
+
+  @@index([expedientId])
+  @@map("expediente_documentos")
 }
 
 model ContractStudent {
