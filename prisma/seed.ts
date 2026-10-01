@@ -192,12 +192,20 @@ async function main(): Promise<void> {
 
   const contractIds = new Map<string, string>()
   const customerIds = new Set<string>()
+  const historicalSiteMembers = new Map<string, { name: string; userIds: Set<string> }>()
   let studentLinks = 0
   for (const source of sourceContracts) {
     const sourceId = requiredText(source.id, 'contratos.id')
     const userId = userIds.get(requiredText(source.usuario_id, `usuario_id de ${sourceId}`))
     if (!userId) throw new Error(`La matrícula ${sourceId} referencia a un asesor inexistente.`)
     const contractNumber = requiredText(source.nro_contrato, `nro_contrato(${sourceId})`)
+    const historicalSiteName = text(source.contrato_dist)?.trim() || null
+    if (historicalSiteName) {
+      const siteKey = identityKey(historicalSiteName)
+      const site = historicalSiteMembers.get(siteKey) ?? { name: historicalSiteName, userIds: new Set<string>() }
+      site.userIds.add(userId)
+      historicalSiteMembers.set(siteKey, site)
+    }
     const holderBirthDate = date(source.titular_fecha_nacimiento)
     if (!holderBirthDate) throw new Error(`La matrícula ${sourceId} no tiene fecha de nacimiento válida.`)
 
@@ -304,6 +312,34 @@ async function main(): Promise<void> {
     }
   }
 
+  // El dump legado no tiene tablas de sedes/equipos. `contrato_dist` contiene
+  // los nombres históricos de sede; se preservan como sedes y se crea un
+  // equipo inicial por sede para que la asignación de asesores sea operativa.
+  let teamMemberships = 0
+  for (const { name, userIds } of historicalSiteMembers.values()) {
+    const siteId = stableUuid('site', identityKey(name))
+    const teamId = stableUuid('team', identityKey(name))
+    const modality = identityKey(name) === 'VIRTUAL' ? 'VIRTUAL' : 'PRESENCIAL'
+    await prisma.site.upsert({
+      where: { id: siteId },
+      update: { name, active: true },
+      create: { id: siteId, name, active: true }
+    })
+    await prisma.team.upsert({
+      where: { id: teamId },
+      update: { name: `Equipo ${name}`, siteId, modality },
+      create: { id: teamId, name: `Equipo ${name}`, siteId, modality }
+    })
+    for (const userId of userIds) {
+      await prisma.teamMember.upsert({
+        where: { teamId_userId: { teamId, userId } },
+        update: {},
+        create: { id: stableUuid('team-member', `${teamId}:${userId}`), teamId, userId }
+      })
+      teamMemberships += 1
+    }
+  }
+
   for (const source of sourceReceipts) {
     const sourceId = requiredText(source.id, 'recibos.id')
     const contractId = contractIds.get(requiredText(source.contrato_id, `contrato_id del recibo ${sourceId}`))
@@ -325,7 +361,7 @@ async function main(): Promise<void> {
     await prisma.receipt.upsert({ where: { id: sourceId }, update: receiptData, create: { id: sourceId, ...receiptData } })
   }
 
-  console.log(`Migración completada: ${sourceUsers.length} usuarios, ${customerIds.size} perfiles de cliente, ${sourceContracts.length} matrículas, ${studentLinks} relaciones matrícula-alumno y ${sourceReceipts.length} recibos procesados.`)
+  console.log(`Migración completada: ${sourceUsers.length} usuarios, ${customerIds.size} perfiles de cliente, ${sourceContracts.length} matrículas, ${studentLinks} relaciones matrícula-alumno, ${historicalSiteMembers.size} sedes, ${teamMemberships} miembros de equipos y ${sourceReceipts.length} recibos procesados.`)
 }
 
 main().catch((error: unknown) => { console.error(error); process.exitCode = 1 }).finally(async () => prisma.$disconnect())

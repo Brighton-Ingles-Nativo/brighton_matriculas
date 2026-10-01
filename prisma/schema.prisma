@@ -39,6 +39,7 @@ model User {
   receipts         Receipt[]
   siteSupervisions SiteSupervisor[]
   teamSupervisions TeamSupervisor[]
+  teamMemberships  TeamMember[]
 
   @@index([roleId])
   @@index([supervisorId])
@@ -91,6 +92,7 @@ model Team {
   updatedAt   DateTime         @updatedAt @map("updated_at")
   site        Site             @relation(fields: [siteId], references: [id], onDelete: Restrict)
   supervisors TeamSupervisor[]
+  members     TeamMember[]
 
   @@index([siteId])
   @@map("equipos")
@@ -120,6 +122,19 @@ model TeamSupervisor {
   @@unique([teamId, supervisorId])
   @@index([supervisorId])
   @@map("equipos_supervisores")
+}
+
+model TeamMember {
+  id        String   @id @default(uuid()) @db.Uuid
+  teamId    String   @map("equipo_id") @db.Uuid
+  userId    String   @map("usuario_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+  @@map("equipos_usuarios")
 }
 
 model Customer {
