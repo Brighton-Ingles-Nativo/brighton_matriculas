@@ -14,17 +14,31 @@ export default defineEventHandler(async (event) => {
   const limit = Number.isInteger(requestedLimit) && requestedLimit > 0
     ? Math.min(requestedLimit, 50)
     : 15
-  const search = typeof query.search === 'string' ? query.search.trim() : ''
+  const holderName = typeof query.holderName === 'string' ? query.holderName.trim() : ''
+  const holderDni = typeof query.holderDni === 'string' ? query.holderDni.trim() : ''
+  const advisorName = typeof query.advisorName === 'string' ? query.advisorName.trim() : ''
+  const status = typeof query.status === 'string' ? query.status.trim() : ''
+
+  const statusFilter = status === 'revision'
+    ? { accepted: false, OR: [{ status: '0' }, { status: null }] }
+    : status === 'firmado'
+      ? { accepted: true }
+      : status === 'revisado'
+        ? { status: '1' }
+        : status === 'anulado'
+          ? { status: '-5' }
+          : {}
 
   const where = {
     ...(user.role?.name === 'asesor' ? { userId: user.id } : {}),
-    ...(search ? {
-      OR: [
-        { contractNumber: { contains: search, mode: 'insensitive' as const } },
-        { customer: { name: { contains: search, mode: 'insensitive' as const } } },
-        { customer: { dni: { contains: search, mode: 'insensitive' as const } } }
-      ]
-    } : {})
+    ...(holderName || holderDni ? {
+      customer: {
+        ...(holderName ? { name: { contains: holderName, mode: 'insensitive' as const } } : {}),
+        ...(holderDni ? { dni: { contains: holderDni, mode: 'insensitive' as const } } : {})
+      }
+    } : {}),
+    ...(advisorName ? { user: { name: { contains: advisorName, mode: 'insensitive' as const } } } : {}),
+    ...statusFilter
   }
 
   const [total, contracts] = await Promise.all([

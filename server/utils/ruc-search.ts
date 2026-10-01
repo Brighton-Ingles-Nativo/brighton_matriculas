@@ -2,12 +2,17 @@ import * as cheerio from 'cheerio';
 import http from 'node:http';
 import https from 'node:https';
 import { URL, URLSearchParams } from 'node:url';
-import { incrementDniCounter } from './dni-counter';
 import { dnipeuService } from './dniperu-service';
 
 const DEFAULT_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.72 Safari/537.36',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'es-PE,es;q=0.9,en;q=0.8',
+  'Cache-Control': 'no-cache',
 };
+
+const SUNAT_DNI_COOLDOWN_MS = 5 * 60_000;
+let sunatDniBlockedUntil = 0;
 
 type HttpResponse = {
   url: string;
@@ -25,6 +30,7 @@ export interface DniLookupResult {
   apellidoMaterno: string;
   nombres: string;
   codVerifica: string;
+  fechaNacimiento?: string;
 }
 
 export interface ParsedCompany {
@@ -53,14 +59,6 @@ export interface LegacyCompanyResult {
   provincia: string;
   distrito: string;
   domicilio_fiscal: string;
-}
-
-interface DniApiResponse {
-  first_name?: string;
-  first_last_name?: string;
-  second_last_name?: string;
-  full_name?: string;
-  document_number?: string;
 }
 
 interface LookupProvider<T> {
@@ -103,7 +101,7 @@ class HttpClient {
   ): Promise<HttpResponse> {
     // Timeout absoluto sobre toda la operación (conexión + transferencia completa).
     // Cubre el caso donde SUNAT acepta la conexión pero manda datos muy lentamente.
-    const ABSOLUTE_TIMEOUT_MS = 10_000;
+    const ABSOLUTE_TIMEOUT_MS = 6_000;
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error(`Absolute timeout after ${ABSOLUTE_TIMEOUT_MS}ms: ${urlStr}`)), ABSOLUTE_TIMEOUT_MS)
     );
@@ -137,7 +135,7 @@ class HttpClient {
           path: parsedUrl.pathname + parsedUrl.search,
           method: init.method,
           headers,
-          timeout: 8000, // 8s — evita conexiones colgadas si SUNAT no responde
+          timeout: 5000, // Un solo intento corto; luego se usa el proveedor alternativo.
         },
         (res) => {
           this.saveCookies(res.headers['set-cookie']);
@@ -171,7 +169,7 @@ class HttpClient {
       req.on('error', reject);
 
       req.on('timeout', () => {
-        req.destroy(new Error(`Request timeout after 8000ms: ${urlStr}`));
+        req.destroy(new Error(`Request timeout after 5000ms: ${urlStr}`));
       });
 
       if (init.body) {
@@ -387,15 +385,15 @@ function parseSunatFullName(fullName: string) {
  */
 export class DniService {
   async get(dni: string): Promise<DniLookupResult | null> {
-    // 1. Primero intentar con SUNAT scraper (RUC 10 + DNI + dígito verificador)
-    try {
-      const verifyDigit = getVerifyCode(dni);
-      if (verifyDigit !== null) {
+    const verifyDigit = getVerifyCode(dni);
+
+    // SUNAT se intenta una sola vez. Si su WAF bloquea la IP, se omite temporalmente.
+    if (verifyDigit !== null && Date.now() >= sunatDniBlockedUntil) {
+      try {
         const ruc = `10${dni}${verifyDigit}`;
         console.log(`[DniService] Querying SUNAT for RUC: ${ruc}`);
-        const rucService = new RucService();
-        const company = await rucService.get(ruc);
-        if (company && company.razonSocial) {
+        const company = await new RucService().get(ruc);
+        if (company?.razonSocial) {
           const parsed = parseSunatFullName(company.razonSocial);
           return {
             dni,
@@ -403,53 +401,27 @@ export class DniService {
             apellidoMaterno: parsed.apellidoMaterno,
             nombres: parsed.nombres,
             codVerifica: String(verifyDigit),
+            fechaNacimiento: await dnipeuService.getBirthDate(dni),
           };
         }
+      } catch (e: any) {
+        const message = e?.message || String(e);
+        if (/status=403|timeout|ETIMEDOUT|ECONNRESET/i.test(message)) {
+          sunatDniBlockedUntil = Date.now() + SUNAT_DNI_COOLDOWN_MS;
+        }
+        console.warn(`[DniService] SUNAT omitido para esta búsqueda: ${message}`);
       }
-    } catch (e: any) {
-      console.log(`[DniService SUNAT Error] ${e?.message || e} — falling back to dnipeu`);
+    } else if (verifyDigit !== null) {
+      console.info('[DniService] SUNAT temporalmente omitido; usando dnipeu.');
     }
 
-    // 2. Fallback: dnipeu.com (scraper)
+    // Fallback inmediato: cubre DNI sin RUC 10 y errores de SUNAT.
     try {
       console.log(`[DniService] Querying dnipeu.com for DNI ${dni}`);
       const result = await dnipeuService.get(dni);
       if (result) return result;
     } catch (e: any) {
-      console.log(`[DniService dnipeu Error] ${e?.message || e} — falling back to Decolecta`);
-    }
-
-    // 3. Fallback: Decolecta API
-    const token = process.env.DECOLECTA_TOKEN || process.env.APIS_NET_PE_TOKEN || process.env.APIS_TOKEN;
-    if (token) {
-      const url = `https://api.decolecta.com/v1/reniec/dni?numero=${dni}`;
-      try {
-        console.log(`[DniService] Querying Decolecta API for DNI ${dni}`);
-        const result = await $fetch<DniApiResponse>(url, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/json',
-          },
-        });
-        if (result && result.first_name) {
-          const mappedResult = {
-            dni: result.document_number || dni,
-            apellidoPaterno: result.first_last_name || "",
-            apellidoMaterno: result.second_last_name || "",
-            nombres: result.first_name || "",
-            codVerifica: String(getVerifyCode(dni)),
-          };
-          const fullName = `${mappedResult.nombres} ${mappedResult.apellidoPaterno} ${mappedResult.apellidoMaterno}`.trim();
-          await incrementDniCounter(dni, true, fullName);
-          return mappedResult;
-        } else {
-          console.warn("[DniService Decolecta] Response did not contain first_name:", result);
-          await incrementDniCounter(dni, false, "Invalid response schema");
-        }
-      } catch (e: any) {
-        console.error("[DniService Decolecta Error]", e?.message || e);
-        await incrementDniCounter(dni, false, e?.message || "Request error");
-      }
+      console.warn(`[DniService] dnipeu falló: ${e?.message || e}`);
     }
 
     return null;
@@ -459,7 +431,7 @@ export class DniService {
 /**
  * Scraper de dnipeu.com (https://dniperu.com/buscar-dni-nombres-apellidos/) ubicado en
  * ./dniperu-service.ts. El singleton exportado `dnipeuService` se importa al
- * inicio de este módulo y se usa como fallback entre SUNAT y Decolecta.
+ * inicio de este módulo y se usa como fallback entre SUNAT y DNIPERU.
  */
 
 export class RucService {
@@ -501,7 +473,7 @@ export class RucService {
       }
       return company;
     } catch (e) {
-      console.error("[RucService Error]", e);
+      console.error('[RucService Error]', e instanceof Error ? e.message : e);
       throw e;
     }
   }

@@ -20,9 +20,31 @@ export default defineEventHandler(async (event) => {
   if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
   if (!['admin', 'verificador'].includes(user.role?.name || '')) throw createError({ statusCode: 403, statusMessage: 'No tienes permiso para exportar matrículas' })
 
-  const search = typeof getQuery(event).search === 'string' ? String(getQuery(event).search).trim() : ''
+  const query = getQuery(event)
+  const holderName = typeof query.holderName === 'string' ? query.holderName.trim() : ''
+  const holderDni = typeof query.holderDni === 'string' ? query.holderDni.trim() : ''
+  const advisorName = typeof query.advisorName === 'string' ? query.advisorName.trim() : ''
+  const status = typeof query.status === 'string' ? query.status.trim() : ''
+  const statusFilter = status === 'revision'
+    ? { accepted: false, OR: [{ status: '0' }, { status: null }] }
+    : status === 'firmado'
+      ? { accepted: true }
+      : status === 'revisado'
+        ? { status: '1' }
+        : status === 'anulado'
+          ? { status: '-5' }
+          : {}
   const contracts = await prisma.contract.findMany({
-    where: search ? { OR: [{ contractNumber: { contains: search, mode: 'insensitive' } }, { customer: { name: { contains: search, mode: 'insensitive' } } }, { customer: { dni: { contains: search, mode: 'insensitive' } } }] } : undefined,
+    where: {
+      ...(holderName || holderDni ? {
+        customer: {
+          ...(holderName ? { name: { contains: holderName, mode: 'insensitive' as const } } : {}),
+          ...(holderDni ? { dni: { contains: holderDni, mode: 'insensitive' as const } } : {})
+        }
+      } : {}),
+      ...(advisorName ? { user: { name: { contains: advisorName, mode: 'insensitive' as const } } } : {}),
+      ...statusFilter
+    },
     orderBy: { registeredAt: 'desc' },
     include: { user: { select: { name: true } }, customer: true, otherData: true }
   })

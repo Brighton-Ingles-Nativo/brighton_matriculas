@@ -13,8 +13,11 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, statusMessage: 'ID de matrícula inválido' })
 
-  const contract = await prisma.contract.findUnique({ where: { id }, select: { id: true, userId: true, customerId: true, status: true } })
+  const contract = await prisma.contract.findUnique({ where: { id }, select: { id: true, userId: true, customerId: true, status: true, accepted: true } })
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'Matrícula no encontrada' })
+  if (contract.accepted || String(contract.status || '').trim().toLowerCase() === 'firmado') {
+    throw createError({ statusCode: 409, statusMessage: 'No se puede editar una matrícula firmada.' })
+  }
   if (!['admin', 'asesor', 'verificador'].includes(user.role?.name || '')) throw createError({ statusCode: 403, statusMessage: 'No tienes permiso para editar matrículas' })
   if (user.role?.name === 'asesor' && contract.userId !== user.id) throw createError({ statusCode: 403, statusMessage: 'No tienes acceso a esta matrícula' })
   if (user.role?.name === 'asesor' && Number(contract.status) !== 0) throw createError({ statusCode: 409, statusMessage: 'Los asesores solo pueden editar matrículas en revisión' })

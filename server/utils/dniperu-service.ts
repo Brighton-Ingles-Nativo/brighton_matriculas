@@ -1,4 +1,4 @@
-import { incrementDniCounter } from './dni-counter';
+////import { incrementDniCounter } from './dni-counter';
 import type { DniLookupResult } from './ruc-search';
 
 /**
@@ -14,12 +14,13 @@ import type { DniLookupResult } from './ruc-search';
  */
 
 const DNIPERU_AJAX_URL = 'https://dniperu.com/wp-admin/admin-ajax.php';
-const DNIPERU_PAGE_URL = 'https://dniperu.com/buscar-dni-nombres-apellidos/';
+const DNIPERU_NAMES_PAGE_URL = 'https://dniperu.com/buscar-dni-nombres-apellidos/';
+const DNIPERU_BIRTH_DATE_PAGE_URL = 'https://dniperu.com/fecha-de-nacimiento-con-dni/';
 const DNIPERU_ORIGIN = 'https://dniperu.com';
 const DNIPERU_UA =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-const DNIPERU_TIMEOUT_MS = 20_000;
-const DNIPERU_TOKEN_CONTEXT = 'buscar_nombres';
+const DNIPERU_TIMEOUT_MS = 8_000;
+const DNIPERU_CACHE_TTL_MS = 10 * 60_000;
 
 interface DniperuToken {
   cc_token: string;
@@ -29,8 +30,12 @@ interface DniperuToken {
 
 export class DniperuService {
   private cookies = new Map<string, string>();
-  private token: DniperuToken | null = null;
+  private tokens = new Map<string, DniperuToken>();
   private sessionPrimed = false;
+  private sessionPromise: Promise<void> | null = null;
+  private tokenPromises = new Map<string, Promise<DniperuToken>>();
+  private resultCache = new Map<string, { value: DniLookupResult; expiresAt: number }>();
+  private resultPromises = new Map<string, Promise<DniLookupResult | null>>();
 
   private setCookiesFromResponse(res: { headers: Headers }) {
     // undici / Nitro fetch expone getSetCookie()
@@ -39,7 +44,7 @@ export class DniperuService {
         ? (res.headers as any).getSetCookie()
         : [];
     for (const c of raw as string[]) {
-      const [pair] = c.split(';');
+      const [pair = ''] = c.split(';');
       const eq = pair.indexOf('=');
       if (eq === -1) continue;
       const name = pair.slice(0, eq).trim();
@@ -54,11 +59,11 @@ export class DniperuService {
       .join('; ');
   }
 
-  private commonHeaders(): Record<string, string> {
+  private commonHeaders(referer = DNIPERU_NAMES_PAGE_URL): Record<string, string> {
     const headers: Record<string, string> = {
       'User-Agent': DNIPERU_UA,
       'X-Requested-With': 'XMLHttpRequest',
-      Referer: DNIPERU_PAGE_URL,
+      Referer: referer,
       Origin: DNIPERU_ORIGIN,
       Accept: 'application/json, text/javascript, */*; q=0.01',
     };
@@ -67,39 +72,50 @@ export class DniperuService {
     return headers;
   }
 
-  private async primeSession() {
+  private async primeSession(pageUrl = DNIPERU_NAMES_PAGE_URL) {
     if (this.sessionPrimed) return;
-    const res = await $fetch.raw(DNIPERU_PAGE_URL, {
-      method: 'GET',
-      headers: {
-        'User-Agent': DNIPERU_UA,
-        Accept:
-          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'es-PE,es;q=0.9',
-      },
-      timeout: DNIPERU_TIMEOUT_MS,
-      ignoreResponseError: true,
-    });
-    this.setCookiesFromResponse(res as any);
-    this.sessionPrimed = true;
+    if (this.sessionPromise) return this.sessionPromise;
+
+    this.sessionPromise = (async () => {
+      const res = await $fetch.raw(pageUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': DNIPERU_UA,
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'es-PE,es;q=0.9',
+        },
+        timeout: DNIPERU_TIMEOUT_MS,
+        ignoreResponseError: true,
+      });
+      this.setCookiesFromResponse(res as any);
+      this.sessionPrimed = true;
+    })();
+
+    try {
+      await this.sessionPromise;
+    } finally {
+      this.sessionPromise = null;
+    }
   }
 
-  private tokenIsValid(): boolean {
-    if (!this.token) return false;
+  private tokenIsValid(context: string): boolean {
+    const token = this.tokens.get(context);
+    if (!token) return false;
     // Refresca hasta 15s antes de la expiración real para evitar condiciones de carrera.
-    return this.token.expiresAt - Date.now() > 15_000;
+    return token.expiresAt - Date.now() > 15_000;
   }
 
-  private async fetchToken(): Promise<DniperuToken> {
+  private async fetchToken(context: string, referer: string): Promise<DniperuToken> {
     const fd = new FormData();
     fd.append('action', 'cc_get_tokens');
-    fd.append('context', DNIPERU_TOKEN_CONTEXT);
+    fd.append('context', context);
     fd.append('company', '');
     fd.append('count', '1');
 
     const res = await $fetch.raw(DNIPERU_AJAX_URL, {
       method: 'POST',
-      headers: this.commonHeaders(),
+      headers: this.commonHeaders(referer),
       body: fd,
       timeout: DNIPERU_TIMEOUT_MS,
       ignoreResponseError: true,
@@ -137,14 +153,24 @@ export class DniperuService {
         : Math.floor(Date.now() / 1000) + (json.data.ttl ?? 120);
     const expiresAt = expiresAtSec * 1000;
 
-    this.token = { cc_token: t.cc_token, cc_sig: t.cc_sig, expiresAt };
-    return this.token;
+    const token = { cc_token: t.cc_token, cc_sig: t.cc_sig, expiresAt };
+    this.tokens.set(context, token);
+    return token;
   }
 
-  private async ensureToken(): Promise<DniperuToken> {
-    await this.primeSession();
-    if (this.tokenIsValid()) return this.token!;
-    return this.fetchToken();
+  private async ensureToken(context: string, referer: string): Promise<DniperuToken> {
+    await this.primeSession(referer);
+    if (this.tokenIsValid(context)) return this.tokens.get(context)!;
+    const pending = this.tokenPromises.get(context);
+    if (pending) return pending;
+
+    const tokenPromise = this.fetchToken(context, referer);
+    this.tokenPromises.set(context, tokenPromise);
+    try {
+      return await tokenPromise;
+    } finally {
+      this.tokenPromises.delete(context);
+    }
   }
 
   private parseMessage(dni: string, message: string): DniLookupResult | null {
@@ -183,20 +209,75 @@ export class DniperuService {
   async get(dni: string): Promise<DniLookupResult | null> {
     if (!/^\d{8}$/.test(dni)) return null;
 
+    const cached = this.resultCache.get(dni);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+    if (cached) this.resultCache.delete(dni);
+
+    const pending = this.resultPromises.get(dni);
+    if (pending) return pending;
+
+    const promise = this.lookupInParallel(dni);
+    this.resultPromises.set(dni, promise);
     try {
-      const token = await this.ensureToken();
+      return await promise;
+    } finally {
+      this.resultPromises.delete(dni);
+    }
+  }
+
+  private async lookupInParallel(dni: string): Promise<DniLookupResult | null> {
+    // El token de nombres es imprescindible; la fecha es un dato complementario.
+    // Si dnipeu falla al emitir el token de fecha, no debemos perder los nombres.
+    let namesToken: DniperuToken
+    try {
+      namesToken = await this.ensureToken('buscar_nombres', DNIPERU_NAMES_PAGE_URL)
+    } catch (error: any) {
+      console.warn(`[DniperuService] No se pudo preparar el token de nombres: ${error?.message || error}`)
+      return null
+    }
+
+    const [namesResult, birthDateResult] = await Promise.allSettled([
+      this.getNames(dni, namesToken),
+      (async () => {
+        try {
+          const birthDateToken = await this.ensureToken('buscar_fecha', DNIPERU_BIRTH_DATE_PAGE_URL)
+          return await this.getBirthDate(dni, birthDateToken)
+        } catch (error: any) {
+          console.warn(`[DniperuService] Fecha de nacimiento no disponible: ${error?.message || error}`)
+          return undefined
+        }
+      })(),
+    ]);
+
+    if (namesResult.status !== 'fulfilled' || !namesResult.value) {
+      return null;
+    }
+
+    const result = {
+      ...namesResult.value,
+      fechaNacimiento:
+        birthDateResult.status === 'fulfilled' ? birthDateResult.value : undefined,
+    };
+    this.resultCache.set(dni, { value: result, expiresAt: Date.now() + DNIPERU_CACHE_TTL_MS });
+    return result;
+  }
+
+  private async getNames(dni: string, token?: DniperuToken): Promise<DniLookupResult | null> {
+
+    try {
+      const namesToken = token ?? await this.ensureToken('buscar_nombres', DNIPERU_NAMES_PAGE_URL);
 
       const fd = new FormData();
       fd.append('action', 'buscar_nombres');
       fd.append('dni4', dni);
       fd.append('buscar_dni', '1');
       fd.append('company', '');
-      fd.append('cc_token', token.cc_token);
-      fd.append('cc_sig', token.cc_sig);
+      fd.append('cc_token', namesToken.cc_token);
+      fd.append('cc_sig', namesToken.cc_sig);
 
       const res = await $fetch.raw(DNIPERU_AJAX_URL, {
         method: 'POST',
-        headers: this.commonHeaders(),
+        headers: this.commonHeaders(DNIPERU_NAMES_PAGE_URL),
         body: fd,
         timeout: DNIPERU_TIMEOUT_MS,
         ignoreResponseError: true,
@@ -207,7 +288,7 @@ export class DniperuService {
         // La sesión puede haber sido invalidada; limpiar caché y reiniciar en la próxima llamada.
         this.cookies.clear();
         this.sessionPrimed = false;
-        this.token = null;
+        this.tokens.clear();
         throw new Error(`buscar_nombres HTTP 403`);
       }
 
@@ -234,12 +315,49 @@ export class DniperuService {
         return null;
       }
 
-      await incrementDniCounter(dni, true, `${parsed.nombres} ${parsed.apellidoPaterno} ${parsed.apellidoMaterno}`.trim());
+      //await incrementDniCounter(dni, true, `${parsed.nombres} ${parsed.apellidoPaterno} ${parsed.apellidoMaterno}`.trim());
       return parsed;
     } catch (e: any) {
       console.error('[DniperuService Error]', e?.message || e);
-      await incrementDniCounter(dni, false, e?.message || 'Request error');
+      //await incrementDniCounter(dni, false, e?.message || 'Request error');
       return null;
+    }
+  }
+
+  async getBirthDate(dni: string, token?: DniperuToken): Promise<string | undefined> {
+    if (!/^\d{8}$/.test(dni)) return undefined;
+
+    const context = 'buscar_fecha';
+    try {
+      const birthDateToken = token ?? await this.ensureToken(context, DNIPERU_BIRTH_DATE_PAGE_URL);
+      const fd = new FormData();
+      fd.append('action', context);
+      fd.append('dni', dni);
+      fd.append('company', '');
+      fd.append('cc_token', birthDateToken.cc_token);
+      fd.append('cc_sig', birthDateToken.cc_sig);
+
+      const res = await $fetch.raw(DNIPERU_AJAX_URL, {
+        method: 'POST',
+        headers: this.commonHeaders(DNIPERU_BIRTH_DATE_PAGE_URL),
+        body: fd,
+        timeout: DNIPERU_TIMEOUT_MS,
+        ignoreResponseError: true,
+      });
+      this.setCookiesFromResponse(res as any);
+
+      if (res.status < 200 || res.status >= 300) {
+        throw new Error(`buscar_fecha HTTP ${res.status}`);
+      }
+
+      const json = (res._data ?? {}) as {
+        success?: boolean;
+        data?: { fechaNacimiento?: string; code?: string };
+      };
+      return json.success && json.data?.fechaNacimiento ? json.data.fechaNacimiento : undefined;
+    } catch (e: any) {
+      console.error('[DniperuService BirthDate Error]', e?.message || e);
+      return undefined;
     }
   }
 }
