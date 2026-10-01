@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ClipboardList, LayoutDashboard, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, ReceiptText, Settings2, Sun, UserRound } from '@lucide/vue'
+import { ClipboardList, FolderOpen, LayoutDashboard, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, ReceiptText, Settings2, Sun, UserRound } from '@lucide/vue'
 
 const { user, logout } = useAuth()
 const { isDark, toggleTheme } = useTheme()
 const router = useRouter()
 const isAdmin = computed(() => user.value?.role?.name === 'admin')
+const canViewExpedients = computed(() => ['admin', 'asesor', 'supervisor', 'asistente_comercial', 'verificador'].includes(user.value?.role?.name || ''))
 const isCollapsed = useState('sidebar-collapsed', () => false)
 const handleLogout = async () => { 
   await logout(); 
@@ -41,6 +42,9 @@ const handleLogout = async () => {
       </NuxtLink>
       <NuxtLink to="/matriculas" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Matrículas">
         <ClipboardList class="size-4" /> <span v-if="!isCollapsed">Matrículas</span>
+      </NuxtLink>
+      <NuxtLink v-if="canViewExpedients" to="/expedientes" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Expedientes">
+        <FolderOpen class="size-4" /> <span v-if="!isCollapsed">Expedientes</span>
       </NuxtLink>
       <NuxtLink to="/recibos" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Recibos">
         <ReceiptText class="size-4" /> <span v-if="!isCollapsed">Recibos</span>
