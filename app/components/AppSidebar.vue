@@ -32,7 +32,7 @@ const handleLogout = async () => {
       </button>
       <div>
         <!-- <p class="text-[11px] text-sidebar-foreground/55">Panel administrativo</p> --> <!-- Descomentar si se desea mostrar el título de sección -->
-      </div>
+      </div>a
     </div>
     <nav class="flex-1 space-y-1 p-3" aria-label="Navegación principal">
       <p v-if="!isCollapsed" class="px-3 pb-2 pt-3 text-[10px] font-bold uppercase tracking-[.14em] text-sidebar-foreground/45">Principal

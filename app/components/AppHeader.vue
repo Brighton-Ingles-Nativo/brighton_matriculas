@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, ChevronDown, LogOut, UserRound } from '@lucide/vue'
+import { ArrowLeft, Bell, ChevronDown, LogOut, UserRound } from '@lucide/vue'
 
 const props = withDefaults(defineProps<{
   title: string
@@ -8,6 +8,7 @@ const props = withDefaults(defineProps<{
 }>(), { subtitle: '' })
 
 const { user, logout } = useAuth()
+const { items: notifications, unreadCount, connected, markRead, enablePush, pushEnabled } = useNotifications()
 const router = useRouter()
 
 const userInitials = computed(() => {
@@ -26,6 +27,15 @@ const handleLogout = async () => {
   await logout()
   await router.push('/login')
 }
+
+const openNotification = async (notification: typeof notifications.value[number]) => {
+  await markRead(notification)
+  if (notification.actionUrl) await router.push(notification.actionUrl)
+}
+
+const enableBrowserNotifications = async () => {
+  await enablePush()
+}
 </script>
 
 <template>
@@ -40,7 +50,50 @@ const handleLogout = async () => {
           <p v-if="props.subtitle" class="hidden truncate text-xs text-muted-foreground sm:block">{{ props.subtitle }}</p>
         </div>
       </div>
-      <div v-if="user" class="flex shrink-0 items-center">
+      <div v-if="user" class="flex shrink-0 items-center gap-2">
+        <UiDropdownMenu>
+          <UiDropdownMenuTrigger as-child>
+            <UiButton variant="ghost" size="icon" class="relative rounded-full" aria-label="Notificaciones">
+              <Bell class="size-4" />
+              <span v-if="unreadCount" class="absolute right-1 top-1 grid min-w-4 place-items-center rounded-full bg-destructive px-1 text-[9px] font-bold leading-4 text-destructive-foreground">
+                {{ unreadCount > 99 ? '99+' : unreadCount }}
+              </span>
+            </UiButton>
+          </UiDropdownMenuTrigger>
+          <UiDropdownMenuContent align="end" class="w-96 max-w-[calc(100vw-2rem)] p-0">
+            <div class="flex items-center justify-between border-b px-4 py-3">
+              <div>
+                <p class="text-sm font-semibold">Notificaciones</p>
+                <p class="text-xs text-muted-foreground">{{ connected ? 'Conectado' : 'Conexión pendiente' }}</p>
+              </div>
+              <UiButton v-if="!pushEnabled" variant="outline" size="sm" class="h-8 text-xs" @click="enableBrowserNotifications">
+                Activar navegador
+              </UiButton>
+              <span v-else class="text-xs text-emerald-600">Navegador activo</span>
+            </div>
+            <div v-if="!notifications.length" class="px-4 py-10 text-center text-sm text-muted-foreground">No tienes notificaciones.</div>
+            <div v-else class="max-h-96 overflow-y-auto p-2">
+              <button
+                v-for="notification in notifications.slice(0, 12)"
+                :key="notification.id"
+                type="button"
+                class="flex w-full gap-3 rounded-xl p-3 text-left transition-colors hover:bg-muted"
+                :class="notification.readAt ? 'opacity-70' : 'bg-primary/5'"
+                @click="openNotification(notification)"
+              >
+                <span class="mt-1 size-2 shrink-0 rounded-full" :class="notification.readAt ? 'bg-muted-foreground/30' : 'bg-primary'" />
+                <span class="min-w-0 flex-1">
+                  <span class="block text-sm font-medium">{{ notification.title }}</span>
+                  <span class="mt-1 block text-xs leading-5 text-muted-foreground">{{ notification.message }}</span>
+                  <span class="mt-1 block text-[10px] text-muted-foreground">{{ new Date(notification.createdAt).toLocaleString() }}</span>
+                </span>
+              </button>
+            </div>
+            <div v-if="notifications.length" class="border-t px-4 py-2 text-right">
+              <NuxtLink to="/notificaciones" class="text-xs font-medium text-primary">Ver todas</NuxtLink>
+            </div>
+          </UiDropdownMenuContent>
+        </UiDropdownMenu>
         <UiDropdownMenu>
           <UiDropdownMenuTrigger as-child>
             <UiButton

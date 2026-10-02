@@ -18,28 +18,35 @@ model Role {
 }
 
 model User {
-  id               String           @id @default(uuid()) @db.Uuid
-  username         String           @unique
-  email            String           @unique
-  password         String
-  name             String
-  picUser          String?          @map("pic_user")
-  active           Boolean          @default(true)
-  emailVerified    Boolean          @default(false) @map("email_verified")
-  roleId           String           @map("role_id") @db.Uuid
-  createdAt        DateTime         @default(now()) @map("created_at")
-  updatedAt        DateTime         @updatedAt @map("updated_at")
-  role             Role             @relation(fields: [roleId], references: [id])
-  supervisorId     String?          @map("supervisor_id") @db.Uuid
-  supervisor       User?            @relation("UserSupervision", fields: [supervisorId], references: [id], onDelete: Restrict)
-  subordinates     User[]           @relation("UserSupervision")
-  sessions         UserSession[]
-  customers        Customer[]       @relation("CustomerAdvisor")
-  contracts        Contract[]
-  receipts         Receipt[]
-  siteSupervisions SiteSupervisor[]
-  teamSupervisions TeamSupervisor[]
-  teamMemberships  TeamMember[]
+  id                           String                @id @default(uuid()) @db.Uuid
+  username                     String                @unique
+  email                        String                @unique
+  password                     String
+  name                         String
+  picUser                      String?               @map("pic_user")
+  active                       Boolean               @default(true)
+  emailVerified                Boolean               @default(false) @map("email_verified")
+  roleId                       String                @map("role_id") @db.Uuid
+  createdAt                    DateTime              @default(now()) @map("created_at")
+  updatedAt                    DateTime              @updatedAt @map("updated_at")
+  role                         Role                  @relation(fields: [roleId], references: [id])
+  supervisorId                 String?               @map("supervisor_id") @db.Uuid
+  supervisor                   User?                 @relation("UserSupervision", fields: [supervisorId], references: [id], onDelete: Restrict)
+  subordinates                 User[]                @relation("UserSupervision")
+  sessions                     UserSession[]
+  customers                    Customer[]            @relation("CustomerAdvisor")
+  contracts                    Contract[]
+  receipts                     Receipt[]
+  siteSupervisions             SiteSupervisor[]
+  teamSupervisions             TeamSupervisor[]
+  teamMemberships              TeamMember[]
+  notifications                Notification[]
+  pushSubscriptions            PushSubscription[]
+  cancellationRequestsMade     CancellationRequest[] @relation("CancellationRequestedBy")
+  cancellationRequestsReviewed CancellationRequest[] @relation("CancellationReviewedBy")
+  expedientObservations        Expedient[]           @relation("ExpedientObservationBy")
+  strategiesCreated            Strategy[]            @relation("StrategyCreatedBy")
+  strategiesUpdated            Strategy[]            @relation("StrategyUpdatedBy")
 
   @@index([roleId])
   @@index([supervisorId])
@@ -61,6 +68,48 @@ model UserSession {
   @@index([userId])
   @@index([expiresAt])
   @@map("user_sessions")
+}
+
+model Notification {
+  id          String    @id @default(uuid()) @db.Uuid
+  recipientId String    @map("recipient_id") @db.Uuid
+  type        String    @db.VarChar(80)
+  title       String    @db.VarChar(160)
+  message     String    @db.Text
+  entityType  String?   @map("entity_type") @db.VarChar(50)
+  entityId    String?   @map("entity_id") @db.Uuid
+  actionUrl   String?   @map("action_url") @db.VarChar(500)
+  priority    String    @default("normal") @db.VarChar(20)
+  data        Json      @default("{}")
+  dedupeKey   String?   @map("dedupe_key") @db.VarChar(180)
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  expiresAt   DateTime? @map("expires_at")
+  recipient   User      @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([recipientId, dedupeKey])
+  @@index([recipientId, readAt, createdAt])
+  @@index([type, createdAt])
+  @@index([entityType, entityId])
+  @@map("notifications")
+}
+
+model PushSubscription {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  endpoint   String    @db.Text
+  p256dh     String    @db.Text
+  auth       String    @db.Text
+  userAgent  String?   @map("user_agent") @db.Text
+  active     Boolean   @default(true)
+  lastUsedAt DateTime? @map("last_used_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
+  @@index([userId, active])
+  @@map("push_subscriptions")
 }
 
 enum TeamModality {
@@ -137,6 +186,27 @@ model TeamMember {
   @@map("equipos_usuarios")
 }
 
+model Strategy {
+  id          String    @id @default(uuid()) @db.Uuid
+  code        String?   @unique @db.VarChar(50)
+  name        String    @unique @db.VarChar(150)
+  description String?   @db.Text
+  active      Boolean   @default(true)
+  displayOrder Int      @default(0) @map("orden")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  createdById String?   @map("created_by_id") @db.Uuid
+  updatedById String?   @map("updated_by_id") @db.Uuid
+  createdBy   User?     @relation("StrategyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   User?     @relation("StrategyUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  contracts   Contract[] @relation("ContractStrategy")
+
+  @@index([active, displayOrder])
+  @@index([createdById])
+  @@index([updatedById])
+  @@map("estrategias")
+}
+
 model Customer {
   id         String     @id @default(uuid()) @db.Uuid
   userId     String     @map("usuario_id") @db.Uuid
@@ -177,61 +247,94 @@ model Student {
 }
 
 model Contract {
-  id                 String             @id @default(uuid()) @db.Uuid
-  userId             String             @map("usuario_id") @db.Uuid
-  customerId         String             @map("cliente_id") @db.Uuid
-  registeredAt       DateTime           @map("fecha_registro")
-  contractDepartment String?            @map("contrato_dep") @db.VarChar(100)
-  contractProvince   String?            @map("contrato_prov") @db.VarChar(100)
-  contractDistrict   String?            @map("contrato_dist") @db.VarChar(100)
-  contractNumber     String             @unique @map("nro_contrato") @db.VarChar(20)
-  paymentStartDate   String?            @map("fecha_inicio_pago") @db.VarChar(20)
-  modality           String?            @map("modalidad") @db.VarChar(20)
-  program            String             @map("programa") @db.VarChar(20)
-  plan               String?            @db.VarChar(50)
-  cashPayment        Boolean            @default(false) @map("modalidad_contado")
-  financedPayment    Boolean            @default(false) @map("modalidad_financiado")
-  programValue       Decimal            @map("valor_programa") @db.Decimal(10, 2)
-  initialPayment     Decimal?           @default(0) @map("cuota_inicial") @db.Decimal(10, 2)
-  balance            Decimal?           @map("saldo") @db.Decimal(10, 2)
-  installmentCount   Int?               @map("nro_cuotas")
-  installmentValue   Decimal?           @map("valor_cuota") @db.Decimal(10, 2)
-  otherPayment       String?            @map("otro_pago") @db.VarChar(100)
-  status             String?            @map("estado") @db.VarChar(50)
-  accepted           Boolean            @default(false) @map("acepto")
-  createdAt          DateTime           @default(now()) @map("created_at")
-  updatedAt          DateTime           @updatedAt @map("updated_at")
-  acceptedAt         DateTime?          @map("acepto_fecha")
-  acceptedIp         String?            @map("acepto_ip") @db.VarChar(45)
-  accessToken        String?            @unique @map("access_token") @db.VarChar(64)
-  tokenExpiresAt     DateTime?          @map("token_expiration")
-  user               User               @relation(fields: [userId], references: [id], onDelete: Restrict)
-  customer           Customer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  students           ContractStudent[]
-  receipts           Receipt[]
-  otherData          ContractOtherData?
-  expedient          Expedient?
+  id                  String               @id @default(uuid()) @db.Uuid
+  userId              String               @map("usuario_id") @db.Uuid
+  customerId          String               @map("cliente_id") @db.Uuid
+  registeredAt        DateTime             @map("fecha_registro")
+  contractDepartment  String?              @map("contrato_dep") @db.VarChar(100)
+  contractProvince    String?              @map("contrato_prov") @db.VarChar(100)
+  contractDistrict    String?              @map("contrato_dist") @db.VarChar(100)
+  contractNumber      String               @unique @map("nro_contrato") @db.VarChar(20)
+  strategyId          String?              @map("estrategia_id") @db.Uuid
+  strategyNameSnapshot String?             @map("estrategia_nombre") @db.VarChar(150)
+  paymentStartDate    String?              @map("fecha_inicio_pago") @db.VarChar(20)
+  modality            String?              @map("modalidad") @db.VarChar(20)
+  program             String               @map("programa") @db.VarChar(20)
+  plan                String?              @db.VarChar(50)
+  cashPayment         Boolean              @default(false) @map("modalidad_contado")
+  financedPayment     Boolean              @default(false) @map("modalidad_financiado")
+  programValue        Decimal              @map("valor_programa") @db.Decimal(10, 2)
+  initialPayment      Decimal?             @default(0) @map("cuota_inicial") @db.Decimal(10, 2)
+  balance             Decimal?             @map("saldo") @db.Decimal(10, 2)
+  installmentCount    Int?                 @map("nro_cuotas")
+  installmentValue    Decimal?             @map("valor_cuota") @db.Decimal(10, 2)
+  otherPayment        String?              @map("otro_pago") @db.VarChar(100)
+  status              String?              @map("estado") @db.VarChar(50)
+  accepted            Boolean              @default(false) @map("acepto")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  acceptedAt          DateTime?            @map("acepto_fecha")
+  acceptedIp          String?              @map("acepto_ip") @db.VarChar(45)
+  accessToken         String?              @unique @map("access_token") @db.VarChar(64)
+  tokenExpiresAt      DateTime?            @map("token_expiration")
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  customer            Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  students            ContractStudent[]
+  receipts            Receipt[]
+  otherData           ContractOtherData?
+  expedient           Expedient?
+  cancellationRequest CancellationRequest?
+  strategyDefinition  Strategy?            @relation("ContractStrategy", fields: [strategyId], references: [id], onDelete: Restrict)
 
   @@index([userId])
   @@index([customerId])
+  @@index([strategyId])
   @@index([tokenExpiresAt])
   @@map("contratos")
 }
 
 model Expedient {
-  id                   String              @id @default(uuid()) @db.Uuid
-  contractId           String              @unique @map("contrato_id") @db.Uuid
-  status               String              @default("PENDIENTE") @db.VarChar(50)
-  createdAt            DateTime            @default(now()) @map("created_at")
-  updatedAt            DateTime            @updatedAt @map("updated_at")
-  sentToCommercialAt   DateTime?           @map("enviado_comercial_at")
-  sentToVerificationAt DateTime?           @map("enviado_verificacion_at")
-  verifiedAt           DateTime?           @map("verificado_at")
-  contract             Contract            @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  documents            ExpedientDocument[]
+  id                       String              @id @default(uuid()) @db.Uuid
+  contractId               String              @unique @map("contrato_id") @db.Uuid
+  status                   String              @default("PENDIENTE") @db.VarChar(50)
+  createdAt                DateTime            @default(now()) @map("created_at")
+  updatedAt                DateTime            @updatedAt @map("updated_at")
+  sentToCommercialAt       DateTime?           @map("enviado_comercial_at")
+  sentToVerificationAt     DateTime?           @map("enviado_verificacion_at")
+  verifiedAt               DateTime?           @map("verificado_at")
+  observation              String?             @map("observacion") @db.Text
+  observationAt            DateTime?           @map("observacion_at")
+  observationById          String?             @map("observacion_by_id") @db.Uuid
+  appointmentAt            DateTime?           @map("cita_at")
+  appointmentRescheduledAt DateTime?           @map("cita_reprogramada_at")
+  appointmentType          String?             @map("tipo_cita") @db.VarChar(20)
+  advisoryRating           Int?                @map("calificacion_asesoria")
+  contract                 Contract            @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  documents                ExpedientDocument[]
+  observationBy            User?               @relation("ExpedientObservationBy", fields: [observationById], references: [id], onDelete: SetNull)
 
   @@index([status])
+  @@index([observationById])
   @@map("expedientes")
+}
+
+model CancellationRequest {
+  id            String    @id @default(uuid()) @db.Uuid
+  contractId    String    @unique @map("contrato_id") @db.Uuid
+  requestedById String    @map("solicitado_por") @db.Uuid
+  reviewedById  String?   @map("revisado_por") @db.Uuid
+  reason        String    @db.Text
+  reviewNote    String?   @map("observacion_revision") @db.Text
+  status        String    @default("PENDIENTE") @db.VarChar(20)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  reviewedAt    DateTime? @map("revisado_at")
+  contract      Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  requestedBy   User      @relation("CancellationRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedBy    User?     @relation("CancellationReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([requestedById])
+  @@map("solicitudes_anulacion")
 }
 
 model ExpedientDocument {

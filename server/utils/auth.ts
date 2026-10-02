@@ -34,7 +34,7 @@ function isProduction(): boolean {
   return process.env.NODE_ENV === 'production'
 }
 
-function sessionCookieName(): string {
+export function sessionCookieName(): string {
   const config = useRuntimeConfig()
   return String(config.sessionCookieName || 'brighton_session')
 }
@@ -97,8 +97,7 @@ export function clearSessionCookie(event: H3Event): void {
   deleteCookie(event, sessionCookieName(), { path: '/' })
 }
 
-export async function getUserBySession(event: H3Event): Promise<User | null> {
-  const token = getCookie(event, sessionCookieName())
+export async function getUserBySessionToken(token: string | undefined): Promise<User | null> {
   if (!token) return null
 
   const session = await prisma.userSession.findUnique({
@@ -143,6 +142,10 @@ export async function getUserBySession(event: H3Event): Promise<User | null> {
       created_at: user.role.createdAt
     }
   }
+}
+
+export async function getUserBySession(event: H3Event): Promise<User | null> {
+  return getUserBySessionToken(getCookie(event, sessionCookieName()))
 }
 
 export async function invalidateCurrentSession(event: H3Event): Promise<void> {
