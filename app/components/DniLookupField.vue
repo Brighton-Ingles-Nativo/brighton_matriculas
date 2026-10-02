@@ -15,7 +15,7 @@ const loading = ref(false)
 const error = ref('')
 
 const lookup = async () => {
-  const dni = props.modelValue.replace(/\D/g, '').slice(0, 8)
+  const dni = String(props.modelValue ?? '').replace(/\D/g, '').slice(0, 8)
   emit('update:modelValue', dni)
   error.value = ''
   if (!/^\d{8}$/.test(dni)) {

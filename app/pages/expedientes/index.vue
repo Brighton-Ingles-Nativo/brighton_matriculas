@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronLeft, ChevronRight, Eye, FolderOpen } from '@lucide/vue'
+import { ChevronLeft, ChevronRight, Eye, FolderOpen, Plus } from '@lucide/vue'
 import { useDebounceFn } from '@vueuse/core'
 
 definePageMeta({ middleware: 'auth', ssr: false })
@@ -122,6 +122,9 @@ onMounted(loadExpedients)
           <h1 class="text-3xl font-semibold tracking-tight">Expedientes</h1>
           <p class="mt-1 text-muted-foreground">{{ pagination.total }} expedientes encontrados.</p>
         </div>
+        <UiButton class="gap-2" as-child>
+          <NuxtLink to="/expedientes/nuevo"><Plus class="size-4" /> Nuevo expediente</NuxtLink>
+        </UiButton>
       </section>
 
       <UiCard>
@@ -176,7 +179,16 @@ onMounted(loadExpedients)
                 <UiTableCell><UiBadge :variant="statusVariant(expedient.status)">{{ statusLabel(expedient.status) }}</UiBadge></UiTableCell>
                 <UiTableCell class="hidden md:table-cell">{{ expedient.documentCount }}</UiTableCell>
                 <UiTableCell class="hidden whitespace-nowrap text-muted-foreground sm:table-cell">{{ formatDate(expedient.updatedAt) }}</UiTableCell>
-                <UiTableCell class="text-right"><UiButton variant="ghost" size="icon" title="Ver matrícula" aria-label="Ver matrícula" as-child><NuxtLink :to="`/matricula/${expedient.contractId}`"><Eye class="size-4" /></NuxtLink></UiButton></UiTableCell>
+                <UiTableCell class="text-right">
+                  <div class="flex justify-end gap-1">
+                    <UiButton variant="ghost" size="icon" title="Gestionar expediente" aria-label="Gestionar expediente" as-child>
+                      <NuxtLink :to="`/expedientes/${expedient.id}`"><FolderOpen class="size-4" /></NuxtLink>
+                    </UiButton>
+                    <UiButton variant="ghost" size="icon" title="Ver matrícula" aria-label="Ver matrícula" as-child>
+                      <NuxtLink :to="`/matricula/${expedient.contractId}`"><Eye class="size-4" /></NuxtLink>
+                    </UiButton>
+                  </div>
+                </UiTableCell>
               </UiTableRow>
             </UiTableBody>
           </UiTable>

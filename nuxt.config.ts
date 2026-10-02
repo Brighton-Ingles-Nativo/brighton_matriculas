@@ -14,6 +14,7 @@ export default defineNuxtConfig({
       from: process.env.MAIL_FROM || '',
       fromName: process.env.MAIL_FROM_NAME || 'Brighton Inglés Nativo',
     },
+    expedientUploadDir: process.env.EXPEDIENT_UPLOAD_DIR || '.data/expedients',
   },
 
   css: ['~/assets/css/main.css'],

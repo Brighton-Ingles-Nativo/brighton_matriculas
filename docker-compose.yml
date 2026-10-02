@@ -12,3 +12,9 @@ services:
       MAIL_ENABLED: ${MAIL_ENABLED:-false}
       MAIL_FROM: ${MAIL_FROM:-}
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Brighton Inglés Nativo}
+      EXPEDIENT_UPLOAD_DIR: ${EXPEDIENT_UPLOAD_DIR:-/app/.data/expedients}
+    volumes:
+      - brighton_expedients:/app/.data/expedients
+
+volumes:
+  brighton_expedients:

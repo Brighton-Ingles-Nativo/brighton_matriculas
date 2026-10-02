@@ -94,6 +94,9 @@ const loadContract = async () => {
     contract.contractNumber; 
     Object.assign(form, { 
       ...contract, 
+      holderDni: contract.holderDni ?? '',
+      beneficiary1Dni: contract.beneficiary1Dni ?? '',
+      beneficiary2Dni: contract.beneficiary2Dni ?? '',
       holderBirthDate: dateInput(contract.holderBirthDate), 
       beneficiary1BirthDate: dateInput(contract.beneficiary1BirthDate), 
       beneficiary2BirthDate: dateInput(contract.beneficiary2BirthDate), 
