@@ -16,6 +16,13 @@ export default defineEventHandler(async (event) => {
       customer: true,
       students: { include: { student: true }, orderBy: { id: 'asc' } },
       otherData: true,
+      strategyDefinition: { select: { id: true, code: true, name: true } },
+      cancellationRequest: {
+        include: {
+          requestedBy: { select: { id: true, name: true } },
+          reviewedBy: { select: { id: true, name: true } }
+        }
+      },
       receipts: {
         orderBy: { registeredAt: 'desc' },
         select: {
@@ -77,11 +84,13 @@ export default defineEventHandler(async (event) => {
       beneficiary2Phone: students[1]?.phone ?? null,
       currentSituation: otherData?.currentSituation ?? '—',
       housingType: otherData?.housingType ?? '—',
-      strategy: otherData?.strategy ?? '—',
       notes: otherData?.notes ?? null,
       dataAuthorization: otherData?.dataAuthorization ?? false,
       testimonials: otherData?.testimonials ?? false,
       dataUsage: otherData?.dataUsage ?? null,
+      strategyId: contract.strategyId,
+      strategyNameSnapshot: contract.strategyNameSnapshot,
+      strategy: contract.strategyNameSnapshot ?? contract.strategyDefinition?.name ?? otherData?.strategy ?? '—',
       programValue: contract.programValue.toString(),
       initialPayment: contract.initialPayment?.toString() ?? null,
       balance: contract.balance?.toString() ?? null,

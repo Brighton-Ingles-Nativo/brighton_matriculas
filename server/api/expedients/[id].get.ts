@@ -14,6 +14,11 @@ export default defineEventHandler(async (event) => {
       id: expedient.id,
       contractId: expedient.contractId,
       status: expedient.status,
+      observation: expedient.observation,
+      observationAt: expedient.observationAt,
+      appointmentAt: expedient.appointmentAt,
+      appointmentType: expedient.appointmentType,
+      advisoryRating: expedient.advisoryRating,
       createdAt: expedient.createdAt,
       updatedAt: expedient.updatedAt,
       documents: expedient.documents.map((document) => ({

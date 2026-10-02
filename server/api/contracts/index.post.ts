@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { assertCsrf, getUserBySession } from '../../utils/auth'
 import { prisma } from '../../utils/prisma'
+import { resolveActiveStrategy } from '../../utils/strategies'
 
 type ContractPayload = {
   contractDepartment?: string
@@ -28,6 +29,7 @@ type ContractPayload = {
   currentSituation?: string
   housingType?: string
   strategy?: string
+  strategyId?: string
   paymentStartDate?: string
   modality?: string
   program?: string
@@ -83,6 +85,8 @@ export default defineEventHandler(async (event) => {
   if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
 
   const body = await readBody<ContractPayload>(event)
+  const selectedStrategy = await resolveActiveStrategy(body.strategyId)
+  const strategyName = selectedStrategy?.name || text(body.strategy)
   const required: Array<[string, unknown]> = [
     ['departamento de contrato', body.contractDepartment],
     ['provincia de contrato', body.contractProvince],
@@ -96,7 +100,7 @@ export default defineEventHandler(async (event) => {
     ['departamento de residencia', body.holderDepartment],
     ['provincia de residencia', body.holderProvince],
     ['distrito de residencia', body.holderDistrict],
-    ['estrategia', body.strategy],
+    ['estrategia', strategyName],
     ['modalidad', body.modality],
     ['programa', body.program],
     ['modalidad de pago', body.paymentMode],
@@ -167,6 +171,8 @@ export default defineEventHandler(async (event) => {
           contractProvince: text(body.contractProvince),
           contractDistrict: text(body.contractDistrict),
           contractNumber,
+          strategyId: selectedStrategy?.id ?? null,
+          strategyNameSnapshot: strategyName,
           paymentStartDate: optionalText(body.paymentStartDate),
           modality: text(body.modality),
           program: text(body.program),
@@ -186,7 +192,7 @@ export default defineEventHandler(async (event) => {
             currentSituation: text(body.currentSituation) || 'Empleado',
             housingType: text(body.housingType) || 'Propia',
             dataAuthorization: Boolean(body.dataAuthorization),
-            strategy: text(body.strategy),
+            strategy: strategyName,
             notes: optionalText(body.notes),
             testimonials: Boolean(body.testimonials),
             dataUsage: Boolean(body.dataUsage)

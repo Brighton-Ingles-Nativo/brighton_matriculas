@@ -1,4 +1,5 @@
 import { assertCsrf } from '../../utils/auth'
+import { notify } from '../../utils/notifications'
 import { prisma } from '../../utils/prisma'
 import { getAccessibleContract, requireExpedientUser, removeStoredFile, storeUpload, type ExpedientDocumentType } from '../../utils/expedients'
 
@@ -47,6 +48,18 @@ export default defineEventHandler(async (event) => {
         await removeStoredFile(previous.filePath)
       }
     }
+    const reviewers = await prisma.user.findMany({ where: { active: true, role: { name: { in: ['asistente_comercial', 'verificador'] } } }, select: { id: true } })
+    await notify({
+      recipients: reviewers.map((reviewer) => reviewer.id),
+      type: 'EXPEDIENTE_PENDIENTE_REVISION',
+      title: 'Nuevo expediente pendiente de revisión',
+      message: 'Se ha creado o actualizado un expediente que requiere revisión.',
+      entityType: 'EXPEDIENT',
+      entityId: expedient.id,
+      actionUrl: `/expedientes/${expedient.id}`,
+      priority: 'high',
+      dedupeKey: `expedient:${expedient.id}:pending:${expedient.updatedAt.toISOString()}`
+    })
     return { success: true, data: { id: expedient.id } }
   } catch (error) {
     await Promise.all(stored.map((document) => removeStoredFile(document.data.filePath)))

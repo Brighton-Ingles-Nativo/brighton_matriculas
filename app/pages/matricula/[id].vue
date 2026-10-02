@@ -5,11 +5,18 @@ definePageMeta({ middleware: 'auth', ssr: false })
 
 const route = useRoute(); 
 const { csrfHeaders } = useAuth(); 
+const { user } = useAuth()
 const loading = ref(true); 
 const saving = ref(false); 
 const error = ref(''); 
 const success = ref('')
 const isLocked = ref(false)
+const cancellationReason = ref('')
+const cancellationRequest = ref<any>(null)
+const cancellationLoading = ref(false)
+const cancellationError = ref('')
+const canRequestCancellation = computed(() => ['asesor', 'supervisor', 'admin'].includes(user.value?.role?.name || ''))
+const canReviewCancellation = computed(() => ['supervisor', 'admin'].includes(user.value?.role?.name || ''))
 
 const departments = ['Amazonas', 'Ancash', 'Apurímac', 'Arequipa', 'Ayacucho', 'Cajamarca', 'Callao', 'Cusco', 'Huancavelica', 'Huánuco', 'Ica', 'Junín', 'La Libertad', 'Lambayeque', 'Lima', 'Loreto', 'Madre de Dios', 'Moquegua', 'Pasco', 'Piura', 'Puno', 'San Martín', 'Tacna', 'Tumbes', 'Ucayali']; 
 const districts = ['Arequipa', 'Alto Selva Alegre', 'Cayma', 'Cerro Colorado', 'Characato', 'Jacobo Hunter', 'José Luis Bustamante y Rivero', 'Mariano Melgar', 'Miraflores', 'Paucarpata', 'Sabandía', 'Sachaca', 'Socabaya', 'Tiabaya', 'Yanahuara', 'Yura', 'La Joya']; 
@@ -89,6 +96,7 @@ const loadContract = async () => {
       credentials: 'include' 
     }); 
     const contract = response.data; 
+    cancellationRequest.value = contract.cancellationRequest || null
     isLocked.value = Boolean(contract.accepted) || String(contract.status || '').trim().toLowerCase() === 'firmado'
     contractNumber.value = 
     contract.contractNumber; 
@@ -113,6 +121,31 @@ const loadContract = async () => {
   } finally { 
     loading.value = false 
   } 
+}
+
+const requestCancellation = async () => {
+  cancellationLoading.value = true
+  cancellationError.value = ''
+  try {
+    const response = await $fetch<{ data: any }>(`/api/contracts/${route.params.id}/cancellation-requests`, { method: 'POST', headers: await csrfHeaders(), credentials: 'include', body: { reason: cancellationReason.value } })
+    cancellationRequest.value = { ...response.data, reason: cancellationReason.value }
+    cancellationReason.value = ''
+  } catch (err: any) {
+    cancellationError.value = err?.data?.statusMessage || 'No se pudo registrar la solicitud.'
+  } finally { cancellationLoading.value = false }
+}
+
+const reviewCancellation = async (decision: 'APROBAR' | 'RECHAZAR') => {
+  if (!cancellationRequest.value) return
+  cancellationLoading.value = true
+  cancellationError.value = ''
+  try {
+    const response = await $fetch<{ data: any }>(`/api/cancellation-requests/${cancellationRequest.value.id}`, { method: 'PATCH', headers: await csrfHeaders(), credentials: 'include', body: { decision } })
+    cancellationRequest.value = { ...cancellationRequest.value, ...response.data }
+    if (decision === 'APROBAR') isLocked.value = true
+  } catch (err: any) {
+    cancellationError.value = err?.data?.statusMessage || 'No se pudo revisar la solicitud.'
+  } finally { cancellationLoading.value = false }
 }
 
 const calculateAmounts = () => { 
@@ -185,6 +218,24 @@ onMounted(async () => { await Promise.all([loadTeams(), loadContract()]) })
         <UiAlertDescription>{{ error }}</UiAlertDescription>
       </UiAlert>
       <form v-else class="space-y-6" @submit.prevent="submit">
+        <UiCard v-if="canRequestCancellation || cancellationRequest">
+          <UiCardHeader><UiCardTitle>Solicitud de anulación</UiCardTitle><UiCardDescription>La solicitud será notificada al supervisor responsable.</UiCardDescription></UiCardHeader>
+          <UiCardContent class="space-y-4">
+            <UiAlert v-if="cancellationError" variant="destructive"><UiAlertDescription>{{ cancellationError }}</UiAlertDescription></UiAlert>
+            <div v-if="cancellationRequest" class="rounded-xl border bg-muted/30 p-4 text-sm">
+              <p><span class="font-medium">Estado:</span> {{ cancellationRequest.status }}</p>
+              <p class="mt-1"><span class="font-medium">Motivo:</span> {{ cancellationRequest.reason }}</p>
+            </div>
+            <template v-if="canRequestCancellation && !cancellationRequest">
+              <UiTextarea v-model="cancellationReason" placeholder="Indica el motivo de la solicitud de anulación." />
+              <UiButton type="button" variant="destructive" :disabled="cancellationLoading || !cancellationReason.trim()" @click="requestCancellation">Solicitar anulación</UiButton>
+            </template>
+            <div v-if="canReviewCancellation && cancellationRequest?.status === 'PENDIENTE'" class="flex flex-wrap gap-2">
+              <UiButton type="button" :disabled="cancellationLoading" @click="reviewCancellation('APROBAR')">Aprobar anulación</UiButton>
+              <UiButton type="button" variant="outline" :disabled="cancellationLoading" @click="reviewCancellation('RECHAZAR')">Rechazar anulación</UiButton>
+            </div>
+          </UiCardContent>
+        </UiCard>
         <UiAlert v-if="isLocked" class="border-amber-200 bg-amber-50 text-amber-900">
           <UiAlertDescription>Esta matrícula está firmada. El registro es de solo lectura y no admite modificaciones.</UiAlertDescription>
         </UiAlert>

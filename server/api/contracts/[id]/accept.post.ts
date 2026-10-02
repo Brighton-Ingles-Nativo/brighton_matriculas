@@ -1,4 +1,5 @@
 import { assertCsrf, getClientIPAddress, getUserBySession } from '../../../utils/auth'
+import { notify } from '../../../utils/notifications'
 import { prisma } from '../../../utils/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -13,7 +14,7 @@ export default defineEventHandler(async (event) => {
 
   const contract = await prisma.contract.findUnique({
     where: { id },
-    select: { id: true, userId: true, status: true, accepted: true }
+    select: { id: true, userId: true, status: true, accepted: true, user: { select: { supervisorId: true } } }
   })
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'Matrícula no encontrada' })
   if (user.role?.name === 'asesor' && contract.userId !== user.id) {
@@ -27,6 +28,17 @@ export default defineEventHandler(async (event) => {
   await prisma.contract.update({
     where: { id },
     data: { accepted: true, acceptedAt: new Date(), acceptedIp: getClientIPAddress(event) }
+  })
+  await notify({
+    recipients: [contract.userId, contract.user.supervisorId ?? ''],
+    type: 'CONTRATO_FIRMADO',
+    title: 'Contrato firmado',
+    message: 'El contrato fue marcado como firmado y el expediente puede ser generado.',
+    entityType: 'CONTRACT',
+    entityId: contract.id,
+    actionUrl: `/matricula/${contract.id}`,
+    priority: 'high',
+    dedupeKey: `contract:${contract.id}:signed`
   })
 
   return { success: true, message: 'Contrato aceptado digitalmente' }

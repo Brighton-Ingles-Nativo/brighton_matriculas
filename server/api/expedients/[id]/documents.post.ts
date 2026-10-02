@@ -1,4 +1,5 @@
 import { assertCsrf } from '../../../utils/auth'
+import { notify } from '../../../utils/notifications'
 import { prisma } from '../../../utils/prisma'
 import { getAccessibleContract, requireExpedientUser, removeStoredFile, storeUpload, validateDocumentType } from '../../../utils/expedients'
 
@@ -26,6 +27,17 @@ export default defineEventHandler(async (event) => {
       return tx.expedientDocument.create({ data: { expedientId, type, ...stored } })
     })
     if (previous) await removeStoredFile(previous.filePath)
+    await notify({
+      recipients: [expedient.contract.userId],
+      type: 'EXPEDIENTE_DOCUMENTO_ACTUALIZADO',
+      title: 'Documento de expediente actualizado',
+      message: `Se actualizó el documento ${document.type} del expediente.`,
+      entityType: 'EXPEDIENT',
+      entityId: expedientId,
+      actionUrl: `/expedientes/${expedientId}`,
+      priority: 'normal',
+      dedupeKey: `expedient:${expedientId}:document:${document.type}:${document.id}`
+    })
     return { success: true, data: { id: document.id, type: document.type, fileName: document.fileName } }
   } catch (error) {
     await removeStoredFile(stored.filePath)

@@ -46,7 +46,7 @@ export default defineEventHandler(async (event) => {
       ...statusFilter
     },
     orderBy: { registeredAt: 'desc' },
-    include: { user: { select: { name: true } }, customer: true, otherData: true }
+    include: { user: { select: { name: true } }, customer: true, otherData: true, strategyDefinition: { select: { name: true } } }
   })
 
   const header = columns.map(([label]) => csv(label)).join(';')
@@ -58,7 +58,7 @@ export default defineEventHandler(async (event) => {
       holderEmail: contract.customer.email,
       holderPhone: contract.customer.phone,
       holderAddress: contract.customer.address,
-      strategy: contract.otherData?.strategy,
+      strategy: contract.strategyNameSnapshot ?? contract.strategyDefinition?.name ?? contract.otherData?.strategy,
       notes: contract.otherData?.notes,
       advisor: contract.user.name
     }
