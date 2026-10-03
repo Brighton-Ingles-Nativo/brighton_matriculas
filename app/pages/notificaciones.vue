@@ -37,7 +37,7 @@ await load()
           </div>
         </div>
         <UiButton variant="outline" :disabled="pushBusy" @click="togglePush">
-          {{ pushBusy ? 'Guardando…' : pushEnabled ? 'Desactivar navegador' : 'Activar navegador' }}
+          {{ pushBusy ? 'Guardando…' : pushEnabled ? 'Desactivar notificaciones' : 'Activar notificaciones' }}
         </UiButton>
       </section>
 

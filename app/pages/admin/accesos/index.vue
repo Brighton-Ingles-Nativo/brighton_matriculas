@@ -1,6 +1,6 @@
 <template>
   <div class="min-h-[100dvh] bg-muted/20">
-    <AppHeader title="Administración" subtitle="Usuarios, roles y seguridad" back-to="/dashboard" />
+    <AppHeader title="Accesos" subtitle="Usuarios, roles, permisos y sesiones" back-to="/admin" />
     <main class="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
       <div class="flex flex-wrap gap-2 border-b">
         <UiButton v-for="tab in tabs" :key="tab" variant="ghost"
@@ -196,8 +196,12 @@
 import { useDebounceFn } from '@vueuse/core'
 import { Pencil, Plus, RefreshCw, Save, Trash2 } from '@lucide/vue'
 
-definePageMeta({ middleware: ['auth', 'admin'] })
+definePageMeta({
+  middleware: ['auth', 'admin'],
+  alias: ['/users', '/admin/accesos/usuarios', '/admin/accesos/roles', '/admin/accesos/sesiones']
+})
 const { user, csrfHeaders } = useAuth()
+const route = useRoute()
 type Role = { 
   id: string; 
   name: string; 
@@ -233,8 +237,19 @@ type Session = {
 }
 
 const tabs = ['Usuarios', 'Roles y permisos', 'Sesiones activas'] as const
+const tabByQuery: Record<string, (typeof tabs)[number]> = {
+  usuarios: 'Usuarios',
+  roles: 'Roles y permisos',
+  sesiones: 'Sesiones activas'
+}
+const tabFromQuery = (value: unknown) => typeof value === 'string' ? tabByQuery[value] : undefined
+const tabFromRoute = () => {
+  if (route.path.endsWith('/roles')) return 'Roles y permisos'
+  if (route.path.endsWith('/sesiones')) return 'Sesiones activas'
+  return tabFromQuery(route.query.tab) ?? 'Usuarios'
+}
 
-const activeTab = ref<(typeof tabs)[number]>('Usuarios')
+const activeTab = ref<(typeof tabs)[number]>(tabFromRoute())
 const users = ref<ManagedUser[]>([]); 
 const roles = ref<Role[]>([]); 
 const sessions = ref<Session[]>([])
@@ -432,7 +447,11 @@ const roleLabel = (name: string) => ({
 }[name] || name)
 
 watch(activeTab, loadTab)
+watch(() => [route.path, route.query.tab], () => {
+  const tab = tabFromRoute()
+  if (tab !== activeTab.value) activeTab.value = tab
+})
 watch(search, () => debouncedLoadUsers())
 
-onMounted(async () => { await loadRoles(); await loadUsers() })
+onMounted(async () => { await loadRoles(); await loadTab() })
 </script>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Bell, ChevronDown, LogOut, UserRound } from '@lucide/vue'
+import { ArrowLeft, Bell, ChevronDown, LogOut, PanelLeftClose, PanelLeftOpen, UserRound } from '@lucide/vue'
 
 const props = withDefaults(defineProps<{
   title: string
@@ -10,6 +10,7 @@ const props = withDefaults(defineProps<{
 const { user, logout } = useAuth()
 const { items: notifications, unreadCount, connected, markRead, enablePush, pushEnabled } = useNotifications()
 const router = useRouter()
+const isCollapsed = useState('sidebar-collapsed', () => false)
 
 const userInitials = computed(() => {
   const name = user.value?.name?.trim() || 'Usuario'
@@ -42,6 +43,18 @@ const enableBrowserNotifications = async () => {
   <header class="sticky top-0 z-20 border-b border-border/80 bg-background/95 backdrop-blur">
     <div class="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
       <div class="flex min-w-0 items-center gap-3">
+        <UiButton
+          v-if="user"
+          variant="ghost"
+          size="icon"
+          class="hidden lg:inline-flex"
+          :aria-label="isCollapsed ? 'Expandir menú lateral' : 'Colapsar menú lateral'"
+          :title="isCollapsed ? 'Expandir menú lateral' : 'Colapsar menú lateral'"
+          @click="isCollapsed = !isCollapsed"
+        >
+          <PanelLeftOpen v-if="isCollapsed" class="size-4" aria-hidden="true" />
+          <PanelLeftClose v-else class="size-4" aria-hidden="true" />
+        </UiButton>
         <UiButton v-if="props.backTo" variant="ghost" size="icon" as-child aria-label="Volver">
           <NuxtLink :to="props.backTo"><ArrowLeft class="size-4" /></NuxtLink>
         </UiButton>

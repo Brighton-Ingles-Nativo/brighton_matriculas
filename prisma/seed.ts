@@ -21,6 +21,34 @@ function identityKey(value: string): string {
   return value.trim().toUpperCase().replace(/\s+/g, '')
 }
 
+function normalizeStrategyName(value: string): string {
+  return value.trim().replace(/\s+/g, ' ')
+}
+
+function strategyKey(value: string): string {
+  return normalizeStrategyName(value).toLocaleUpperCase('es-PE')
+}
+
+function strategyCode(name: string, usedCodes: Set<string>): string {
+  const base = name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'ESTRATEGIA'
+
+  let suffix = ''
+  let attempt = 1
+  let code = base.slice(0, 50)
+  while (usedCodes.has(code)) {
+    attempt += 1
+    suffix = `_${attempt}`
+    code = `${base.slice(0, 50 - suffix.length)}${suffix}`
+  }
+  usedCodes.add(code)
+  return code
+}
+
 function decodeCopyField(value: string): unknown {
   if (value === '\\N') return null
   let decoded = ''
@@ -190,6 +218,34 @@ async function main(): Promise<void> {
     userIds.set(sourceId, id)
   }
 
+  // El CRM aún no cuenta con un catálogo de estrategias definido. Se genera
+  // un catálogo inicial a partir de los valores realmente usados en las
+  // matrículas históricas, con códigos estables para facilitar su gestión.
+  const strategyNames = [...new Set(sourceContracts
+    .map((source) => normalizeStrategyName(requiredText(source.estrategia, `estrategia(${String(source.id)})`)))
+  )].sort((left, right) => left.localeCompare(right, 'es-PE'))
+  const existingStrategies = await prisma.strategy.findMany({ select: { id: true, name: true, code: true } })
+  const existingStrategiesByName = new Map(existingStrategies.map((strategy) => [strategyKey(strategy.name), strategy]))
+  const usedStrategyCodes = new Set(existingStrategies.flatMap((strategy) => strategy.code ? [strategy.code] : []))
+  const strategyIds = new Map<string, string>()
+
+  for (const [displayOrder, name] of strategyNames.entries()) {
+    const existing = existingStrategiesByName.get(strategyKey(name))
+    const code = existing?.code ?? strategyCode(name, usedStrategyCodes)
+    const strategy = await prisma.strategy.upsert({
+      where: { name },
+      update: { code, displayOrder },
+      create: {
+        id: stableUuid('strategy', strategyKey(name)),
+        code,
+        name,
+        active: true,
+        displayOrder
+      }
+    })
+    strategyIds.set(strategyKey(name), strategy.id)
+  }
+
   const contractIds = new Map<string, string>()
   const customerIds = new Set<string>()
   const historicalSiteMembers = new Map<string, { name: string; userIds: Set<string> }>()
@@ -199,6 +255,9 @@ async function main(): Promise<void> {
     const userId = userIds.get(requiredText(source.usuario_id, `usuario_id de ${sourceId}`))
     if (!userId) throw new Error(`La matrícula ${sourceId} referencia a un asesor inexistente.`)
     const contractNumber = requiredText(source.nro_contrato, `nro_contrato(${sourceId})`)
+    const strategyName = normalizeStrategyName(requiredText(source.estrategia, `estrategia(${sourceId})`))
+    const strategyId = strategyIds.get(strategyKey(strategyName))
+    if (!strategyId) throw new Error(`No se pudo resolver la estrategia histórica de la matrícula ${sourceId}.`)
     const historicalSiteName = text(source.contrato_dist)?.trim() || null
     if (historicalSiteName) {
       const siteKey = identityKey(historicalSiteName)
@@ -241,6 +300,8 @@ async function main(): Promise<void> {
       contractProvince: text(source.contrato_prov),
       contractDistrict: text(source.contrato_dist),
       contractNumber,
+      strategyId,
+      strategyNameSnapshot: strategyName,
       paymentStartDate: text(source.fecha_inicio_pago),
       modality: text(source.modalidad),
       program: requiredText(source.programa, `programa(${sourceId})`),
@@ -269,7 +330,7 @@ async function main(): Promise<void> {
       currentSituation: requiredText(source.situacion_actual, `situacion_actual(${sourceId})`),
       housingType: requiredText(source.tipo_vivienda, `tipo_vivienda(${sourceId})`),
       dataAuthorization: boolean(source.autorizacion_datos),
-      strategy: requiredText(source.estrategia, `estrategia(${sourceId})`),
+      strategy: strategyName,
       notes: text(source.observaciones),
       testimonials: boolean(source.testimonios),
       dataUsage: source.uso_datos === null ? null : boolean(source.uso_datos)
@@ -361,7 +422,7 @@ async function main(): Promise<void> {
     await prisma.receipt.upsert({ where: { id: sourceId }, update: receiptData, create: { id: sourceId, ...receiptData } })
   }
 
-  console.log(`Migración completada: ${sourceUsers.length} usuarios, ${customerIds.size} perfiles de cliente, ${sourceContracts.length} matrículas, ${studentLinks} relaciones matrícula-alumno, ${historicalSiteMembers.size} sedes, ${teamMemberships} miembros de equipos y ${sourceReceipts.length} recibos procesados.`)
+  console.log(`Migración completada: ${sourceUsers.length} usuarios, ${strategyNames.length} estrategias, ${customerIds.size} perfiles de cliente, ${sourceContracts.length} matrículas, ${studentLinks} relaciones matrícula-alumno, ${historicalSiteMembers.size} sedes, ${teamMemberships} miembros de equipos y ${sourceReceipts.length} recibos procesados.`)
 }
 
 main().catch((error: unknown) => { console.error(error); process.exitCode = 1 }).finally(async () => prisma.$disconnect())

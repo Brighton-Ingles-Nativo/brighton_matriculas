@@ -1,12 +1,36 @@
 <script setup lang="ts">
-import { Building2, ClipboardList, FolderOpen, LayoutDashboard, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, ReceiptText, Settings2, Sun, UserRound } from '@lucide/vue'
+import { ChevronDown, ClipboardList, FolderOpen, LayoutDashboard, LogOut, Menu, Moon, ReceiptText, Settings2, Sun, UserRound } from '@lucide/vue'
 
 const { user, logout } = useAuth()
 const { isDark, toggleTheme } = useTheme()
 const router = useRouter()
+const route = useRoute()
 const isAdmin = computed(() => user.value?.role?.name === 'admin')
 const canViewExpedients = computed(() => ['admin', 'asesor', 'supervisor', 'asistente_comercial', 'verificador'].includes(user.value?.role?.name || ''))
 const isCollapsed = useState('sidebar-collapsed', () => false)
+const isAdminSection = computed(() => route.path.startsWith('/admin') || ['/sites', '/users'].includes(route.path))
+const isAdminHome = computed(() => route.path === '/admin')
+const isAccessSection = computed(() => route.path.startsWith('/admin/accesos') || route.path === '/users')
+const isOrganizationSection = computed(() => route.path.startsWith('/admin/organizacion') || route.path === '/sites')
+const isConfigurationSection = computed(() => route.path.startsWith('/admin/configuracion'))
+const adminMenuOpen = ref(isAdminSection.value)
+
+watch(isAdminSection, (isInAdministration) => {
+  if (isInAdministration) adminMenuOpen.value = true
+})
+
+const userInitials = computed(() => {
+  const name = user.value?.name?.trim() || 'Usuario'
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('')
+
+  return initials || 'U'
+})
+
 const handleLogout = async () => { 
   await logout(); 
   await router.push('/login') 
@@ -20,21 +44,8 @@ const handleLogout = async () => {
         <img v-if="!isCollapsed" src="/assets/images/logoBlanco.webp" alt="Brighton" class="max-h-full w-full px-4 object-contain" />
         <Menu v-else class="size-5" aria-hidden="true" />
       </div>
-      <button
-        type="button"
-        class="sidebar-toggle cursor-pointer"
-        :aria-label="isCollapsed ? 'Expandir menú' : 'Colapsar menú'"
-        :title="isCollapsed ? 'Expandir menú' : 'Colapsar menú'"
-        @click="isCollapsed = !isCollapsed"
-      >
-        <PanelLeftOpen v-if="isCollapsed" class="size-4" aria-hidden="true" />
-        <PanelLeftClose v-else class="size-4" aria-hidden="true" />
-      </button>
-      <div>
-        <!-- <p class="text-[11px] text-sidebar-foreground/55">Panel administrativo</p> --> <!-- Descomentar si se desea mostrar el título de sección -->
-      </div>a
     </div>
-    <nav class="flex-1 space-y-1 p-3" aria-label="Navegación principal">
+    <nav class="sidebar-navigation space-y-1 p-3" aria-label="Navegación principal">
       <p v-if="!isCollapsed" class="px-3 pb-2 pt-3 text-[10px] font-bold uppercase tracking-[.14em] text-sidebar-foreground/45">Principal
       </p>
       <NuxtLink to="/dashboard" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Dashboard">
@@ -53,30 +64,116 @@ const handleLogout = async () => {
       <NuxtLink to="/profile" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Mi perfil">
         <UserRound class="size-4" /> <span v-if="!isCollapsed">Mi perfil</span>
       </NuxtLink>
-      <NuxtLink v-if="isAdmin" to="/users" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Administración">
-        <Settings2 class="size-4" /> <span v-if="!isCollapsed">Administración</span>
-      </NuxtLink>
-      <NuxtLink v-if="isAdmin" to="/sites" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Sedes y equipos">
-        <Building2 class="size-4" /> <span v-if="!isCollapsed">Sedes y equipos</span>
-      </NuxtLink>
-    </nav>
-    <div class="border-t border-sidebar-border p-3">
-      <div class="mb-2 flex items-center gap-3 rounded-xl px-3 py-2" :class="{ 'justify-center px-0': isCollapsed }"><span
-          class="grid size-8 place-items-center rounded-full bg-sidebar-accent text-xs font-bold text-sidebar-accent-foreground">{{
-            user.name?.slice(0, 1).toUpperCase() }}</span>
-        <div v-if="!isCollapsed" class="min-w-0">
-          <p class="truncate text-sm font-medium text-sidebar-foreground">{{ user.name }}</p>
-          <p class="truncate text-xs text-sidebar-foreground/50">{{ user.role?.name }}</p>
-        </div>
+      <div v-if="isAdmin" class="sidebar-admin">
+        <p v-if="!isCollapsed" class="px-3 pb-2 pt-7 text-[10px] font-bold uppercase tracking-[.14em] text-sidebar-foreground/45">Administración</p>
+
+        <NuxtLink
+          v-if="isCollapsed"
+          to="/admin"
+          class="sidebar-link sidebar-link-collapsed"
+          :class="{ 'sidebar-link-active': isAdminHome }"
+          title="Administración"
+        >
+          <Settings2 class="size-4" />
+          <span class="sr-only">Administración</span>
+        </NuxtLink>
+
+        <template v-else>
+          <button
+            type="button"
+            class="sidebar-link sidebar-admin-trigger"
+            :aria-expanded="adminMenuOpen"
+            aria-controls="sidebar-administration-menu"
+            :aria-label="adminMenuOpen ? 'Contraer secciones de Administración' : 'Expandir secciones de Administración'"
+            @click="adminMenuOpen = !adminMenuOpen"
+          >
+            <span class="sidebar-admin-trigger-content">
+              <Settings2 class="size-4" />
+              <span>Administración</span>
+            </span>
+            <ChevronDown class="size-4 transition-transform duration-200" :class="{ 'rotate-180': adminMenuOpen }" aria-hidden="true" />
+          </button>
+
+          <Transition name="sidebar-submenu">
+            <div v-if="adminMenuOpen" id="sidebar-administration-menu" class="sidebar-submenu" role="group" aria-label="Secciones de administración">
+              <NuxtLink
+                to="/admin"
+                class="sidebar-sub-link"
+                :class="{ 'sidebar-sub-link-active': isAdminHome }"
+                :aria-current="isAdminHome ? 'page' : undefined"
+              >
+                <span>Panel de administración</span>
+              </NuxtLink>
+              <NuxtLink
+                to="/admin/accesos/usuarios"
+                class="sidebar-sub-link"
+                :class="{ 'sidebar-sub-link-active': isAccessSection }"
+                :aria-current="isAccessSection ? 'page' : undefined"
+              >
+                <span>Accesos</span>
+              </NuxtLink>
+              <NuxtLink
+                to="/admin/organizacion/sedes"
+                class="sidebar-sub-link"
+                :class="{ 'sidebar-sub-link-active': isOrganizationSection }"
+                :aria-current="isOrganizationSection ? 'page' : undefined"
+              >
+                <span>Organización</span>
+              </NuxtLink>
+              <NuxtLink
+                to="/admin/configuracion"
+                class="sidebar-sub-link"
+                :class="{ 'sidebar-sub-link-active': isConfigurationSection }"
+                :aria-current="isConfigurationSection ? 'page' : undefined"
+              >
+                <span>Configuración</span>
+              </NuxtLink>
+            </div>
+          </Transition>
+        </template>
       </div>
-      <button type="button" class="sidebar-link mb-1 w-full" :class="{ 'sidebar-link-collapsed': isCollapsed, 'justify-between': !isCollapsed }" :title="isDark ? 'Modo claro' : 'Modo oscuro'" @click="toggleTheme"><span
-          class="flex items-center gap-3">
-          <Sun v-if="isDark" class="size-4" />
-          <Moon v-else class="size-4" /> <span v-if="!isCollapsed">{{ isDark ? 'Modo claro' : 'Modo oscuro' }}</span>
-        </span><span v-if="!isCollapsed" class="text-[10px] text-sidebar-foreground/45">{{ isDark ? 'ON' : 'OFF' }}</span></button>
-      <button type="button" class="sidebar-link w-full" :class="{ 'sidebar-link-collapsed': isCollapsed }" title="Cerrar sesión" @click="handleLogout">
-        <LogOut class="size-4" /> <span v-if="!isCollapsed">Cerrar sesión</span>
-      </button>
+    </nav>
+    <div class="sidebar-account-footer">
+      <UiDropdownMenu>
+        <UiDropdownMenuTrigger as-child>
+          <button
+            type="button"
+            class="sidebar-account-trigger group"
+            :class="{ 'sidebar-account-trigger-collapsed': isCollapsed }"
+            aria-label="Abrir menú de usuario"
+          >
+            <span class="sidebar-account-avatar">{{ userInitials }}</span>
+            <span v-if="!isCollapsed" class="sidebar-account-copy">
+              <span class="truncate text-sm font-medium text-sidebar-foreground">{{ user.name }}</span>
+              <span class="truncate text-xs text-sidebar-foreground/50">{{ user.role?.name || 'Cuenta' }}</span>
+            </span>
+            <ChevronDown v-if="!isCollapsed" class="ml-auto size-4 text-sidebar-foreground/60 transition-transform group-data-[state=open]:rotate-180" aria-hidden="true" />
+          </button>
+        </UiDropdownMenuTrigger>
+        <UiDropdownMenuContent side="right" align="end" class="w-60">
+          <UiDropdownMenuLabel class="px-2 py-2">
+            <p class="truncate font-semibold text-foreground">{{ user.name }}</p>
+            <p v-if="user.email" class="truncate text-[11px] font-normal">{{ user.email }}</p>
+          </UiDropdownMenuLabel>
+          <UiDropdownMenuSeparator />
+          <UiDropdownMenuItem as-child class="px-2 py-2">
+            <NuxtLink to="/profile" class="flex w-full items-center gap-2">
+              <UserRound class="size-4" />
+              <span>Mi perfil</span>
+            </NuxtLink>
+          </UiDropdownMenuItem>
+          <UiDropdownMenuItem class="px-2 py-2" @select="toggleTheme">
+            <Sun v-if="isDark" class="size-4" />
+            <Moon v-else class="size-4" />
+            <span>{{ isDark ? 'Modo claro' : 'Modo oscuro' }}</span>
+          </UiDropdownMenuItem>
+          <UiDropdownMenuSeparator />
+          <UiDropdownMenuItem variant="destructive" class="px-2 py-2" @select="handleLogout">
+            <LogOut class="size-4" />
+            <span>Cerrar sesión</span>
+          </UiDropdownMenuItem>
+        </UiDropdownMenuContent>
+      </UiDropdownMenu>
     </div>
   </aside>
 </template>

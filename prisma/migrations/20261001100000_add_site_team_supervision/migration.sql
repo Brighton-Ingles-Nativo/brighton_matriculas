@@ -1,10 +1,5 @@
--- CreateEnum (the enum may already exist when the schema was synchronized manually)
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'modalidad_equipo') THEN
-        CREATE TYPE "modalidad_equipo" AS ENUM ('PRESENCIAL', 'VIRTUAL');
-    END IF;
-END $$;
+-- CreateEnum
+CREATE TYPE "modalidad_equipo" AS ENUM ('PRESENCIAL', 'VIRTUAL');
 
 -- CreateTable
 CREATE TABLE "sedes" (

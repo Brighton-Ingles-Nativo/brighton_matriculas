@@ -1,6 +1,6 @@
 <template>
   <div class="min-h-[100dvh] bg-muted/20">
-    <AppHeader title="Sedes y equipos" subtitle="Organización comercial y supervisión" back-to="/dashboard" />
+    <AppHeader title="Organización" subtitle="Sedes, equipos y supervisión comercial" back-to="/admin" />
     <main class="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
       <div class="flex flex-wrap gap-2 border-b">
         <UiButton v-for="tab in tabs" :key="tab" variant="ghost" :class="activeTab === tab ? 'border-b-2 border-primary text-primary' : ''" @click="activeTab = tab">{{ tab }}</UiButton>
@@ -21,7 +21,7 @@
             <label class="flex items-center gap-2 pt-7 text-sm"><input v-model="siteForm.active" type="checkbox" /> Sede activa</label>
             <div class="space-y-2 sm:col-span-2"><UiLabel>Supervisores asignados</UiLabel><div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <label v-for="supervisor in supervisors" :key="supervisor.id" class="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"><input v-model="siteForm.supervisorIds" type="checkbox" :value="supervisor.id" /> <span>{{ supervisor.name }} <span class="text-muted-foreground">(@{{ supervisor.username }})</span></span></label>
-              <div v-if="!supervisors.length" class="flex items-center gap-3 rounded-md border border-dashed p-3 text-sm text-muted-foreground"><span>No hay supervisores activos disponibles.</span><UiButton variant="outline" size="sm" as-child><NuxtLink to="/users">Crear supervisor</NuxtLink></UiButton></div>
+              <div v-if="!supervisors.length" class="flex items-center gap-3 rounded-md border border-dashed p-3 text-sm text-muted-foreground"><span>No hay supervisores activos disponibles.</span><UiButton variant="outline" size="sm" as-child><NuxtLink to="/admin/accesos/usuarios">Crear supervisor</NuxtLink></UiButton></div>
             </div></div>
             <div class="flex justify-end gap-2 sm:col-span-2"><UiButton type="button" variant="outline" @click="siteFormOpen = false">Cancelar</UiButton><UiButton type="submit" class="gap-2" :disabled="saving"><Save class="size-4" /> Guardar sede</UiButton></div>
           </form>
@@ -39,7 +39,7 @@
         <UiCard v-if="teamFormOpen"><UiCardHeader><UiCardTitle>{{ editingTeam ? 'Editar equipo' : 'Nuevo equipo' }}</UiCardTitle><UiCardDescription>Un supervisor puede estar asignado a varios equipos.</UiCardDescription></UiCardHeader><form class="grid gap-5 p-6 sm:grid-cols-2" @submit.prevent="saveTeam">
           <div class="space-y-2"><UiLabel>Nombre del equipo</UiLabel><UiInput v-model="teamForm.name" required /></div><div class="space-y-2"><UiLabel>Sede</UiLabel><UiSelect v-model="teamForm.siteId" required><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione sede" /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="site in activeSites" :key="site.id" :value="site.id">{{ site.name }}</UiSelectItem></UiSelectContent></UiSelect></div>
           <div class="space-y-2"><UiLabel>Modalidad del equipo</UiLabel><UiSelect v-model="teamForm.modality"><UiSelectTrigger class="w-full"><UiSelectValue /></UiSelectTrigger><UiSelectContent><UiSelectItem value="PRESENCIAL">Presencial</UiSelectItem><UiSelectItem value="VIRTUAL">Virtual</UiSelectItem></UiSelectContent></UiSelect></div><label class="flex items-center gap-2 pt-7 text-sm"><input v-model="teamForm.active" type="checkbox" /> Equipo activo</label>
-          <div class="space-y-2 sm:col-span-2"><UiLabel>Supervisores asignados</UiLabel><div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"><label v-for="supervisor in supervisors" :key="supervisor.id" class="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"><input v-model="teamForm.supervisorIds" type="checkbox" :value="supervisor.id" /> <span>{{ supervisor.name }}</span></label><div v-if="!supervisors.length" class="flex items-center gap-3 rounded-md border border-dashed p-3 text-sm text-muted-foreground sm:col-span-2 lg:col-span-3"><span>No hay supervisores activos disponibles.</span><UiButton variant="outline" size="sm" as-child><NuxtLink to="/users">Crear supervisor</NuxtLink></UiButton></div></div></div>
+          <div class="space-y-2 sm:col-span-2"><UiLabel>Supervisores asignados</UiLabel><div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"><label v-for="supervisor in supervisors" :key="supervisor.id" class="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"><input v-model="teamForm.supervisorIds" type="checkbox" :value="supervisor.id" /> <span>{{ supervisor.name }}</span></label><div v-if="!supervisors.length" class="flex items-center gap-3 rounded-md border border-dashed p-3 text-sm text-muted-foreground sm:col-span-2 lg:col-span-3"><span>No hay supervisores activos disponibles.</span><UiButton variant="outline" size="sm" as-child><NuxtLink to="/admin/accesos/usuarios">Crear supervisor</NuxtLink></UiButton></div></div></div>
           <div class="space-y-2 sm:col-span-2"><UiLabel>Miembros del equipo</UiLabel><div class="grid max-h-48 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3"><label v-for="member in activeUsers" :key="member.id" class="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"><input v-model="teamForm.memberIds" type="checkbox" :value="member.id" /> <span>{{ member.name }} <span class="text-muted-foreground">({{ roleLabel(member.role.name) }})</span></span></label><p v-if="!activeUsers.length" class="text-sm text-muted-foreground">No hay usuarios activos disponibles.</p></div></div>
           <div class="flex justify-end gap-2 sm:col-span-2"><UiButton type="button" variant="outline" @click="teamFormOpen = false">Cancelar</UiButton><UiButton type="submit" class="gap-2" :disabled="saving"><Save class="size-4" /> Guardar equipo</UiButton></div>
         </form></UiCard>
@@ -52,10 +52,15 @@
 <script setup lang="ts">
 import { Pencil, Plus, RefreshCw, Save } from '@lucide/vue'
 
-definePageMeta({ middleware: ['auth', 'admin'] })
+definePageMeta({
+  middleware: ['auth', 'admin'],
+  alias: ['/sites', '/admin/organizacion/sedes', '/admin/organizacion/equipos']
+})
 const { csrfHeaders } = useAuth()
+const route = useRoute()
 const tabs = ['Sedes', 'Equipos'] as const
-const activeTab = ref<(typeof tabs)[number]>('Sedes')
+const tabFromRoute = () => route.path.endsWith('/equipos') || route.query.tab === 'equipos' ? 'Equipos' : 'Sedes'
+const activeTab = ref<(typeof tabs)[number]>(tabFromRoute())
 type Supervisor = { 
   id: string; 
   name: string; 
@@ -289,5 +294,9 @@ const roleLabel = (value: string) => ({
 
 const initials = (value: string) => value.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')
 
+watch(() => [route.path, route.query.tab], () => {
+  const tab = tabFromRoute()
+  if (tab !== activeTab.value) activeTab.value = tab
+})
 onMounted(loadAll)
 </script>
