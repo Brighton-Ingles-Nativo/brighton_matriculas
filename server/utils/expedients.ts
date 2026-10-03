@@ -29,7 +29,7 @@ export async function requireExpedientUser(event: H3Event) {
 export async function getAccessibleContract(contractId: string, user: Awaited<ReturnType<typeof requireExpedientUser>>) {
   const contract = await prisma.contract.findUnique({
     where: { id: contractId },
-    select: { id: true, userId: true, accepted: true }
+    select: { id: true, userId: true, signedAt: true }
   })
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'Matrícula no encontrada' })
   if (user.role?.name === 'asesor' && contract.userId !== user.id) {

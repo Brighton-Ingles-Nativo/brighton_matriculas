@@ -21,6 +21,7 @@ const canReviewCancellation = computed(() => ['supervisor', 'admin'].includes(us
 const departments = ['Amazonas', 'Ancash', 'Apurímac', 'Arequipa', 'Ayacucho', 'Cajamarca', 'Callao', 'Cusco', 'Huancavelica', 'Huánuco', 'Ica', 'Junín', 'La Libertad', 'Lambayeque', 'Lima', 'Loreto', 'Madre de Dios', 'Moquegua', 'Pasco', 'Piura', 'Puno', 'San Martín', 'Tacna', 'Tumbes', 'Ucayali']; 
 const districts = ['Arequipa', 'Alto Selva Alegre', 'Cayma', 'Cerro Colorado', 'Characato', 'Jacobo Hunter', 'José Luis Bustamante y Rivero', 'Mariano Melgar', 'Miraflores', 'Paucarpata', 'Sabandía', 'Sachaca', 'Socabaya', 'Tiabaya', 'Yanahuara', 'Yura', 'La Joya']; 
 const teams = ref<{ id: string; name: string; site: { id: string; name: string } }[]>([])
+const strategies = ref<{ id: string; code: string | null; name: string; description: string | null }[]>([])
 
 const installments = Array.from({ length: 13 }, (_, index) => index + 2)
 const form = reactive<Record<string, any>>({ 
@@ -48,7 +49,7 @@ const form = reactive<Record<string, any>>({
   beneficiary2Phone: '', 
   currentSituation: 'Empleado', 
   housingType: 'Propia', 
-  strategy: '', 
+  strategyId: '',
   paymentStartDate: '', 
   modality: '', 
   program: '',
@@ -85,6 +86,15 @@ const loadTeams = async () => {
     teams.value = response.data
   } catch {
     error.value = 'No se pudieron cargar los equipos comerciales.'
+  }
+}
+
+const loadStrategies = async () => {
+  try {
+    const response = await $fetch<{ data: typeof strategies.value }>('/api/strategies', { credentials: 'include' })
+    strategies.value = response.data
+  } catch {
+    error.value = 'No se pudieron cargar las estrategias.'
   }
 }
 
@@ -179,11 +189,12 @@ const submit = async () => {
   error.value = ''; 
   success.value = ''; 
   try { 
+    const { strategy: _strategy, strategyNameSnapshot: _strategyNameSnapshot, strategyDefinition: _strategyDefinition, ...editableForm } = form
     await $fetch<any>(`/api/contracts/${route.params.id}`, { 
       method: 'PUT' as any, 
       headers: await csrfHeaders(), 
       credentials: 'include', 
-      body: form 
+      body: editableForm
     }); 
     success.value = 'Matrícula actualizada correctamente.' 
   } catch (err: any) { 
@@ -193,7 +204,7 @@ const submit = async () => {
   } 
 }
 
-onMounted(async () => { await Promise.all([loadTeams(), loadContract()]) })
+onMounted(async () => { await Promise.all([loadTeams(), loadStrategies(), loadContract()]) })
 </script>
 
 <template>
@@ -289,7 +300,14 @@ onMounted(async () => { await Promise.all([loadTeams(), loadContract()]) })
             </div>
             <div class="space-y-2">
               <UiLabel>Estrategia</UiLabel>
-              <UiInput v-model="form.strategy" required />
+              <UiSelect v-model="form.strategyId" required>
+                <UiSelectTrigger class="w-full">
+                  <UiSelectValue placeholder="Seleccione una estrategia" />
+                </UiSelectTrigger>
+                <UiSelectContent>
+                  <UiSelectItem v-for="item in strategies" :key="item.id" :value="item.id">{{ item.name }}</UiSelectItem>
+                </UiSelectContent>
+              </UiSelect>
             </div>
           </UiCardContent>
         </UiCard>

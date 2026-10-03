@@ -28,7 +28,6 @@ type ContractPayload = {
   beneficiary2Phone?: string
   currentSituation?: string
   housingType?: string
-  strategy?: string
   strategyId?: string
   paymentStartDate?: string
   modality?: string
@@ -86,7 +85,7 @@ export default defineEventHandler(async (event) => {
 
   const body = await readBody<ContractPayload>(event)
   const selectedStrategy = await resolveActiveStrategy(body.strategyId)
-  const strategyName = selectedStrategy?.name || text(body.strategy)
+  const strategyName = selectedStrategy?.name || ''
   const required: Array<[string, unknown]> = [
     ['departamento de contrato', body.contractDepartment],
     ['provincia de contrato', body.contractProvince],
@@ -185,7 +184,7 @@ export default defineEventHandler(async (event) => {
           installmentCount: Math.max(0, Math.trunc(Number(body.installmentCount) || 0)),
           installmentValue: money(body.installmentValue),
           otherPayment: optionalText(body.otherPayment),
-          status: '0',
+          status: 'REVISION',
           accessToken: token,
           tokenExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
           otherData: { create: {

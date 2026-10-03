@@ -8,10 +8,10 @@ export default defineEventHandler(async (event) => {
   const user = await requireExpedientUser(event)
   const expedientId = getRouterParam(event, 'id')
   if (!expedientId || !/^[0-9a-f-]{36}$/i.test(expedientId)) throw createError({ statusCode: 400, statusMessage: 'Expediente inválido' })
-  const expedient = await prisma.expedient.findUnique({ where: { id: expedientId }, include: { contract: { select: { id: true, userId: true, accepted: true } } } })
+  const expedient = await prisma.expedient.findUnique({ where: { id: expedientId }, include: { contract: { select: { id: true, userId: true, signedAt: true } } } })
   if (!expedient) throw createError({ statusCode: 404, statusMessage: 'Expediente no encontrado' })
   await getAccessibleContract(expedient.contract.id, user)
-  if (!expedient.contract.accepted) throw createError({ statusCode: 409, statusMessage: 'El contrato aún no está firmado.' })
+  if (!expedient.contract.signedAt) throw createError({ statusCode: 409, statusMessage: 'El contrato aún no está firmado.' })
 
   const parts = await readMultipartFormData(event)
   const type = String(parts?.find((part) => part.name === 'type')?.data?.toString() || '').trim()
@@ -23,7 +23,18 @@ export default defineEventHandler(async (event) => {
   try {
     const document = await prisma.$transaction(async (tx) => {
       if (previous) await tx.expedientDocument.delete({ where: { id: previous.id } })
-      await tx.expedient.update({ where: { id: expedientId }, data: { status: 'PENDIENTE' } })
+      const updated = await tx.expedient.update({ where: { id: expedientId }, data: { status: 'CREADO' } })
+      await tx.expedientMovement.create({
+        data: {
+          expedientId,
+          fromStatus: expedient.status,
+          toStatus: updated.status,
+          fromLocation: expedient.currentLocation,
+          toLocation: updated.currentLocation,
+          userId: user.id,
+          observation: `Documento ${type} actualizado.`
+        }
+      })
       return tx.expedientDocument.create({ data: { expedientId, type, ...stored } })
     })
     if (previous) await removeStoredFile(previous.filePath)

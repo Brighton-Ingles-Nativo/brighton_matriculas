@@ -41,24 +41,47 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'La fecha de cita es obligatoria' })
   }
 
-  const statusByAction: Record<WorkflowAction, string> = {
-    send_verification: 'EN_VERIFICACION',
-    reject_commercial: 'REBOTADO_COMERCIAL',
-    reject_verification: 'REBOTADO_VERIFICACION',
-    schedule_appointment: 'CITA_PROGRAMADA',
-    verify_with_observations: 'VERIFICADA_CON_OBSERVACIONES',
-    verify: 'VERIFICADA'
-  }
+  const statusByAction = {
+    send_verification: 'CREADO',
+    reject_commercial: 'REBOTADO',
+    reject_verification: 'REBOTADO',
+    schedule_appointment: 'AGENDADO',
+    verify_with_observations: 'OBSERVADO',
+    verify: 'VERIFICADO'
+  } as const satisfies Record<WorkflowAction, 'CREADO' | 'REBOTADO' | 'AGENDADO' | 'OBSERVADO' | 'VERIFICADO'>
+  const locationByAction = {
+    send_verification: 'VERIFICACION',
+    reject_commercial: 'ASESOR',
+    reject_verification: 'ASISTENTE_COMERCIAL',
+    schedule_appointment: 'VERIFICACION',
+    verify_with_observations: 'VERIFICACION',
+    verify: 'VERIFICACION'
+  } as const satisfies Record<WorkflowAction, 'ASESOR' | 'SUPERVISOR' | 'ASISTENTE_COMERCIAL' | 'VERIFICACION'>
   const status = statusByAction[action]
-  const updated = await prisma.expedient.update({
-    where: { id },
-    data: {
-      status,
-      ...(action === 'send_verification' ? { sentToVerificationAt: new Date() } : {}),
-      ...(['reject_commercial', 'reject_verification', 'verify_with_observations'].includes(action) ? { observation, observationAt: new Date(), observationById: user.id } : {}),
-      ...(action === 'schedule_appointment' ? { appointmentAt, appointmentType: body.appointmentType || null } : {}),
-      ...(action === 'verify' || action === 'verify_with_observations' ? { verifiedAt: new Date(), advisoryRating: Number.isInteger(body.advisoryRating) ? body.advisoryRating : null } : {})
-    }
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.expedient.update({
+      where: { id },
+      data: {
+        status,
+        currentLocation: locationByAction[action],
+        ...(action === 'send_verification' ? { sentToVerificationAt: new Date() } : {}),
+        ...(['reject_commercial', 'reject_verification', 'verify_with_observations'].includes(action) ? { observation, observationAt: new Date(), observationById: user.id } : {}),
+        ...(action === 'schedule_appointment' ? { appointmentAt, appointmentType: body.appointmentType || null } : {}),
+        ...(action === 'verify' || action === 'verify_with_observations' ? { verifiedAt: new Date(), advisoryRating: Number.isInteger(body.advisoryRating) ? body.advisoryRating : null } : {})
+      }
+    })
+    await tx.expedientMovement.create({
+      data: {
+        expedientId: id,
+        fromStatus: expedient.status,
+        toStatus: result.status,
+        fromLocation: expedient.currentLocation,
+        toLocation: result.currentLocation,
+        userId: user.id,
+        observation: observation || null
+      }
+    })
+    return result
   })
 
   const recipients = [expedient.contract.userId, expedient.contract.user.supervisorId ?? '']
@@ -92,5 +115,5 @@ export default defineEventHandler(async (event) => {
     dedupeKey: `expedient:${updated.id}:workflow:${updated.updatedAt.toISOString()}`
   })
 
-  return { success: true, data: { id: updated.id, status: updated.status, observation: updated.observation } }
+  return { success: true, data: { id: updated.id, status: updated.status, currentLocation: updated.currentLocation, observation: updated.observation } }
 })

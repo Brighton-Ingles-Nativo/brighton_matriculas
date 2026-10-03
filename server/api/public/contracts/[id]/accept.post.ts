@@ -11,13 +11,13 @@ export default defineEventHandler(async (event) => {
 
   const contract = await prisma.contract.findFirst({
     where: { id, accessToken: token, tokenExpiresAt: { gt: new Date() } },
-    select: { id: true, status: true, accepted: true, userId: true, user: { select: { supervisorId: true } } }
+    select: { id: true, status: true, signedAt: true, userId: true, user: { select: { supervisorId: true } } }
   })
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'El enlace ha expirado o no es válido' })
-  if (Number(contract.status) !== 1) throw createError({ statusCode: 409, statusMessage: 'El contrato debe estar revisado antes de aceptarlo' })
-  if (contract.accepted) return { success: true, message: 'El contrato ya fue aceptado' }
+  if (contract.status !== 'REVISION') throw createError({ statusCode: 409, statusMessage: 'El contrato debe estar en revisión antes de firmarlo' })
+  if (contract.signedAt) return { success: true, message: 'El contrato ya fue firmado' }
 
-  await prisma.contract.update({ where: { id }, data: { accepted: true, acceptedAt: new Date(), acceptedIp: getClientIPAddress(event) } })
+  await prisma.contract.update({ where: { id }, data: { status: 'FIRMADO', signedAt: new Date(), signedIp: getClientIPAddress(event) } })
   await notify({
     recipients: [contract.userId, contract.user.supervisorId ?? ''],
     type: 'CONTRATO_FIRMADO',

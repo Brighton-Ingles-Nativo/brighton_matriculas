@@ -5,7 +5,7 @@ export default defineEventHandler(async (event) => {
   const user = await requireExpedientUser(event)
   const contracts = await prisma.contract.findMany({
     where: {
-      accepted: true,
+      signedAt: { not: null },
       expedient: null,
       ...(user.role?.name === 'asesor' ? { userId: user.id } : {})
     },

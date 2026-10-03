@@ -5,7 +5,7 @@ export default defineEventHandler(async (event) => {
   const user = await requireExpedientUser(event)
   const id = getRouterParam(event, 'id')
   if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, statusMessage: 'Expediente inválido' })
-  const expedient = await prisma.expedient.findUnique({ where: { id }, include: { contract: { select: { userId: true } }, documents: { orderBy: { uploadedAt: 'asc' } } } })
+  const expedient = await prisma.expedient.findUnique({ where: { id }, include: { contract: { select: { userId: true } }, documents: { orderBy: { uploadedAt: 'asc' } }, movements: { orderBy: { createdAt: 'desc' }, include: { user: { select: { id: true, name: true, username: true } } } } } })
   if (!expedient) throw createError({ statusCode: 404, statusMessage: 'Expediente no encontrado' })
   if (user.role?.name === 'asesor' && expedient.contract.userId !== user.id) throw createError({ statusCode: 403, statusMessage: 'No tienes acceso a este expediente' })
   return {
@@ -14,6 +14,16 @@ export default defineEventHandler(async (event) => {
       id: expedient.id,
       contractId: expedient.contractId,
       status: expedient.status,
+      currentLocation: expedient.currentLocation,
+      responsibleId: expedient.responsibleId,
+      firstContactAt: expedient.firstContactAt,
+      strategyConfirmed: expedient.strategyConfirmed,
+      strategyObservation: expedient.strategyObservation,
+      advisorValidationConfirmed: expedient.advisorValidationConfirmed,
+      advisorValidationName: expedient.advisorValidationName,
+      classStartDate: expedient.classStartDate,
+      paymentDate: expedient.paymentDate,
+      movements: expedient.movements,
       observation: expedient.observation,
       observationAt: expedient.observationAt,
       appointmentAt: expedient.appointmentAt,

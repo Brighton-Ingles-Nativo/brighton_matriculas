@@ -11,7 +11,7 @@ type PdfContract = {
   customer: { name: string; birthDate: Date; dni: string; email: string; address: string; department: string | null; province: string | null; district: string | null; phone: string }
   students: Array<{ student: { name: string; birthDate: Date | null; dni: string | null; email: string | null; phone: string | null } }>
   otherData: { currentSituation: string; housingType: string; dataAuthorization: boolean; strategy: string; notes: string | null; testimonials: boolean; dataUsage: boolean | null } | null
-  accepted: boolean
+  signedAt: Date | null
   paymentStartDate: string | null
   modality: string | null
   program: string
@@ -25,8 +25,7 @@ type PdfContract = {
   installmentValue: { toString(): string } | null
   otherPayment: string | null
   status: string | null
-  acceptedAt: Date | null
-  acceptedIp: string | null
+  signedIp: string | null
   user: { id: string; name: string; username: string }
   receipts: Array<{
     amount: { toString(): string } | null
@@ -77,8 +76,8 @@ function buildPdf(contract: PdfContract): Buffer {
     `Situacion: ${contract.otherData?.currentSituation || '-'}    Vivienda: ${contract.otherData?.housingType || '-'}`,
     `Estrategia: ${contract.otherData?.strategy || '-'}    Estado: ${contract.status || '-'}`,
     `Autorizacion de datos: ${yesNo(contract.otherData?.dataAuthorization ?? null)}    Uso de datos: ${yesNo(contract.otherData?.dataUsage ?? null)}`,
-    `Aceptado: ${yesNo(contract.accepted)}    Testimonios: ${yesNo(contract.otherData?.testimonials ?? null)}`,
-    `Fecha aceptacion: ${date(contract.acceptedAt)}    IP: ${contract.acceptedIp || '-'}`,
+    `Firmado: ${yesNo(Boolean(contract.signedAt))}    Testimonios: ${yesNo(contract.otherData?.testimonials ?? null)}`,
+    `Fecha firma: ${date(contract.signedAt)}    IP: ${contract.signedIp || '-'}`,
     '',
     'RECIBOS',
     ...(contract.receipts.length ? contract.receipts.flatMap((receipt, index) => [

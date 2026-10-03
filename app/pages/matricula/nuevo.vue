@@ -3,7 +3,7 @@ import { ArrowLeft, Save } from '@lucide/vue'
 
 definePageMeta({ middleware: 'auth', ssr: false })
 
-const strategies = ['Lead de Fb.', 'Lead de Instagram.', 'Lead de Tiktok.', 'Referido.', 'Cadena de referido.', 'Webinar.', 'Página web.', 'Panel.', 'Pesquisa.', 'Módulo', 'Convenio', 'Informe de oficina', 'Influencer', 'Mercado natural', 'Remarketing', 'Feria', 'Base de datos', 'LinkedIn']
+const strategies = ref<{ id: string; code: string | null; name: string; description: string | null }[]>([])
 const departments = ['Amazonas', 'Ancash', 'Apurímac', 'Arequipa', 'Ayacucho', 'Cajamarca', 'Callao', 'Cusco', 'Huancavelica', 'Huánuco', 'Ica', 'Junín', 'La Libertad', 'Lambayeque', 'Lima', 'Loreto', 'Madre de Dios', 'Moquegua', 'Pasco', 'Piura', 'Puno', 'San Martín', 'Tacna', 'Tumbes', 'Ucayali']
 const residenceDistricts = ['Arequipa', 'Alto Selva Alegre', 'Cayma', 'Cerro Colorado', 'Characato', 'Jacobo Hunter', 'José Luis Bustamante y Rivero', 'Mariano Melgar', 'Miraflores', 'Paucarpata', 'Sabandía', 'Sachaca', 'Socabaya', 'Tiabaya', 'Yanahuara', 'Yura', 'La Joya']
 const teams = ref<{ id: string; name: string; site: { id: string; name: string } }[]>([])
@@ -13,7 +13,7 @@ const form = reactive({
   contractDepartment: 'Arequipa', contractProvince: 'Arequipa', contractDistrict: '',
   holderName: '', holderBirthDate: '', holderDni: '', holderEmail: '', holderAddress: '', holderDepartment: '', holderProvince: '', holderDistrict: '', holderPhone: '',
   beneficiary1Name: '', beneficiary1BirthDate: '', beneficiary1Dni: '', beneficiary1Email: '', beneficiary1Phone: '', beneficiary2Name: '', beneficiary2BirthDate: '', beneficiary2Dni: '', beneficiary2Email: '', beneficiary2Phone: '',
-  currentSituation: 'Empleado', housingType: 'Propia', strategy: '', paymentStartDate: '', modality: '', program: '', plan: '', paymentMode: '', programValue: '', initialPayment: '0', balance: '0', installmentCount: '0', installmentValue: '0', otherPayment: '0', notes: '', dataAuthorization: false, testimonials: false, dataUsage: false,
+  currentSituation: 'Empleado', housingType: 'Propia', strategyId: '', paymentStartDate: '', modality: '', program: '', plan: '', paymentMode: '', programValue: '', initialPayment: '0', balance: '0', installmentCount: '0', installmentValue: '0', otherPayment: '0', notes: '', dataAuthorization: false, testimonials: false, dataUsage: false,
 })
 
 const saving = ref(false)
@@ -30,6 +30,15 @@ const loadTeams = async () => {
     teams.value = response.data
   } catch {
     formError.value = 'No se pudieron cargar los equipos comerciales.'
+  }
+}
+
+const loadStrategies = async () => {
+  try {
+    const response = await $fetch<{ data: typeof strategies.value }>('/api/strategies', { credentials: 'include' })
+    strategies.value = response.data
+  } catch {
+    formError.value = 'No se pudieron cargar las estrategias.'
   }
 }
 
@@ -79,7 +88,7 @@ watch(() => [form.paymentMode, form.program, form.plan, form.modality], () => {
   else if (isFinanced.value) calculateAmounts()
 })
 watch(() => [form.programValue, form.initialPayment, form.installmentCount, form.otherPayment], calculateAmounts)
-onMounted(loadTeams)
+onMounted(async () => { await Promise.all([loadTeams(), loadStrategies()]) })
 
 const handleSubmit = async () => {
   if (saving.value) return
@@ -249,12 +258,12 @@ const handleSubmit = async () => {
             </div>
             <div class="space-y-2">
               <UiLabel for="strategy">Estrategia *</UiLabel>
-              <UiSelect v-model="form.strategy" required>
+              <UiSelect v-model="form.strategyId" required>
                 <UiSelectTrigger id="strategy" class="w-full">
                   <UiSelectValue placeholder="Seleccione..." />
                 </UiSelectTrigger>
                 <UiSelectContent>
-                  <UiSelectItem v-for="item in strategies" :key="item" :value="item">{{ item }}</UiSelectItem>
+                  <UiSelectItem v-for="item in strategies" :key="item.id" :value="item.id">{{ item.name }}</UiSelectItem>
                 </UiSelectContent>
               </UiSelect>
             </div>

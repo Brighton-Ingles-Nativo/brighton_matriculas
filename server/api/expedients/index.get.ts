@@ -1,5 +1,6 @@
 import { getUserBySession } from '../../utils/auth'
 import { prisma } from '../../utils/prisma'
+import { Prisma } from '@prisma/client'
 
 export default defineEventHandler(async (event) => {
   const user = await getUserBySession(event)
@@ -15,27 +16,43 @@ export default defineEventHandler(async (event) => {
   const requestedLimit = Number(query.limit || 15)
   const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
   const limit = Number.isInteger(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 50) : 15
-  const holderName = typeof query.holderName === 'string' ? query.holderName.trim() : ''
-  const holderDni = typeof query.holderDni === 'string' ? query.holderDni.trim() : ''
-  const advisorName = typeof query.advisorName === 'string' ? query.advisorName.trim() : ''
+  const search = typeof query.search === 'string' ? query.search.trim() : ''
   const status = typeof query.status === 'string' ? query.status.trim() : ''
+  const location = typeof query.location === 'string' ? query.location.trim() : ''
 
-  const contractFilter = {
+  const contractFilter: Prisma.ContractWhereInput = {
     ...(user.role?.name === 'asesor' ? { userId: user.id } : {}),
-    ...(holderName || holderDni ? {
-      customer: {
-        ...(holderName ? { name: { contains: holderName, mode: 'insensitive' as const } } : {}),
-        ...(holderDni ? { dni: { contains: holderDni, mode: 'insensitive' as const } } : {})
-      }
-    } : {}),
-    ...(advisorName && user.role?.name !== 'asesor' ? {
-      user: { name: { contains: advisorName, mode: 'insensitive' as const } }
+    ...(search ? {
+      OR: [
+        { customer: { name: { contains: search, mode: 'insensitive' as const } } },
+        { customer: { dni: { contains: search, mode: 'insensitive' as const } } },
+        ...(user.role?.name !== 'asesor' ? [{ user: { name: { contains: search, mode: 'insensitive' as const } } }] : [])
+      ]
     } : {})
   }
 
-  const where = {
+  const statusFilter: Prisma.ExpedientWhereInput = status === 'PENDIENTE'
+    ? { status: 'CREADO', currentLocation: 'SUPERVISOR' }
+    : status === 'EN_COMERCIAL'
+      ? { status: 'CREADO', currentLocation: 'ASISTENTE_COMERCIAL' }
+      : status === 'EN_VERIFICACION'
+        ? { status: 'CREADO', currentLocation: 'VERIFICACION' }
+        : status === 'REBOTADO_COMERCIAL'
+          ? { status: 'REBOTADO', currentLocation: 'ASESOR' }
+          : status === 'REBOTADO_VERIFICACION'
+            ? { status: 'REBOTADO', currentLocation: 'ASISTENTE_COMERCIAL' }
+            : status === 'VERIFICADA_CON_OBSERVACIONES'
+              ? { status: 'OBSERVADO' }
+                : status === 'VERIFICADA'
+                  ? { status: 'VERIFICADO' }
+                  : {}
+  const locationFilter: Prisma.ExpedientWhereInput = ['ASESOR', 'SUPERVISOR', 'ASISTENTE_COMERCIAL', 'VERIFICACION'].includes(location)
+    ? { currentLocation: location as Prisma.ExpedientWhereInput['currentLocation'] }
+    : {}
+  const where: Prisma.ExpedientWhereInput = {
     ...(Object.keys(contractFilter).length ? { contract: contractFilter } : {}),
-    ...(status ? { status } : {})
+    ...statusFilter,
+    ...locationFilter
   }
 
   const [total, expedients] = await Promise.all([
@@ -69,6 +86,8 @@ export default defineEventHandler(async (event) => {
       holderDni: expedient.contract.customer.dni,
       advisorName: expedient.contract.user.name,
       status: expedient.status,
+      currentLocation: expedient.currentLocation,
+      responsibleId: expedient.responsibleId,
       documentCount: expedient._count.documents,
       createdAt: expedient.createdAt,
       updatedAt: expedient.updatedAt,

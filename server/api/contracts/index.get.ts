@@ -20,14 +20,12 @@ export default defineEventHandler(async (event) => {
   const status = typeof query.status === 'string' ? query.status.trim() : ''
 
   const statusFilter = status === 'revision'
-    ? { accepted: false, OR: [{ status: '0' }, { status: null }] }
+    ? { status: 'REVISION' as const }
     : status === 'firmado'
-      ? { accepted: true }
-      : status === 'revisado'
-        ? { status: '1' }
-        : status === 'anulado'
-          ? { status: '-5' }
-          : {}
+      ? { status: 'FIRMADO' as const }
+      : status === 'anulado'
+        ? { status: 'ANULADO' as const }
+        : {}
 
   const where = {
     ...(user.role?.name === 'asesor' ? { userId: user.id } : {}),
@@ -67,7 +65,7 @@ export default defineEventHandler(async (event) => {
       plan: contract.plan,
       programValue: contract.programValue.toString(),
       status: contract.status,
-      accepted: contract.accepted,
+      signedAt: contract.signedAt,
       registeredAt: contract.registeredAt,
       advisor: contract.user,
       receiptCount: contract.receipts.length,

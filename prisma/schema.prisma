@@ -45,6 +45,8 @@ model User {
   cancellationRequestsMade     CancellationRequest[] @relation("CancellationRequestedBy")
   cancellationRequestsReviewed CancellationRequest[] @relation("CancellationReviewedBy")
   expedientObservations        Expedient[]           @relation("ExpedientObservationBy")
+  responsibleExpedients        Expedient[]           @relation("ExpedientResponsible")
+  expedientMovements            ExpedientMovement[]   @relation("ExpedientMovementActor")
   strategiesCreated            Strategy[]            @relation("StrategyCreatedBy")
   strategiesUpdated            Strategy[]            @relation("StrategyUpdatedBy")
 
@@ -117,6 +119,27 @@ enum TeamModality {
   VIRTUAL
 
   @@map("modalidad_equipo")
+}
+
+enum ContractStatus {
+  REVISION
+  FIRMADO
+  ANULADO
+}
+
+enum ExpedientStatus {
+  CREADO
+  REBOTADO
+  AGENDADO
+  OBSERVADO
+  VERIFICADO
+}
+
+enum ExpedientLocation {
+  ASESOR
+  SUPERVISOR
+  ASISTENTE_COMERCIAL
+  VERIFICACION
 }
 
 model Site {
@@ -269,12 +292,11 @@ model Contract {
   installmentCount    Int?                 @map("nro_cuotas")
   installmentValue    Decimal?             @map("valor_cuota") @db.Decimal(10, 2)
   otherPayment        String?              @map("otro_pago") @db.VarChar(100)
-  status              String?              @map("estado") @db.VarChar(50)
-  accepted            Boolean              @default(false) @map("acepto")
+  status              ContractStatus       @default(REVISION) @map("estado")
   createdAt           DateTime             @default(now()) @map("created_at")
   updatedAt           DateTime             @updatedAt @map("updated_at")
-  acceptedAt          DateTime?            @map("acepto_fecha")
-  acceptedIp          String?              @map("acepto_ip") @db.VarChar(45)
+  signedAt            DateTime?            @map("firmado_at")
+  signedIp            String?              @map("firmado_ip") @db.VarChar(45)
   accessToken         String?              @unique @map("access_token") @db.VarChar(64)
   tokenExpiresAt      DateTime?            @map("token_expiration")
   user                User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -296,12 +318,15 @@ model Contract {
 model Expedient {
   id                       String              @id @default(uuid()) @db.Uuid
   contractId               String              @unique @map("contrato_id") @db.Uuid
-  status                   String              @default("PENDIENTE") @db.VarChar(50)
+  status                   ExpedientStatus     @default(CREADO)
+  currentLocation          ExpedientLocation   @map("ubicacion_actual")
+  responsibleId            String?             @map("responsable_id") @db.Uuid
   createdAt                DateTime            @default(now()) @map("created_at")
   updatedAt                DateTime            @updatedAt @map("updated_at")
   sentToCommercialAt       DateTime?           @map("enviado_comercial_at")
   sentToVerificationAt     DateTime?           @map("enviado_verificacion_at")
   verifiedAt               DateTime?           @map("verificado_at")
+  firstContactAt           DateTime?           @map("primer_contacto_at")
   observation              String?             @map("observacion") @db.Text
   observationAt            DateTime?           @map("observacion_at")
   observationById          String?             @map("observacion_by_id") @db.Uuid
@@ -309,13 +334,39 @@ model Expedient {
   appointmentRescheduledAt DateTime?           @map("cita_reprogramada_at")
   appointmentType          String?             @map("tipo_cita") @db.VarChar(20)
   advisoryRating           Int?                @map("calificacion_asesoria")
+  strategyConfirmed        Boolean?            @map("estrategia_confirmada")
+  strategyObservation      String?             @map("estrategia_observacion") @db.Text
+  advisorValidationConfirmed Boolean?          @map("asesor_validacion_confirmado")
+  advisorValidationName    String?             @map("asesor_validacion_nombre") @db.VarChar(200)
+  classStartDate           DateTime?           @map("inicio_clases_at")
+  paymentDate              DateTime?           @map("fecha_pago")
   contract                 Contract            @relation(fields: [contractId], references: [id], onDelete: Cascade)
   documents                ExpedientDocument[]
   observationBy            User?               @relation("ExpedientObservationBy", fields: [observationById], references: [id], onDelete: SetNull)
+  responsible              User?               @relation("ExpedientResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
+  movements                ExpedientMovement[]
 
   @@index([status])
   @@index([observationById])
   @@map("expedientes")
+}
+
+model ExpedientMovement {
+  id             String             @id @default(uuid()) @db.Uuid
+  expedientId    String             @map("expediente_id") @db.Uuid
+  fromStatus     ExpedientStatus?   @map("estado_anterior")
+  toStatus       ExpedientStatus?   @map("estado_nuevo")
+  fromLocation   ExpedientLocation? @map("ubicacion_anterior")
+  toLocation     ExpedientLocation? @map("ubicacion_nueva")
+  userId         String             @map("usuario_id") @db.Uuid
+  observation    String?            @db.Text
+  createdAt      DateTime           @default(now()) @map("created_at")
+
+  expedient Expedient @relation(fields: [expedientId], references: [id], onDelete: Cascade)
+  user      User      @relation("ExpedientMovementActor", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([expedientId, createdAt])
+  @@map("expediente_movimientos")
 }
 
 model CancellationRequest {

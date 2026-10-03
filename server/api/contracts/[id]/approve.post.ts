@@ -17,6 +17,6 @@ export default defineEventHandler(async (event) => {
   const contract = await prisma.contract.findUnique({ where: { id }, select: { id: true } })
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'Matrícula no encontrada' })
 
-  await prisma.contract.update({ where: { id }, data: { status: '1' } })
+  await prisma.contract.update({ where: { id }, data: { status: 'REVISION' } })
   return { success: true, message: 'Matrícula aprobada correctamente' }
 })

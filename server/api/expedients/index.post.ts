@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
   if (!/^[0-9a-f-]{36}$/i.test(contractId)) throw createError({ statusCode: 400, statusMessage: 'Matrícula inválida' })
 
   const contract = await getAccessibleContract(contractId, user)
-  if (!contract.accepted) throw createError({ statusCode: 409, statusMessage: 'El expediente se puede crear cuando el contrato esté firmado.' })
+  if (!contract.signedAt) throw createError({ statusCode: 409, statusMessage: 'El expediente se puede crear cuando el contrato esté firmado.' })
 
   const dni = filePart(parts, 'dni')
   const voucher = filePart(parts, 'voucher')
@@ -33,9 +33,21 @@ export default defineEventHandler(async (event) => {
     }
     const existing = await prisma.expedient.findUnique({ where: { contractId }, include: { documents: true } })
     const expedient = await prisma.$transaction(async (tx) => {
+      const initialLocation = user.role?.name === 'asesor' ? 'SUPERVISOR' : 'ASISTENTE_COMERCIAL' as const
       const current = existing
-        ? await tx.expedient.update({ where: { id: existing.id }, data: { status: 'PENDIENTE' } })
-        : await tx.expedient.create({ data: { contractId, status: 'PENDIENTE' } })
+        ? await tx.expedient.update({ where: { id: existing.id }, data: { status: 'CREADO' } })
+        : await tx.expedient.create({ data: { contractId, status: 'CREADO', currentLocation: initialLocation } })
+      await tx.expedientMovement.create({
+        data: {
+          expedientId: current.id,
+          fromStatus: existing?.status ?? null,
+          toStatus: current.status,
+          fromLocation: existing?.currentLocation ?? null,
+          toLocation: current.currentLocation,
+          userId: user.id,
+          observation: existing ? 'Expediente actualizado por carga de documentos.' : 'Expediente creado.'
+        }
+      })
       for (const document of stored) {
         const previous = existing?.documents.find((item) => item.type === document.type)
         if (previous) await tx.expedientDocument.delete({ where: { id: previous.id } })

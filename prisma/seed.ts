@@ -125,6 +125,12 @@ function decimal(value: unknown): Prisma.Decimal | null {
 
 function boolean(value: unknown): boolean { return value === true || value === 't' || value === 'true' || value === 1 || value === '1' }
 
+function contractStatus(status: unknown, accepted: unknown): 'REVISION' | 'FIRMADO' | 'ANULADO' {
+  if (text(status) === '-5') return 'ANULADO'
+  if (boolean(accepted)) return 'FIRMADO'
+  return 'REVISION'
+}
+
 function json(value: unknown): Prisma.InputJsonValue {
   if (typeof value !== 'string') return (value ?? {}) as Prisma.InputJsonValue
   try { return JSON.parse(value) as Prisma.InputJsonValue }
@@ -314,12 +320,11 @@ async function main(): Promise<void> {
       installmentCount: integer(source.nro_cuotas, `nro_cuotas(${sourceId})`),
       installmentValue: decimal(source.valor_cuota),
       otherPayment: text(source.otro_pago),
-      status: text(source.estado),
-      accepted: boolean(source.acepto),
+      status: contractStatus(source.estado, source.acepto),
       createdAt: date(source.created_at) ?? new Date(),
       updatedAt: date(source.updated_at) ?? new Date(),
-      acceptedAt: date(source.acepto_fecha),
-      acceptedIp: text(source.acepto_ip),
+      signedAt: date(source.acepto_fecha),
+      signedIp: text(source.acepto_ip),
       accessToken: text(source.access_token),
       tokenExpiresAt: date(source.token_expiration)
     }

@@ -2,7 +2,7 @@ import { getUserBySession } from '../../utils/auth'
 import { prisma } from '../../utils/prisma'
 
 const columns = [
-  ['Número de matrícula', 'contractNumber'], ['Fecha de registro', 'registeredAt'], ['Estado', 'status'], ['Aceptado', 'accepted'],
+  ['Número de matrícula', 'contractNumber'], ['Fecha de registro', 'registeredAt'], ['Estado', 'status'], ['Firmado', 'signedAt'],
   ['Titular', 'holderName'], ['DNI', 'holderDni'], ['Correo', 'holderEmail'], ['Celular', 'holderPhone'], ['Dirección', 'holderAddress'],
   ['Departamento', 'contractDepartment'], ['Provincia', 'contractProvince'], ['Distrito', 'contractDistrict'], ['Programa', 'program'], ['Plan', 'plan'],
   ['Modalidad', 'modality'], ['Valor programa', 'programValue'], ['Cuota inicial', 'initialPayment'], ['Saldo', 'balance'], ['Nro. cuotas', 'installmentCount'],
@@ -26,14 +26,12 @@ export default defineEventHandler(async (event) => {
   const advisorName = typeof query.advisorName === 'string' ? query.advisorName.trim() : ''
   const status = typeof query.status === 'string' ? query.status.trim() : ''
   const statusFilter = status === 'revision'
-    ? { accepted: false, OR: [{ status: '0' }, { status: null }] }
+    ? { status: 'REVISION' as const }
     : status === 'firmado'
-      ? { accepted: true }
-      : status === 'revisado'
-        ? { status: '1' }
-        : status === 'anulado'
-          ? { status: '-5' }
-          : {}
+      ? { status: 'FIRMADO' as const }
+      : status === 'anulado'
+        ? { status: 'ANULADO' as const }
+        : {}
   const contracts = await prisma.contract.findMany({
     where: {
       ...(holderName || holderDni ? {

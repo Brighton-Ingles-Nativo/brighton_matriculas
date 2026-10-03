@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   const approved = body.decision === 'APROBAR'
   const updated = await prisma.$transaction(async (tx) => {
     const result = await tx.cancellationRequest.update({ where: { id }, data: { status: approved ? 'APROBADA' : 'RECHAZADA', reviewedById: user.id, reviewedAt: new Date(), reviewNote: String(body.reviewNote || '').trim() || null } })
-    if (approved) await tx.contract.update({ where: { id: request.contract.id }, data: { status: '-5' } })
+    if (approved) await tx.contract.update({ where: { id: request.contract.id }, data: { status: 'ANULADO' } })
     return result
   })
   await notify({ recipients: [request.contract.userId, request.requestedById], type: approved ? 'ANULACION_APROBADA' : 'ANULACION_RECHAZADA', title: approved ? 'Anulación aprobada' : 'Anulación rechazada', message: approved ? `La matrícula ${request.contract.contractNumber} fue anulada.` : `La solicitud de anulación fue rechazada. ${updated.reviewNote || ''}`, entityType: 'CONTRACT', entityId: request.contract.id, actionUrl: `/matricula/${request.contract.id}`, priority: 'high', dedupeKey: `cancellation:${request.id}:${updated.status}` })

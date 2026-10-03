@@ -12,6 +12,7 @@ interface ExpedientRow {
   holderDni: string
   advisorName: string
   status: string
+  currentLocation: string
   documentCount: number
   createdAt: string
   updatedAt: string
@@ -26,17 +27,14 @@ interface ExpedientsResponse {
 }
 
 const { user } = useAuth()
-const holderName = ref('')
-const holderDni = ref('')
-const advisorName = ref('')
+const search = ref('')
 const status = ref('')
+const location = ref('')
 const page = ref(1)
 const loading = ref(true)
 const error = ref('')
 const expedients = ref<ExpedientRow[]>([])
 const pagination = ref<ExpedientsResponse['pagination']>({ page: 1, limit: 15, total: 0, totalPages: 0 })
-
-const canFilterAdvisor = computed(() => user.value?.role?.name !== 'asesor')
 
 const loadExpedients = async () => {
   loading.value = true
@@ -45,10 +43,9 @@ const loadExpedients = async () => {
     const response = await $fetch<ExpedientsResponse>('/api/expedients', {
       query: {
         page: page.value,
-        holderName: holderName.value || undefined,
-        holderDni: holderDni.value || undefined,
-        advisorName: canFilterAdvisor.value ? advisorName.value || undefined : undefined,
-        status: status.value || undefined
+        search: search.value || undefined,
+        status: status.value || undefined,
+        location: location.value || undefined
       },
       credentials: 'include'
     })
@@ -92,24 +89,16 @@ const formatDate = (value: string | null) => value
   ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
   : '—'
 
-const statusLabel = (value: string) => ({
-  PENDIENTE: 'Pendiente',
-  EN_COMERCIAL: 'En comercial',
-  REBOTADO_COMERCIAL: 'Rebotado comercial',
-  EN_VERIFICACION: 'En verificación',
-  REBOTADO_VERIFICACION: 'Rebotado verificación',
-  VERIFICADA_CON_OBSERVACIONES: 'Verificada con observaciones',
-  VERIFICADA: 'Verificada'
-}[value] || value)
-
+const statusLabel = (value: string) => ({ CREADO: 'Creado', REBOTADO: 'Rebotado', AGENDADO: 'Agendado', OBSERVADO: 'Observado', VERIFICADO: 'Verificado' }[value] || value)
+const locationLabel = (value: string) => ({ ASESOR: 'Asesor', SUPERVISOR: 'Supervisor', ASISTENTE_COMERCIAL: 'Asistente comercial', VERIFICACION: 'Verificación' }[value] || value)
 const statusVariant = (value: string): 'default' | 'secondary' | 'outline' | 'destructive' => {
-  if (value.startsWith('REBOTADO')) return 'destructive'
-  if (value === 'VERIFICADA') return 'default'
-  if (value === 'EN_VERIFICACION' || value === 'VERIFICADA_CON_OBSERVACIONES') return 'secondary'
+  if (value === 'REBOTADO') return 'destructive'
+  if (value === 'VERIFICADO') return 'default'
+  if (value === 'AGENDADO' || value === 'OBSERVADO') return 'secondary'
   return 'outline'
 }
 
-watch([holderName, holderDni, advisorName, status], () => debouncedApplyFilters())
+watch([search, status, location], () => debouncedApplyFilters())
 onMounted(loadExpedients)
 </script>
 
@@ -134,9 +123,7 @@ onMounted(loadExpedients)
             <UiCardDescription>Consulta y seguimiento de los expedientes registrados.</UiCardDescription>
           </div>
           <div class="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:grid-cols-4">
-            <UiInput v-model="holderName" placeholder="Nombre del titular" aria-label="Nombre del titular" />
-            <UiInput v-model="holderDni" placeholder="DNI del titular" aria-label="DNI del titular" />
-            <UiInput v-if="canFilterAdvisor" v-model="advisorName" placeholder="Nombre del asesor" aria-label="Nombre del asesor" />
+            <UiInput v-model="search" placeholder="Buscar por titular, DNI o asesor" aria-label="Buscar por titular, DNI o asesor" />
             <UiSelect v-model="status">
               <UiSelectTrigger class="w-full" aria-label="Estado del expediente"><UiSelectValue placeholder="Todos los estados" /></UiSelectTrigger>
               <UiSelectContent>
@@ -147,6 +134,15 @@ onMounted(loadExpedients)
                 <UiSelectItem value="REBOTADO_VERIFICACION">Rebotado verificación</UiSelectItem>
                 <UiSelectItem value="VERIFICADA_CON_OBSERVACIONES">Verificada con observaciones</UiSelectItem>
                 <UiSelectItem value="VERIFICADA">Verificada</UiSelectItem>
+              </UiSelectContent>
+            </UiSelect>
+            <UiSelect v-model="location">
+              <UiSelectTrigger class="w-full" aria-label="Ubicación del expediente"><UiSelectValue placeholder="Todas las ubicaciones" /></UiSelectTrigger>
+              <UiSelectContent>
+                <UiSelectItem value="ASESOR">Asesor</UiSelectItem>
+                <UiSelectItem value="SUPERVISOR">Supervisor</UiSelectItem>
+                <UiSelectItem value="ASISTENTE_COMERCIAL">Asistente comercial</UiSelectItem>
+                <UiSelectItem value="VERIFICACION">Verificación</UiSelectItem>
               </UiSelectContent>
             </UiSelect>
           </div>
@@ -166,6 +162,7 @@ onMounted(loadExpedients)
                 <UiTableHead>Titular</UiTableHead>
                 <UiTableHead>Asesor</UiTableHead>
                 <UiTableHead>Estado</UiTableHead>
+                <UiTableHead>Ubicación</UiTableHead>
                 <UiTableHead class="hidden md:table-cell">Documentos</UiTableHead>
                 <UiTableHead class="hidden sm:table-cell">Actualizado</UiTableHead>
                 <UiTableHead class="text-right">Acciones</UiTableHead>
@@ -177,6 +174,7 @@ onMounted(loadExpedients)
                 <UiTableCell><div class="max-w-56 truncate font-medium uppercase">{{ expedient.holderName }}</div><div class="text-xs text-muted-foreground">{{ expedient.holderDni }}</div></UiTableCell>
                 <UiTableCell>{{ expedient.advisorName }}</UiTableCell>
                 <UiTableCell><UiBadge :variant="statusVariant(expedient.status)">{{ statusLabel(expedient.status) }}</UiBadge></UiTableCell>
+                <UiTableCell><UiBadge variant="outline">{{ locationLabel(expedient.currentLocation) }}</UiBadge></UiTableCell>
                 <UiTableCell class="hidden md:table-cell">{{ expedient.documentCount }}</UiTableCell>
                 <UiTableCell class="hidden whitespace-nowrap text-muted-foreground sm:table-cell">{{ formatDate(expedient.updatedAt) }}</UiTableCell>
                 <UiTableCell class="text-right">
