@@ -1,4 +1,5 @@
 import { getUserBySession } from '../../utils/auth'
+import { contractAccessWhere } from '../../utils/contract-access'
 import { prisma } from '../../utils/prisma'
 import { Prisma } from '@prisma/client'
 
@@ -21,7 +22,7 @@ export default defineEventHandler(async (event) => {
   const location = typeof query.location === 'string' ? query.location.trim() : ''
 
   const contractFilter: Prisma.ContractWhereInput = {
-    ...(user.role?.name === 'asesor' ? { userId: user.id } : {}),
+    AND: [contractAccessWhere(user)],
     ...(search ? {
       OR: [
         { customer: { name: { contains: search, mode: 'insensitive' as const } } },

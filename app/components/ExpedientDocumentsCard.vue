@@ -14,11 +14,12 @@ interface ExpedientDocument {
 interface Expedient {
   id: string
   status: string
+  currentLocation: string
   documents: ExpedientDocument[]
 }
 
 const props = defineProps<{ contractId: string; contractAccepted: boolean }>()
-const { csrfHeaders } = useAuth()
+const { csrfHeaders, user } = useAuth()
 const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
@@ -30,6 +31,7 @@ const labels: Record<DocumentType, string> = { DNI: 'DNI del titular', VOUCHER: 
 const selectedFile = (type: DocumentType) => files[type]
 const formatSize = (value: number | null) => value ? `${(value / 1024 / 1024).toFixed(2)} MB` : '—'
 const documentFor = (type: DocumentType) => expedient.value?.documents.find((document) => document.type === type)
+const canManageDocuments = computed(() => ['asesor', 'supervisor'].includes(user.value?.role?.name || '') && (!expedient.value || expedient.value.currentLocation === 'ASESOR'))
 
 const load = async () => {
   loading.value = true
@@ -132,12 +134,12 @@ onMounted(load)
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <a v-if="documentFor(type)" class="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted" :href="documentFor(type)?.downloadUrl" target="_blank" rel="noreferrer"><Download class="size-4" /> Descargar</a>
-            <label v-if="contractAccepted" class="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted" :class="{ 'pointer-events-none opacity-50': saving }">
+            <label v-if="contractAccepted && canManageDocuments" class="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted" :class="{ 'pointer-events-none opacity-50': saving }">
               <FileUp class="size-4" /> {{ documentFor(type) ? 'Reemplazar' : 'Cargar' }}
               <input class="sr-only" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" :disabled="saving" @change="setFile(type, $event)">
             </label>
-            <UiButton v-if="selectedFile(type)" size="sm" :disabled="saving" @click="upload(type)">Guardar</UiButton>
-            <UiButton v-if="documentFor(type)" variant="ghost" size="icon" title="Eliminar documento" :disabled="saving" @click="remove(documentFor(type)!)"><Trash2 class="size-4" /></UiButton>
+            <UiButton v-if="selectedFile(type) && canManageDocuments" size="sm" :disabled="saving" @click="upload(type)">Guardar</UiButton>
+            <UiButton v-if="documentFor(type) && canManageDocuments" variant="ghost" size="icon" title="Eliminar documento" :disabled="saving" @click="remove(documentFor(type)!)"><Trash2 class="size-4" /></UiButton>
           </div>
         </div>
       </div>

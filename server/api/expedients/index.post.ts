@@ -2,12 +2,16 @@ import { assertCsrf } from '../../utils/auth'
 import { notify } from '../../utils/notifications'
 import { prisma } from '../../utils/prisma'
 import { getAccessibleContract, requireExpedientUser, removeStoredFile, storeUpload, type ExpedientDocumentType } from '../../utils/expedients'
+import { supervisorRecipientIds } from '../../utils/contract-access'
 
 const filePart = (parts: Awaited<ReturnType<typeof readMultipartFormData>>, name: string) => parts?.find((part) => part.name === name && part.data?.length)
 
 export default defineEventHandler(async (event) => {
   assertCsrf(event)
   const user = await requireExpedientUser(event)
+  if (!['asesor', 'supervisor'].includes(user.role?.name || '')) {
+    throw createError({ statusCode: 403, statusMessage: 'Solo el asesor o supervisor puede crear un expediente.' })
+  }
   const parts = await readMultipartFormData(event)
   const contractId = String(parts?.find((part) => part.name === 'contractId')?.data?.toString() || '').trim()
   if (!/^[0-9a-f-]{36}$/i.test(contractId)) throw createError({ statusCode: 400, statusMessage: 'Matrícula inválida' })
@@ -60,18 +64,33 @@ export default defineEventHandler(async (event) => {
         await removeStoredFile(previous.filePath)
       }
     }
-    const reviewers = await prisma.user.findMany({ where: { active: true, role: { name: { in: ['asistente_comercial', 'verificador'] } } }, select: { id: true } })
-    await notify({
-      recipients: reviewers.map((reviewer) => reviewer.id),
-      type: 'EXPEDIENTE_PENDIENTE_REVISION',
-      title: 'Nuevo expediente pendiente de revisión',
-      message: 'Se ha creado o actualizado un expediente que requiere revisión.',
-      entityType: 'EXPEDIENT',
-      entityId: expedient.id,
-      actionUrl: `/expedientes/${expedient.id}`,
-      priority: 'high',
-      dedupeKey: `expedient:${expedient.id}:pending:${expedient.updatedAt.toISOString()}`
-    })
+    let recipients: string[] = []
+    let title = 'Expediente actualizado'
+    let message = 'El expediente fue actualizado.'
+    if (expedient.currentLocation === 'SUPERVISOR') {
+      recipients = await supervisorRecipientIds(contract.userId)
+      title = 'Expediente pendiente de revisión'
+      message = 'Un expediente requiere tu revisión antes de enviarlo a Comercial.'
+    }
+    if (expedient.currentLocation === 'ASISTENTE_COMERCIAL') {
+      const commercial = await prisma.user.findMany({ where: { active: true, role: { name: 'asistente_comercial' } }, select: { id: true } })
+      recipients = commercial.map((item) => item.id)
+      title = 'Expediente pendiente de revisión comercial'
+      message = 'Un expediente está listo para la revisión de Comercial.'
+    }
+    if (recipients.length) {
+      await notify({
+        recipients,
+        type: 'EXPEDIENTE_PENDIENTE_REVISION',
+        title,
+        message,
+        entityType: 'EXPEDIENT',
+        entityId: expedient.id,
+        actionUrl: `/expedientes/${expedient.id}`,
+        priority: 'high',
+        dedupeKey: `expedient:${expedient.id}:pending:${expedient.updatedAt.toISOString()}`
+      })
+    }
     return { success: true, data: { id: expedient.id } }
   } catch (error) {
     await Promise.all(stored.map((document) => removeStoredFile(document.data.filePath)))

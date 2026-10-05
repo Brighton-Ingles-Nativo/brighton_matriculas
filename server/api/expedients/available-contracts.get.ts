@@ -1,13 +1,17 @@
 import { requireExpedientUser } from '../../utils/expedients'
+import { contractAccessWhere } from '../../utils/contract-access'
 import { prisma } from '../../utils/prisma'
 
 export default defineEventHandler(async (event) => {
   const user = await requireExpedientUser(event)
+  if (!['asesor', 'supervisor','admin'].includes(user.role?.name || '')) {
+    throw createError({ statusCode: 403, statusMessage: 'Solo el asesor o supervisor puede crear un expediente.' })
+  }
   const contracts = await prisma.contract.findMany({
     where: {
       signedAt: { not: null },
       expedient: null,
-      ...(user.role?.name === 'asesor' ? { userId: user.id } : {})
+      ...contractAccessWhere(user)
     },
     orderBy: { contractNumber: 'desc' },
     take: 100,

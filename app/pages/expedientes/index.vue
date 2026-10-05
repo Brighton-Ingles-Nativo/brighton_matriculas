@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronLeft, ChevronRight, Eye, FolderOpen, Plus } from '@lucide/vue'
+import { ChevronLeft, ChevronRight, Download, Eye, FolderOpen, Plus } from '@lucide/vue'
 import { useDebounceFn } from '@vueuse/core'
 
 definePageMeta({ middleware: 'auth', ssr: false })
@@ -27,6 +27,8 @@ interface ExpedientsResponse {
 }
 
 const { user } = useAuth()
+const canCreateExpedient = computed(() => ['asesor', 'supervisor','admin'].includes(user.value?.role?.name || ''))
+const canExport = computed(() => ['admin', 'asesor', 'supervisor', 'asistente_comercial', 'verificador'].includes(user.value?.role?.name || ''))
 const search = ref('')
 const status = ref('')
 const location = ref('')
@@ -35,6 +37,14 @@ const loading = ref(true)
 const error = ref('')
 const expedients = ref<ExpedientRow[]>([])
 const pagination = ref<ExpedientsResponse['pagination']>({ page: 1, limit: 15, total: 0, totalPages: 0 })
+
+const exportUrl = computed(() => {
+  const params = new URLSearchParams({ format: 'xlsx' })
+  if (search.value) params.set('search', search.value)
+  if (status.value) params.set('status', status.value)
+  if (location.value) params.set('location', location.value)
+  return `/api/expedients/export?${params.toString()}`
+})
 
 const loadExpedients = async () => {
   loading.value = true
@@ -111,9 +121,14 @@ onMounted(loadExpedients)
           <h1 class="text-3xl font-semibold tracking-tight">Expedientes</h1>
           <p class="mt-1 text-muted-foreground">{{ pagination.total }} expedientes encontrados.</p>
         </div>
-        <UiButton class="gap-2" as-child>
-          <NuxtLink to="/expedientes/nuevo"><Plus class="size-4" /> Nuevo expediente</NuxtLink>
-        </UiButton>
+        <div class="flex flex-wrap gap-2">
+          <UiButton v-if="canExport" variant="outline" class="gap-2" as-child>
+            <a :href="exportUrl"><Download class="size-4" /> Exportar Excel</a>
+          </UiButton>
+          <UiButton v-if="canCreateExpedient" class="gap-2" as-child>
+            <NuxtLink to="/expedientes/nuevo"><Plus class="size-4" /> Nuevo expediente</NuxtLink>
+          </UiButton>
+        </div>
       </section>
 
       <UiCard>

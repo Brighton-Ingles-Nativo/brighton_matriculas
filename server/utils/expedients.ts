@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import type { H3Event } from 'h3'
 import { prisma } from './prisma'
 import { getUserBySession } from './auth'
+import { assertContractAccess } from './contract-access'
 
 export const EXPEDIENT_ROLES = ['admin', 'asesor', 'supervisor', 'asistente_comercial', 'verificador'] as const
 export const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
@@ -32,9 +33,7 @@ export async function getAccessibleContract(contractId: string, user: Awaited<Re
     select: { id: true, userId: true, signedAt: true }
   })
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'Matrícula no encontrada' })
-  if (user.role?.name === 'asesor' && contract.userId !== user.id) {
-    throw createError({ statusCode: 403, statusMessage: 'No tienes acceso a esta matrícula' })
-  }
+  await assertContractAccess(user, contractId)
   return contract
 }
 

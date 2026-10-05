@@ -1,4 +1,5 @@
 import { requireExpedientUser } from '../../../utils/expedients'
+import { assertContractAccess } from '../../../utils/contract-access'
 import { prisma } from '../../../utils/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -10,12 +11,10 @@ export default defineEventHandler(async (event) => {
 
   const expedient = await prisma.expedient.findUnique({
     where: { id: expedientId },
-    select: { id: true, contract: { select: { userId: true } } }
+    select: { id: true, contractId: true }
   })
   if (!expedient) throw createError({ statusCode: 404, statusMessage: 'Expediente no encontrado' })
-  if (user.role?.name === 'asesor' && expedient.contract.userId !== user.id) {
-    throw createError({ statusCode: 403, statusMessage: 'No tienes acceso a este expediente' })
-  }
+  await assertContractAccess(user, expedient.contractId)
 
   const movements = await prisma.expedientMovement.findMany({
     where: { expedientId },

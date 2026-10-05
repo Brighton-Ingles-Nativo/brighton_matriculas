@@ -39,7 +39,9 @@ onMounted(async () => {
         <p class="mt-2 text-muted-foreground">Solo aparecen matrículas firmadas que todavía no tienen expediente.</p>
       </section>
 
-      <UiAlert v-if="error" variant="destructive"><UiAlertDescription>{{ error }}</UiAlertDescription></UiAlert>
+      <UiAlert v-if="error" variant="destructive">
+        <UiAlertDescription>{{ error }}</UiAlertDescription>
+      </UiAlert>
       <section v-if="selectedContract" class="space-y-4">
         <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
           <div>
