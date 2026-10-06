@@ -1,4 +1,5 @@
 import { getUserBySession } from '../../utils/auth'
+import { contractAccessWhere } from '../../utils/contract-access'
 import { prisma } from '../../utils/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -28,7 +29,7 @@ export default defineEventHandler(async (event) => {
         : {}
 
   const where = {
-    ...(user.role?.name === 'asesor' ? { userId: user.id } : {}),
+    ...contractAccessWhere(user),
     ...(holderName || holderDni ? {
       customer: {
         ...(holderName ? { name: { contains: holderName, mode: 'insensitive' as const } } : {}),

@@ -1,4 +1,5 @@
 import { assertCsrf, getUserBySession } from '../../utils/auth'
+import { assertContractAccess } from '../../utils/contract-access'
 import { notify } from '../../utils/notifications'
 import { prisma } from '../../utils/prisma'
 
@@ -11,6 +12,7 @@ export default defineEventHandler(async (event) => {
   if (!id || !['APROBAR', 'RECHAZAR'].includes(body.decision || '')) throw createError({ statusCode: 400, statusMessage: 'Decisión inválida' })
   const request = await prisma.cancellationRequest.findUnique({ where: { id }, include: { contract: { select: { id: true, contractNumber: true, userId: true } } } })
   if (!request) throw createError({ statusCode: 404, statusMessage: 'Solicitud no encontrada' })
+  await assertContractAccess(user, request.contract.id)
   if (request.status !== 'PENDIENTE') throw createError({ statusCode: 409, statusMessage: 'La solicitud ya fue revisada' })
   const approved = body.decision === 'APROBAR'
   const updated = await prisma.$transaction(async (tx) => {

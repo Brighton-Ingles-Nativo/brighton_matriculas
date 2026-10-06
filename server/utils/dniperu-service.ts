@@ -17,8 +17,7 @@ const DNIPERU_AJAX_URL = 'https://dniperu.com/wp-admin/admin-ajax.php';
 const DNIPERU_NAMES_PAGE_URL = 'https://dniperu.com/buscar-dni-nombres-apellidos/';
 const DNIPERU_BIRTH_DATE_PAGE_URL = 'https://dniperu.com/fecha-de-nacimiento-con-dni/';
 const DNIPERU_ORIGIN = 'https://dniperu.com';
-const DNIPERU_UA =
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const DNIPERU_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const DNIPERU_TIMEOUT_MS = 8_000;
 const DNIPERU_CACHE_TTL_MS = 10 * 60_000;
 

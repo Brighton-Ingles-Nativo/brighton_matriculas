@@ -82,7 +82,11 @@ export const useNotifications = () => {
       await load()
       const { io } = await import('socket.io-client')
       activeSocket = io({ path: '/socket.io', withCredentials: true, transports: ['websocket', 'polling'] })
-      activeSocket.on('connect', () => { connected.value = true })
+      activeSocket.on('connect', () => {
+        const reconnecting = connected.value
+        connected.value = true
+        if (reconnecting) void load()
+      })
       activeSocket.on('disconnect', () => { connected.value = false })
       activeSocket.on('notification.created', handleCreated)
       activeSocket.on('notification.read', (event: { payload?: { id?: string; readAt?: string } }) => {
@@ -102,6 +106,9 @@ export const useNotifications = () => {
     activeSocket = null
     connected.value = false
     startPromise = null
+    items.value = []
+    unreadCount.value = 0
+    pushEnabled.value = false
   }
 
   const markRead = async (notification: AppNotification) => {
@@ -148,5 +155,14 @@ export const useNotifications = () => {
     pushEnabled.value = false
   }
 
-  return { items, unreadCount, connected, pushEnabled, loading, load, start, stop, markRead, enablePush, disablePush }
+  const syncPushState = async () => {
+    if (!import.meta.client || !('serviceWorker' in navigator)) {
+      pushEnabled.value = false
+      return
+    }
+    const registration = await navigator.serviceWorker.getRegistration('/sw.js')
+    pushEnabled.value = Boolean(await registration?.pushManager.getSubscription())
+  }
+
+  return { items, unreadCount, connected, pushEnabled, loading, load, start, stop, markRead, enablePush, disablePush, syncPushState }
 }

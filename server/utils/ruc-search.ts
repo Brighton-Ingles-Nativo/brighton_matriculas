@@ -118,7 +118,7 @@ class HttpClient {
       const parsedUrl = new URL(urlStr);
       const isHttps = parsedUrl.protocol === 'https:';
       const transport = isHttps ? https : http;
-      const headers = {
+      const headers: Record<string, string> = {
         ...DEFAULT_HEADERS,
         ...init.headers,
       };
@@ -187,6 +187,9 @@ class HttpClient {
 
     for (const rawCookie of rawCookies) {
       const firstPart = rawCookie.split(';')[0];
+      if (!firstPart) {
+        continue;
+      }
       const separatorIndex = firstPart.indexOf('=');
       if (separatorIndex === -1) {
         continue;
@@ -219,7 +222,12 @@ export function getVerifyCode(dni: string): number | null {
   const hash = [3, 2, 7, 6, 5, 4, 3, 2];
 
   for (let i = 0; i < dni.length; i += 1) {
-    suma += Number(dni[i]) * hash[i];
+    const digit = dni[i];
+    const multiplier = hash[i];
+    if (digit === undefined || multiplier === undefined) {
+      return null;
+    }
+    suma += Number(digit) * multiplier;
   }
 
   const entero = Math.floor(suma / 11);
@@ -285,7 +293,9 @@ function parseLegacyTableDictionary(html: string) {
       const options = valueNode.find("select option");
       if (options.length) {
         const arr: string[] = [];
-        options.each((_, op) => arr.push($(op).text().trim()));
+        options.each((_, op) => {
+          arr.push($(op).text().trim());
+        });
         dic[title] = arr;
       } else {
         dic[title] = valueNode.text().trim();
@@ -305,7 +315,14 @@ function parseDate(text: string) {
 }
 
 function getFirstLine(text: string) {
-  return String(text || "").split(/\r?\n/)[0].trim();
+  return String(text || "").split(/\r?\n/)[0]?.trim() || "";
+}
+
+function getDictionaryString(value: ParsedDictionaryValue | undefined): string {
+  if (Array.isArray(value)) {
+    return value.join(" ").trim();
+  }
+  return value?.trim() || "";
 }
 
 function getDepartment(dep: string) {
@@ -323,7 +340,7 @@ export function parseCompany(html: string): ParsedCompany | null {
   const dic = parseHtmlRecaptchaDictionary(html) || parseLegacyTableDictionary(html);
   if (!dic) return null;
 
-  const rucRaw = dic["Número de RUC:"] || dic["RUC:"] || "";
+  const rucRaw = getDictionaryString(dic["Número de RUC:"] || dic["RUC:"]);
   const pos = rucRaw.indexOf("-");
   const ruc = pos === -1 ? "" : rucRaw.slice(0, pos).trim();
   const razonSocial = pos === -1 ? "" : rucRaw.slice(pos + 1).trim();
@@ -331,12 +348,12 @@ export function parseCompany(html: string): ParsedCompany | null {
   const company: ParsedCompany = {
     ruc,
     razonSocial,
-    nombreComercial: dic["Nombre Comercial:"] || "",
-    tipo: dic["Tipo Contribuyente:"] || "",
-    estado: dic["Estado del Contribuyente:"] || dic["Estado:"] || "",
-    condicion: getFirstLine(dic["Condición del Contribuyente:"] || dic["Condición:"] || ""),
-    direccion: dic["Domicilio Fiscal:"] || dic["Dirección del Domicilio Fiscal:"] || "",
-    fechaInscripcion: parseDate(dic["Fecha de Inscripción:"] || ""),
+    nombreComercial: getDictionaryString(dic["Nombre Comercial:"]),
+    tipo: getDictionaryString(dic["Tipo Contribuyente:"]),
+    estado: getDictionaryString(dic["Estado del Contribuyente:"] || dic["Estado:"]),
+    condicion: getFirstLine(getDictionaryString(dic["Condición del Contribuyente:"] || dic["Condición:"])),
+    direccion: getDictionaryString(dic["Domicilio Fiscal:"] || dic["Dirección del Domicilio Fiscal:"]),
+    fechaInscripcion: parseDate(getDictionaryString(dic["Fecha de Inscripción:"])),
     departamento: "",
     provincia: "",
     distrito: "",
@@ -344,17 +361,18 @@ export function parseCompany(html: string): ParsedCompany | null {
 
   // Corregir Estado
   const lines = String(company.estado || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
-  if (lines.length > 0) company.estado = lines[0];
+  if (lines.length > 0 && lines[0]) company.estado = lines[0];
 
   // Corregir Dirección
   const rawDir = String(company.direccion || "");
   const items = rawDir.split("                                               -");
   if (items.length === 3) {
-    const pieces = items[0].trim().split(" ").filter(Boolean);
-    const department = getDepartment(pieces[pieces.length - 1]);
+    const pieces = (items[0] || "").trim().split(" ").filter(Boolean);
+    const lastPiece = pieces[pieces.length - 1] || "";
+    const department = getDepartment(lastPiece);
     company.departamento = department;
-    company.provincia = items[1].trim();
-    company.distrito = items[2].trim();
+    company.provincia = items[1]?.trim() || "";
+    company.distrito = items[2]?.trim() || "";
     pieces.splice(-department.split(" ").length);
     company.direccion = pieces.join(" ").trim();
   } else {
@@ -367,13 +385,13 @@ export function parseCompany(html: string): ParsedCompany | null {
 function parseSunatFullName(fullName: string) {
   const parts = fullName.trim().split(/\s+/);
   if (parts.length >= 3) {
-    const apellidoPaterno = parts[0];
-    const apellidoMaterno = parts[1];
+    const apellidoPaterno = parts[0] || '';
+    const apellidoMaterno = parts[1] || '';
     const nombres = parts.slice(2).join(' ');
     return { nombres, apellidoPaterno, apellidoMaterno };
   } else if (parts.length === 2) {
-    const apellidoPaterno = parts[0];
-    const nombres = parts[1];
+    const apellidoPaterno = parts[0] || '';
+    const nombres = parts[1] || '';
     return { nombres, apellidoPaterno, apellidoMaterno: '' };
   } else {
     return { nombres: fullName, apellidoPaterno: '', apellidoMaterno: '' };
@@ -451,7 +469,7 @@ export class RucService {
       this.assertNotBlocked(htmlRandom);
 
       const randomMatch = htmlRandom.match(/<input type="hidden" name="numRnd" value="(.*)">/);
-      const random = randomMatch ? randomMatch[1] : "";
+      const random = randomMatch?.[1] || "";
 
       const resultResponse = await client.postResponse(endpoint, {
         accion: 'consPorRuc',
@@ -543,7 +561,21 @@ export class LookupService {
  * Mapeadores
  */
 export function mapCompanyToLegacyRtn(company: ParsedCompany | null): LegacyCompanyResult {
-  if (!company) return { RUC: "00000000000" };
+  if (!company) {
+    return {
+      RUC: "00000000000",
+      nombre: "",
+      tipo_contribuyente: "",
+      ncomercial: "",
+      condicion: "",
+      estado_contribuyente: "",
+      fechai: "",
+      departamento: "",
+      provincia: "",
+      distrito: "",
+      domicilio_fiscal: "",
+    };
+  }
   const fecha = (company.fechaInscripcion || "").replace("T00:00:00.000Z", "");
   return {
     RUC: company.ruc || "00000000000",

@@ -60,10 +60,9 @@ interface Contract {
   dataAuthorization: boolean
   testimonials: boolean
   dataUsage: boolean | null
-  status: string | null
-  accepted: boolean
-  acceptedAt: string | null
-  acceptedIp: string | null
+  status: 'REVISION' | 'FIRMADO' | 'ANULADO'
+  signedAt: string | null
+  signedIp: string | null
   advisor: { name: string; username: string }
   receipts: Receipt[]
 }
@@ -73,63 +72,69 @@ const props = defineProps<{
   contract: Contract | null
   loading?: boolean
   error?: string
-  canApprove?: boolean
   actionLoading?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
-  approve: []
   accept: []
   publicView: []
+  pdf: []
 }>()
 
 const termsHtml = ref('')
+const termsContainer = ref<HTMLElement | null>(null)
 const termsLoading = ref(false)
+const termsError = ref(false)
 const termsRead = ref(false)
 const acceptedChecked = ref(false)
 
 const statusLabel = computed(() => {
   if (!props.contract) return '—'
-  if (props.contract.accepted && Number(props.contract.status) === 0) return 'Firmado · pendiente de verificación'
-  if (props.contract.accepted) return 'Firmado'
-  if (Number(props.contract.status) === 1) return 'Revisado'
-  return 'En revisión'
+  if (props.contract.status === 'ANULADO') return 'Anulado'
+  if (props.contract.status === 'FIRMADO' || props.contract.signedAt) return 'Firmado'
+  return 'Listo para firma'
 })
 
-const statusVariant = computed<'default' | 'secondary' | 'outline'>(() => {
+const statusVariant = computed<'default' | 'outline' | 'destructive'>(() => {
   if (!props.contract) return 'outline'
-  if (props.contract.accepted) return 'default'
-  return Number(props.contract.status) === 1 ? 'secondary' : 'outline'
+  if (props.contract.status === 'ANULADO') return 'destructive'
+  return props.contract.status === 'FIRMADO' || props.contract.signedAt ? 'default' : 'outline'
 })
 
-const termsAvailable = computed(() => Boolean(props.contract && (Number(props.contract.status) === 1 || props.contract.accepted)))
-const canAccept = computed(() => Boolean(props.contract && Number(props.contract.status) === 1 && !props.contract.accepted))
+const termsAvailable = computed(() => Boolean(props.contract && (props.contract.status === 'REVISION' || props.contract.signedAt)))
+const canAccept = computed(() => Boolean(props.contract && props.contract.status === 'REVISION' && !props.contract.signedAt && termsHtml.value && !termsError.value))
 
 const formatDate = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' }).format(new Date(value)) : '—'
 const formatDateTime = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'
 const formatCurrency = (value: string | null | undefined) => value ? new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(value)) : '—'
 const display = (value: string | number | null | undefined) => value === null || value === undefined || value === '' ? '—' : value
-const yesNo = (value: boolean | null | undefined) => value === null || value === undefined ? '—' : value ? 'Sí' : 'No'
 const paymentMode = (contract: Contract) => contract.cashPayment ? 'CONTADO' : contract.financedPayment ? 'FINANCIADO' : '—'
 
 const loadTerms = async () => {
   if (!termsAvailable.value || termsHtml.value) return
   termsLoading.value = true
+  termsError.value = false
   try {
     const response = await $fetch<{ success: boolean; html: string }>('/api/contracts/terms')
     termsHtml.value = response.html
   } catch {
-    termsHtml.value = '<p>No se pudieron cargar los términos y condiciones.</p>'
+    termsError.value = true
   } finally {
     termsLoading.value = false
   }
 }
 
-const handleTermsScroll = (event: Event) => {
-  const target = event.currentTarget as HTMLElement
+const updateTermsRead = () => {
+  const target = termsContainer.value
+  if (!target) return
   termsRead.value = target.scrollHeight - target.scrollTop <= target.clientHeight + 8
 }
+
+watch([() => props.open, termsHtml, termsLoading], async () => {
+  await nextTick()
+  updateTermsRead()
+})
 
 watch(() => props.open, (open) => {
   if (open) {
@@ -141,6 +146,7 @@ watch(() => props.open, (open) => {
 
 watch(() => props.contract?.id, () => {
   termsHtml.value = ''
+  termsError.value = false
   termsRead.value = false
   acceptedChecked.value = false
   loadTerms()
@@ -163,8 +169,8 @@ watch(() => props.contract?.id, () => {
       <div v-else-if="contract" class="space-y-5 bg-muted/20 p-6">
         <section class="rounded-lg border bg-card p-5 shadow-sm">
           <div class="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-            <div class="flex items-center gap-4"><div class="grid size-12 place-items-center rounded-full bg-primary text-primary-foreground"><CheckCircle2 class="size-6" /></div><div><h2 class="text-lg font-semibold">Contrato {{ contract.contractNumber }}</h2><p class="text-sm text-muted-foreground">{{ contract.accepted ? `Firmado digitalmente el ${formatDateTime(contract.acceptedAt)}.` : 'Seguimiento del contrato registrado.' }}</p></div></div>
-            <div class="flex flex-wrap items-center gap-2"><UiBadge :variant="statusVariant">{{ statusLabel }}</UiBadge><UiButton v-if="canApprove && Number(contract.status) === 0" :disabled="actionLoading" @click="emit('approve')"><CheckCircle2 class="mr-2 size-4" /> Aprobar revisión</UiButton></div>
+            <div class="flex items-center gap-4"><div class="grid size-12 place-items-center rounded-full bg-primary text-primary-foreground"><CheckCircle2 class="size-6" /></div><div><h2 class="text-lg font-semibold">Contrato {{ contract.contractNumber }}</h2><p class="text-sm text-muted-foreground">{{ contract.signedAt ? `Firmado digitalmente el ${formatDateTime(contract.signedAt)}.` : 'Seguimiento del contrato registrado.' }}</p></div></div>
+            <UiBadge :variant="statusVariant">{{ statusLabel }}</UiBadge>
           </div>
         </section>
 
@@ -182,9 +188,9 @@ watch(() => props.contract?.id, () => {
 
         <section class="rounded-lg border bg-card p-5 shadow-sm"><div class="flex items-center justify-between"><h3 class="section-title m-0">Recibos</h3><UiBadge variant="secondary">{{ contract.receipts.length }}</UiBadge></div><div v-if="contract.receipts.length" class="mt-4 overflow-x-auto"><table class="w-full min-w-[680px] text-left text-sm"><thead><tr class="border-b text-xs uppercase text-muted-foreground"><th class="p-3">Concepto</th><th class="p-3">Importe</th><th class="p-3">Método</th><th class="p-3">Operación</th><th class="p-3">Fecha</th></tr></thead><tbody><tr v-for="receipt in contract.receipts" :key="receipt.id" class="border-b last:border-0"><td class="p-3">{{ receipt.concepts || 'Pago registrado' }}</td><td class="p-3 font-medium">{{ formatCurrency(receipt.amount) }}</td><td class="p-3">{{ display(receipt.paymentMethod) }}</td><td class="p-3">{{ display(receipt.operationNumber) }}</td><td class="p-3">{{ formatDate(receipt.transactionDate || receipt.registeredAt) }}</td></tr></tbody></table></div><p v-else class="mt-4 text-sm text-muted-foreground">No hay recibos registrados.</p></section>
 
-        <section v-if="termsAvailable" class="rounded-lg border bg-card p-5 shadow-sm"><h3 class="section-title m-0">Términos y condiciones del servicio</h3><div class="terms-container mt-4" @scroll="handleTermsScroll"><div v-if="termsLoading" class="space-y-3"><UiSkeleton class="h-6 w-3/4" /><UiSkeleton v-for="item in 8" :key="item" class="h-4 w-full" /></div><div v-else class="legacy-terms" v-html="termsHtml" /></div><div v-if="canAccept" class="mt-5 space-y-4"><label class="flex items-start gap-3 text-sm"><UiCheckbox v-model="acceptedChecked" :disabled="!termsRead" /><span>Declaro haber leído y acepto los Términos y Condiciones de Licencia de Uso de Curso Educativo y Compraventa de Libros de BRIGHTON INGLÉS NATIVO S.A.C.</span></label><UiButton :disabled="!termsRead || !acceptedChecked || actionLoading" class="gap-2" @click="emit('accept')"><CheckCircle2 class="size-4" /> Firmar y aceptar contrato</UiButton><p v-if="!termsRead" class="text-xs text-muted-foreground">Lee los términos hasta el final para habilitar la aceptación.</p></div><div v-else-if="contract.accepted" class="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><p class="font-semibold">Contrato aceptado digitalmente</p><p>Validado el {{ formatDateTime(contract.acceptedAt) }}. IP: {{ display(contract.acceptedIp) }}</p></div></section><section v-else class="rounded-lg border border-sky-200 bg-sky-50 p-5 text-sm text-sky-900">El contrato estará disponible para firma una vez que sea <strong>aprobado</strong>.</section>
+        <section v-if="termsAvailable" class="rounded-lg border bg-card p-5 shadow-sm"><h3 class="section-title m-0">Términos y condiciones del servicio</h3><UiAlert v-if="termsError" variant="destructive"><UiAlertDescription>No se pudieron cargar los términos y condiciones.</UiAlertDescription></UiAlert><div v-else ref="termsContainer" class="terms-container mt-4" @scroll="updateTermsRead"><div v-if="termsLoading" class="space-y-3"><UiSkeleton class="h-6 w-3/4" /><UiSkeleton v-for="item in 8" :key="item" class="h-4 w-full" /></div><div v-else class="legacy-terms" v-html="termsHtml" /></div><div v-if="canAccept" class="mt-5 space-y-4"><label class="flex items-start gap-3 text-sm"><UiCheckbox v-model="acceptedChecked" :disabled="!termsRead" /><span>Declaro haber leído y acepto los Términos y Condiciones de Licencia de Uso de Curso Educativo y Compraventa de Libros de BRIGHTON INGLÉS NATIVO S.A.C.</span></label><UiButton :disabled="!termsRead || !acceptedChecked || actionLoading" class="gap-2" @click="emit('accept')"><CheckCircle2 class="size-4" /> Firmar y aceptar contrato</UiButton><p v-if="!termsRead" class="text-xs text-muted-foreground">Lee los términos hasta el final para habilitar la aceptación.</p></div><div v-else-if="contract.signedAt" class="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><p class="font-semibold">Contrato aceptado digitalmente</p><p>Validado el {{ formatDateTime(contract.signedAt) }}. IP: {{ display(contract.signedIp) }}</p></div></section><section v-else class="rounded-lg border border-sky-200 bg-sky-50 p-5 text-sm text-sky-900">El contrato anulado no está disponible para firma.</section>
 
-        <section class="rounded-lg border bg-card p-5 shadow-sm"><h3 class="section-title m-0">Ficha del registro</h3><dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2"><div><dt class="label">Asesor</dt><dd class="value">{{ contract.advisor.name }}</dd></div><div><dt class="label">Última actualización</dt><dd class="value">{{ formatDateTime(contract.updatedAt) }}</dd></div><div><dt class="label">Aceptación</dt><dd class="value">{{ yesNo(contract.accepted) }}</dd></div><div><dt class="label">Fecha aceptación</dt><dd class="value">{{ formatDateTime(contract.acceptedAt) }}</dd></div></dl></section>
+        <section class="rounded-lg border bg-card p-5 shadow-sm"><h3 class="section-title m-0">Ficha del registro</h3><dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2"><div><dt class="label">Asesor</dt><dd class="value">{{ contract.advisor.name }}</dd></div><div><dt class="label">Última actualización</dt><dd class="value">{{ formatDateTime(contract.updatedAt) }}</dd></div><div><dt class="label">Firma</dt><dd class="value">{{ contract.signedAt ? 'Sí' : 'No' }}</dd></div><div><dt class="label">Fecha de firma</dt><dd class="value">{{ formatDateTime(contract.signedAt) }}</dd></div></dl></section>
       </div>
     </UiDialogScrollContent>
   </UiDialog>

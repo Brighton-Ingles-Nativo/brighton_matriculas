@@ -12,11 +12,11 @@ export default defineEventHandler(async (event) => {
 
   const [items, unreadCount] = await Promise.all([
     prisma.notification.findMany({
-      where: { recipientId: user.id, ...(unreadOnly ? { readAt: null } : {}) },
+      where: { recipientId: user.id, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }], ...(unreadOnly ? { readAt: null } : {}) },
       orderBy: { createdAt: 'desc' },
       take: limit
     }),
-    prisma.notification.count({ where: { recipientId: user.id, readAt: null } })
+    prisma.notification.count({ where: { recipientId: user.id, readAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] } })
   ])
 
   return { success: true, data: items.map(serializeNotification), unreadCount }

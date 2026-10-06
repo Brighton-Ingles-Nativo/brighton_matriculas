@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Bell, Check, ExternalLink } from '@lucide/vue'
 
-const { items: notifications, unreadCount, loading, load, markRead, enablePush, disablePush, pushEnabled } = useNotifications()
+const { items: notifications, unreadCount, loading, load, markRead, enablePush, disablePush, pushEnabled, syncPushState } = useNotifications()
 const pushBusy = ref(false)
 
 const togglePush = async () => {
@@ -20,6 +20,7 @@ const openNotification = async (notification: typeof notifications.value[number]
 }
 
 await load()
+await syncPushState()
 </script>
 
 <template>

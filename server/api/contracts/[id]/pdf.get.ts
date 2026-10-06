@@ -1,5 +1,6 @@
 import { getQuery } from 'h3'
 import { getUserBySession } from '../../../utils/auth'
+import { assertContractAccess } from '../../../utils/contract-access'
 import { prisma } from '../../../utils/prisma'
 
 type PdfContract = {
@@ -130,7 +131,7 @@ export default defineEventHandler(async (event) => {
   if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, statusMessage: 'ID de contrato invalido' })
   const contract = await prisma.contract.findFirst({ where: { id, ...(user ? {} : { accessToken: publicToken!, tokenExpiresAt: { gt: new Date() } }) }, include: { user: { select: { id: true, name: true, username: true } }, customer: true, students: { include: { student: true }, orderBy: { id: 'asc' } }, otherData: true, receipts: { orderBy: { registeredAt: 'desc' }, select: { amount: true, concepts: true, otherConcept: true, paymentMethod: true, operationNumber: true, bank: true, transactionDate: true, registeredAt: true } } } }) as PdfContract | null
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'Contrato no encontrado' })
-  if (user && user.role?.name === 'asesor' && contract.user.id !== user.id) throw createError({ statusCode: 403, statusMessage: 'No tienes acceso a este contrato' })
+  if (user) await assertContractAccess(user, id)
   setHeader(event, 'Content-Type', 'application/pdf')
   setHeader(event, 'Content-Disposition', `inline; filename="contrato-${contract.contractNumber}.pdf"`)
   return buildPdf(contract)

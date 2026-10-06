@@ -1,69 +1,29 @@
 import { getUserBySession } from '../../utils/auth'
-import { prisma } from '../../utils/prisma'
+import { buildEnrollmentExport, type ExportRole } from '../../utils/exports/reports/enrollments'
+import { renderExport } from '../../utils/exports/engine'
+import type { ExportFormat } from '../../utils/exports/types'
 
-const columns = [
-  ['Número de matrícula', 'contractNumber'], ['Fecha de registro', 'registeredAt'], ['Estado', 'status'], ['Firmado', 'signedAt'],
-  ['Titular', 'holderName'], ['DNI', 'holderDni'], ['Correo', 'holderEmail'], ['Celular', 'holderPhone'], ['Dirección', 'holderAddress'],
-  ['Departamento', 'contractDepartment'], ['Provincia', 'contractProvince'], ['Distrito', 'contractDistrict'], ['Programa', 'program'], ['Plan', 'plan'],
-  ['Modalidad', 'modality'], ['Valor programa', 'programValue'], ['Cuota inicial', 'initialPayment'], ['Saldo', 'balance'], ['Nro. cuotas', 'installmentCount'],
-  ['Valor cuota', 'installmentValue'], ['Forma de pago', 'cashPayment'], ['Financiado', 'financedPayment'], ['Estrategia', 'strategy'], ['Observaciones', 'notes'],
-  ['Asesor', 'advisor']
-] as const
-
-function csv(value: unknown): string {
-  const text = value instanceof Date ? value.toISOString() : value === null || value === undefined ? '' : String(value)
-  return `"${text.replace(/[\r\n;]/g, (character) => character === ';' ? ',' : ' ').replace(/"/g, '""')}"`
-}
+const exportRoles: ExportRole[] = ['admin', 'asesor', 'supervisor', 'asistente_comercial', 'verificador']
 
 export default defineEventHandler(async (event) => {
   const user = await getUserBySession(event)
   if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
-  if (!['admin', 'verificador'].includes(user.role?.name || '')) throw createError({ statusCode: 403, statusMessage: 'No tienes permiso para exportar matrículas' })
+  const role = user.role?.name as ExportRole | undefined
+  if (!role || !exportRoles.includes(role)) throw createError({ statusCode: 403, statusMessage: 'No tienes permiso para exportar matrículas' })
 
   const query = getQuery(event)
-  const holderName = typeof query.holderName === 'string' ? query.holderName.trim() : ''
-  const holderDni = typeof query.holderDni === 'string' ? query.holderDni.trim() : ''
-  const advisorName = typeof query.advisorName === 'string' ? query.advisorName.trim() : ''
-  const status = typeof query.status === 'string' ? query.status.trim() : ''
-  const statusFilter = status === 'revision'
-    ? { status: 'REVISION' as const }
-    : status === 'firmado'
-      ? { status: 'FIRMADO' as const }
-      : status === 'anulado'
-        ? { status: 'ANULADO' as const }
-        : {}
-  const contracts = await prisma.contract.findMany({
-    where: {
-      ...(holderName || holderDni ? {
-        customer: {
-          ...(holderName ? { name: { contains: holderName, mode: 'insensitive' as const } } : {}),
-          ...(holderDni ? { dni: { contains: holderDni, mode: 'insensitive' as const } } : {})
-        }
-      } : {}),
-      ...(advisorName ? { user: { name: { contains: advisorName, mode: 'insensitive' as const } } } : {}),
-      ...statusFilter
-    },
-    orderBy: { registeredAt: 'desc' },
-    include: { user: { select: { name: true } }, customer: true, otherData: true, strategyDefinition: { select: { name: true } } }
+  const format: ExportFormat = query.format === 'csv' ? 'csv' : 'xlsx'
+  const document = await buildEnrollmentExport(user as { id: string; role: { name: string } }, {
+    holderName: typeof query.holderName === 'string' ? query.holderName.trim() : undefined,
+    holderDni: typeof query.holderDni === 'string' ? query.holderDni.trim() : undefined,
+    advisorName: typeof query.advisorName === 'string' ? query.advisorName.trim() : undefined,
+    status: typeof query.status === 'string' ? query.status.trim() : undefined,
+    search: typeof query.search === 'string' ? query.search.trim() : undefined,
+    expedientStatus: typeof query.expedientStatus === 'string' ? query.expedientStatus.trim() : undefined,
+    location: typeof query.location === 'string' ? query.location.trim() : undefined
   })
-
-  const header = columns.map(([label]) => csv(label)).join(';')
-  const rows = contracts.map((contract) => {
-    const row: Record<string, unknown> = {
-      ...contract,
-      holderName: contract.customer.name,
-      holderDni: contract.customer.dni,
-      holderEmail: contract.customer.email,
-      holderPhone: contract.customer.phone,
-      holderAddress: contract.customer.address,
-      strategy: contract.strategyNameSnapshot ?? contract.strategyDefinition?.name ?? contract.otherData?.strategy,
-      notes: contract.otherData?.notes,
-      advisor: contract.user.name
-    }
-    return columns.map(([, key]) => csv(row[key])).join(';')
-  })
-
-  setHeader(event, 'Content-Type', 'text/csv; charset=utf-8')
-  setHeader(event, 'Content-Disposition', `attachment; filename="matriculas_brighton_${new Date().toISOString().slice(0, 10)}.csv"`)
-  return `\uFEFF${[header, ...rows].join('\r\n')}\r\n`
+  const output = renderExport(document, format)
+  setHeader(event, 'Content-Type', output.contentType)
+  setHeader(event, 'Content-Disposition', `attachment; filename="${document.filename}_${new Date().toISOString().slice(0, 10)}.${output.extension}"`)
+  return output.body
 })

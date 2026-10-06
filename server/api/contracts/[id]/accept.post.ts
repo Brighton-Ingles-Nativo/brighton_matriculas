@@ -1,4 +1,5 @@
 import { assertCsrf, getClientIPAddress, getUserBySession } from '../../../utils/auth'
+import { assertContractAccess } from '../../../utils/contract-access'
 import { notify } from '../../../utils/notifications'
 import { prisma } from '../../../utils/prisma'
 
@@ -17,15 +18,13 @@ export default defineEventHandler(async (event) => {
     select: { id: true, userId: true, status: true, signedAt: true, user: { select: { supervisorId: true } } }
   })
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'Matrícula no encontrada' })
-  if (user.role?.name === 'asesor' && contract.userId !== user.id) {
-    throw createError({ statusCode: 403, statusMessage: 'No tienes acceso a esta matrícula' })
-  }
+  await assertContractAccess(user, id)
   if (contract.status !== 'REVISION') {
     throw createError({ statusCode: 409, statusMessage: 'El contrato debe estar en revisión antes de firmarlo' })
   }
   if (contract.signedAt) return { success: true, message: 'El contrato ya fue firmado' }
 
-  await prisma.contract.update({
+  const signed = await prisma.contract.update({
     where: { id },
     data: { status: 'FIRMADO', signedAt: new Date(), signedIp: getClientIPAddress(event) }
   })
@@ -41,5 +40,5 @@ export default defineEventHandler(async (event) => {
     dedupeKey: `contract:${contract.id}:signed`
   })
 
-  return { success: true, message: 'Contrato aceptado digitalmente' }
+  return { success: true, message: 'Contrato aceptado digitalmente', data: { status: signed.status, signedAt: signed.signedAt, signedIp: signed.signedIp } }
 })

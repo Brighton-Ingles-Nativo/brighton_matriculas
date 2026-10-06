@@ -107,7 +107,7 @@ const loadContract = async () => {
     }); 
     const contract = response.data; 
     cancellationRequest.value = contract.cancellationRequest || null
-    isLocked.value = Boolean(contract.accepted) || String(contract.status || '').trim().toLowerCase() === 'firmado'
+    isLocked.value = Boolean(contract.signedAt) || contract.status !== 'REVISION'
     contractNumber.value = 
     contract.contractNumber; 
     Object.assign(form, { 

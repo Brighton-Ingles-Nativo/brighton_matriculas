@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
   const user = await getUserBySession(event)
   if (!user) {
     throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
-  }
+  } 
 
   const dni = String(getRouterParam(event, 'dni') || '').trim()
   if (!/^\d{8}$/.test(dni)) {

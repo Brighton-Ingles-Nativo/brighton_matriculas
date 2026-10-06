@@ -9,7 +9,7 @@
         </div>
         <div class="flex flex-wrap gap-2">
           <UiButton v-if="canExport" variant="outline" class="gap-2" as-child><a :href="exportUrl">
-              <Download class="size-4" /> Exportar CSV
+              <Download class="size-4" /> Exportar Excel
             </a></UiButton>
           <UiButton class="gap-2" as-child>
             <NuxtLink to="/matricula/nuevo">
@@ -28,7 +28,7 @@
             <UiInput v-model="holderName" placeholder="Nombre del titular" aria-label="Nombre del titular" />
             <UiInput v-model="holderDni" placeholder="DNI del titular" aria-label="DNI del titular" />
             <UiInput v-if="canFilterAdvisor" v-model="advisorName" placeholder="Nombre del asesor" aria-label="Nombre del asesor" />
-            <UiSelect v-model="status"><UiSelectTrigger class="w-full" aria-label="Estado"><UiSelectValue placeholder="Todos los estados" /></UiSelectTrigger><UiSelectContent><UiSelectItem value="revision">En revisión</UiSelectItem><UiSelectItem value="firmado">Firmado</UiSelectItem><UiSelectItem value="revisado">Revisado</UiSelectItem><UiSelectItem value="anulado">Anulado</UiSelectItem></UiSelectContent></UiSelect>
+            <UiSelect v-model="status"><UiSelectTrigger class="w-full" aria-label="Estado"><UiSelectValue placeholder="Todos los estados" /></UiSelectTrigger><UiSelectContent><UiSelectItem value="revision">En revisión</UiSelectItem><UiSelectItem value="firmado">Firmado</UiSelectItem><UiSelectItem value="anulado">Anulado</UiSelectItem></UiSelectContent></UiSelect>
           </div>
         </UiCardHeader>
         <UiCardContent class="p-0">
@@ -133,7 +133,7 @@
       </UiCard>
     </main>
     <MatriculaContractDetailDialog v-model:open="detailOpen" :contract="selectedContract" :loading="detailLoading"
-      :error="detailError" :can-approve="canApprove" :action-loading="detailActionLoading" @approve="approveContract"
+      :error="detailError" :action-loading="detailActionLoading"
       @accept="acceptContract" @public-view="openPublicView" @pdf="openContractPdf" />
   </div>
 </template>
@@ -150,8 +150,8 @@ interface ContractRow {
   program: string; 
   plan: string | null; 
   programValue: string; 
-  status: string | null; 
-  accepted: boolean; 
+  status: 'REVISION' | 'FIRMADO' | 'ANULADO';
+  signedAt: string | null;
   registeredAt: string; 
   advisor: { 
     name: string; 
@@ -224,8 +224,7 @@ interface ContractDetail extends ContractRow {
   notes: string | null; 
   testimonials: boolean; 
   dataUsage: boolean | null; 
-  acceptedAt: string | null; 
-  acceptedIp: string | null; 
+  signedIp: string | null;
   receipts: ReceiptDetail[] 
 }
 
@@ -258,11 +257,10 @@ const detailError = ref('');
 const detailActionLoading = ref(false); 
 const selectedContract = ref<ContractDetail | null>(null)
 
-const canExport = computed(() => ['admin', 'verificador'].includes(user.value?.role?.name || '')); 
+const canExport = computed(() => ['admin', 'asesor', 'supervisor', 'asistente_comercial', 'verificador'].includes(user.value?.role?.name || ''));
 const canEdit = computed(() => true); 
-const canApprove = computed(() => ['admin', 'verificador'].includes(user.value?.role?.name || ''))
 const canFilterAdvisor = computed(() => user.value?.role?.name !== 'asesor')
-const isContractLocked = (row?: ContractRow) => Boolean(row?.accepted) || String(row?.status || '').trim().toLowerCase() === 'firmado'
+const isContractLocked = (row?: ContractRow) => !row || row.status !== 'REVISION' || Boolean(row.signedAt)
 
 const exportUrl = computed(() => {
   const params = new URLSearchParams()
@@ -270,6 +268,7 @@ const exportUrl = computed(() => {
   if (holderDni.value) params.set('holderDni', holderDni.value)
   if (canFilterAdvisor.value && advisorName.value) params.set('advisorName', advisorName.value)
   if (status.value) params.set('status', status.value)
+  params.set('format', 'xlsx')
   const query = params.toString()
   return `/api/contracts/export${query ? `?${query}` : ''}`
 })
@@ -357,37 +356,17 @@ const openDetail = async (row: ContractRow) => {
   } 
 }
 
-const approveContract = async () => { 
-  if (!selectedContract.value) return; 
-  detailActionLoading.value = true; 
-  detailError.value = ''; 
-  try { 
-    await $fetch(`/api/contracts/${selectedContract.value.id}/approve`, { 
-      method: 'POST', 
-      headers: await csrfHeaders(), 
-      credentials: 'include' 
-    }); 
-    selectedContract.value.status = '1'; 
-    await loadContracts() 
-  } catch (error: any) { 
-    detailError.value = error?.data?.statusMessage || 'No pudimos aprobar la matrícula.' 
-  } finally { 
-    detailActionLoading.value = false 
-  } 
-}
-
 const acceptContract = async () => { 
   if (!selectedContract.value) return; 
   detailActionLoading.value = true; 
   detailError.value = ''; 
   try { 
-    await $fetch(`/api/contracts/${selectedContract.value.id}/accept`, { 
+    const response = await $fetch<{ data: Pick<ContractDetail, 'status' | 'signedAt' | 'signedIp'> }>(`/api/contracts/${selectedContract.value.id}/accept`, {
       method: 'POST', 
       headers: await csrfHeaders(), 
       credentials: 'include' }); 
-      selectedContract.value.accepted = true; 
-      selectedContract.value.acceptedAt = new Date().toISOString(); 
-      await loadContracts() 
+    Object.assign(selectedContract.value, response.data)
+    await loadContracts()
   } catch (
     error: any) { 
       detailError.value = error?.data?.statusMessage || 'No pudimos aceptar el contrato.' 
@@ -459,15 +438,10 @@ watch(contracts, async (rows) => {
       button.disabled = !receiptRole || !rows[index]?.receiptCount 
     }); 
   
-  document.querySelectorAll<HTMLButtonElement>('button[aria-label="Generar recibo"]')
-    .forEach((button, index) => { 
-      button.disabled = !receiptRole || Number(rows[index]?.status) !== 1 || Boolean(rows[index]?.receiptCount); 
-      button.title = button.disabled ? 'Disponible para matrículas revisadas sin recibo' : 'Generar recibo' 
-    })
 })
 
-const statusLabel = (row: ContractRow) => Number(row.status) === -5 ? 'Anulado' : row.accepted ? 'Firmado' : Number(row.status) === 1 ? 'Revisado' : 'En revisión';
-const statusVariant = (row: ContractRow): 'default' | 'secondary' | 'outline' | 'destructive' => Number(row.status) === -5 ? 'destructive' : row.accepted ? 'default' : Number(row.status) === 1 ? 'secondary' : 'outline';
+const statusLabel = (row: ContractRow) => row.status === 'ANULADO' ? 'Anulado' : row.status === 'FIRMADO' || row.signedAt ? 'Firmado' : 'En revisión';
+const statusVariant = (row: ContractRow): 'default' | 'outline' | 'destructive' => row.status === 'ANULADO' ? 'destructive' : row.status === 'FIRMADO' || row.signedAt ? 'default' : 'outline';
 
 const planClass = (plan: string | null) => ({ 
   Light: 'bg-amber-100 text-amber-800 border-amber-200', 

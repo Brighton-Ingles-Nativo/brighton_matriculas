@@ -1,4 +1,5 @@
 import { assertCsrf, getUserBySession } from '../../../utils/auth'
+import { assertContractAccess } from '../../../utils/contract-access'
 import { notify } from '../../../utils/notifications'
 import { prisma } from '../../../utils/prisma'
 
@@ -14,7 +15,7 @@ export default defineEventHandler(async (event) => {
 
   const contract = await prisma.contract.findUnique({ where: { id: contractId }, select: { id: true, contractNumber: true, userId: true, user: { select: { supervisorId: true } } } })
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'Matrícula no encontrada' })
-  if (user.role?.name === 'asesor' && contract.userId !== user.id) throw createError({ statusCode: 403, statusMessage: 'Solo puedes solicitar la anulación de tus propias matrículas' })
+  await assertContractAccess(user, contractId)
   const admins = await prisma.user.findMany({ where: { active: true, role: { name: 'admin' } }, select: { id: true } })
   const recipients = [contract.user.supervisorId ?? '', ...admins.map((item) => item.id)]
   const request = await prisma.cancellationRequest.upsert({

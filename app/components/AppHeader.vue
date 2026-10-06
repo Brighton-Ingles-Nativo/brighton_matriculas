@@ -8,7 +8,7 @@ const props = withDefaults(defineProps<{
 }>(), { subtitle: '' })
 
 const { user, logout } = useAuth()
-const { items: notifications, unreadCount, connected, markRead, enablePush, pushEnabled } = useNotifications()
+const { items: notifications, unreadCount, connected, markRead, enablePush, pushEnabled, syncPushState } = useNotifications()
 const router = useRouter()
 const isCollapsed = useState('sidebar-collapsed', () => false)
 
@@ -37,6 +37,8 @@ const openNotification = async (notification: typeof notifications.value[number]
 const enableBrowserNotifications = async () => {
   await enablePush()
 }
+
+onMounted(() => { void syncPushState() })
 </script>
 
 <template>

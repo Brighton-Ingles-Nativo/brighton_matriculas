@@ -13,6 +13,9 @@ services:
       MAIL_FROM: ${MAIL_FROM:-}
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Brighton Inglés Nativo}
       EXPEDIENT_UPLOAD_DIR: ${EXPEDIENT_UPLOAD_DIR:-/app/.data/expedients}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
     volumes:
       - brighton_expedients:/app/.data/expedients
 

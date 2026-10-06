@@ -1,4 +1,5 @@
 import { getUserBySession } from '../../utils/auth'
+import { assertContractAccess } from '../../utils/contract-access'
 import { prisma } from '../../utils/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -42,9 +43,7 @@ export default defineEventHandler(async (event) => {
   })
 
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'Contrato no encontrado' })
-  if (user.role?.name === 'asesor' && contract.userId !== user.id) {
-    throw createError({ statusCode: 403, statusMessage: 'No tienes acceso a este contrato' })
-  }
+  await assertContractAccess(user, contract.id)
 
   const { accessToken: _accessToken, ...safeContract } = contract
   const students = contract.students.map(({ student }) => ({

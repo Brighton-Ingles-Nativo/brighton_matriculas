@@ -1,5 +1,7 @@
 import { getUserBySession } from '../../utils/auth'
+import { contractAccessWhere } from '../../utils/contract-access'
 import { prisma } from '../../utils/prisma'
+import type { Prisma } from '@prisma/client'
 
 export default defineEventHandler(async (event) => {
   const user = await getUserBySession(event)
@@ -11,8 +13,9 @@ export default defineEventHandler(async (event) => {
   const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
   const limit = Number.isInteger(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 50) : 15
   const search = typeof query.search === 'string' ? query.search.trim() : ''
-  const where = {
-    ...(user.role?.name === 'asesor' ? { contract: { userId: user.id } } : {}),
+  const accessWhere = contractAccessWhere(user)
+  const where: Prisma.ReceiptWhereInput = {
+    ...(Object.keys(accessWhere).length ? { contract: accessWhere } : {}),
     ...(search ? { OR: [
       { contract: { contractNumber: { contains: search, mode: 'insensitive' as const } } },
       { contract: { customer: { name: { contains: search, mode: 'insensitive' as const } } } },

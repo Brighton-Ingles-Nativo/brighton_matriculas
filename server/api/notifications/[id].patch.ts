@@ -9,9 +9,10 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'Notificación inválida' })
 
+  const readAt = new Date()
   const notification = await prisma.notification.updateMany({
     where: { id, recipientId: user.id },
-    data: { readAt: new Date() }
+    data: { readAt }
   })
   if (!notification.count) throw createError({ statusCode: 404, statusMessage: 'Notificación no encontrada' })
 
@@ -19,8 +20,8 @@ export default defineEventHandler(async (event) => {
     id,
     type: 'notification.read',
     recipientId: user.id,
-    payload: { id, readAt: new Date().toISOString() },
-    occurredAt: new Date().toISOString()
+    payload: { id, readAt: readAt.toISOString() },
+    occurredAt: readAt.toISOString()
   })
 
   return { success: true }
