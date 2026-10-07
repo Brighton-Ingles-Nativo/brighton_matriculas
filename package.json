@@ -15,6 +15,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "prisma db seed",
+    "prisma:reset:dev": "prisma migrate reset --force",
     "prisma:baseline": "bash scripts/baseline-existing-db.sh"
   },
   "dependencies": {
