@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Bell, Check, ExternalLink } from '@lucide/vue'
 
+definePageMeta({ middleware: 'auth', ssr: false })
+
 const { items: notifications, unreadCount, loading, load, markRead, enablePush, disablePush, pushEnabled, syncPushState } = useNotifications()
 const pushBusy = ref(false)
 

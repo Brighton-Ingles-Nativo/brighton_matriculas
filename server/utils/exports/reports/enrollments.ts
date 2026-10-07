@@ -92,6 +92,7 @@ export async function buildEnrollmentExport(
   filters: { holderName?: string; holderDni?: string; advisorName?: string; status?: string; search?: string; expedientStatus?: string; location?: string }
 ): Promise<ExportDocument> {
   const role = user.role.name as ExportRole
+  const missingExpedient = filters.expedientStatus === 'sin_expediente'
   const statusFilter = filters.status === 'revision'
     ? { status: 'REVISION' as const }
     : filters.status === 'firmado'
@@ -133,7 +134,7 @@ export async function buildEnrollmentExport(
       }
     } : {}),
     ...(filters.advisorName ? { user: { name: { contains: filters.advisorName, mode: 'insensitive' as const } } } : {}),
-    ...(Object.keys(expedientFilter).length ? { expedient: expedientFilter } : {}),
+    ...(missingExpedient ? { expedient: { is: null } } : Object.keys(expedientFilter).length ? { expedient: expedientFilter } : {}),
     ...statusFilter
   }
   const contracts = await prisma.contract.findMany({

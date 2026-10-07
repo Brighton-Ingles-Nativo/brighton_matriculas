@@ -1,8 +1,9 @@
-import { getUserBySession } from '../../utils/auth'
+import { assertCsrf, getUserBySession } from '../../utils/auth'
 import { prisma } from '../../utils/prisma'
 import { publishToUser } from '../../utils/realtime'
 
 export default defineEventHandler(async (event) => {
+  assertCsrf(event)
   const user = await getUserBySession(event)
   if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
 

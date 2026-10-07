@@ -97,7 +97,7 @@ export function clearSessionCookie(event: H3Event): void {
   deleteCookie(event, sessionCookieName(), { path: '/' })
 }
 
-export async function getUserBySessionToken(token: string | undefined): Promise<User | null> {
+export async function getUserBySessionToken(token: string | undefined, event?: H3Event): Promise<User | null> {
   if (!token) return null
 
   const session = await prisma.userSession.findUnique({
@@ -114,7 +114,7 @@ export async function getUserBySessionToken(token: string | undefined): Promise<
   // de la sesión y el estado activo del usuario.
   if (session.expiresAt <= now || !session.user.active) {
     await prisma.userSession.deleteMany({ where: { id: session.id } })
-    clearSessionCookie(event)
+    if (event) clearSessionCookie(event)
     return null
   }
 
@@ -145,7 +145,7 @@ export async function getUserBySessionToken(token: string | undefined): Promise<
 }
 
 export async function getUserBySession(event: H3Event): Promise<User | null> {
-  return getUserBySessionToken(getCookie(event, sessionCookieName()))
+  return getUserBySessionToken(getCookie(event, sessionCookieName()), event)
 }
 
 export async function invalidateCurrentSession(event: H3Event): Promise<void> {

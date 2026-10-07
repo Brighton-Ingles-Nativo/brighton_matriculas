@@ -235,11 +235,13 @@ definePageMeta({
 })
 
 const { user, verifyToken, csrfHeaders } = useAuth(); 
+const route = useRoute()
 
-const holderName = ref('');
-const holderDni = ref('');
+const holderName = ref(typeof route.query.holderName === 'string' ? route.query.holderName : '');
+const holderDni = ref(typeof route.query.holderDni === 'string' ? route.query.holderDni : '');
 const advisorName = ref('');
-const status = ref('');
+const status = ref(typeof route.query.status === 'string' ? route.query.status : '');
+const expedientStatus = route.query.expedientStatus === 'sin_expediente' ? 'sin_expediente' : '';
 const page = ref(1); 
 const loading = ref(true); 
 const error = ref(''); 
@@ -268,6 +270,7 @@ const exportUrl = computed(() => {
   if (holderDni.value) params.set('holderDni', holderDni.value)
   if (canFilterAdvisor.value && advisorName.value) params.set('advisorName', advisorName.value)
   if (status.value) params.set('status', status.value)
+  if (expedientStatus) params.set('expedientStatus', expedientStatus)
   params.set('format', 'xlsx')
   const query = params.toString()
   return `/api/contracts/export${query ? `?${query}` : ''}`
@@ -283,7 +286,8 @@ const loadContracts = async () => {
         holderName: holderName.value || undefined,
         holderDni: holderDni.value || undefined,
         advisorName: canFilterAdvisor.value ? advisorName.value || undefined : undefined,
-        status: status.value || undefined
+        status: status.value || undefined,
+        expedientStatus: expedientStatus || undefined
       } 
       }); 
     contracts.value = response.data; 

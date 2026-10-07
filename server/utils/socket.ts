@@ -2,8 +2,6 @@ import { Server as SocketIOServer, type Socket } from 'socket.io'
 import type { Server as HttpServer } from 'node:http'
 import { getUserBySessionToken, sessionCookieName } from './auth'
 import { subscribeToChannel, type RealtimeChannel } from './realtime'
-import { serializeNotification } from './notifications'
-import { prisma } from './prisma'
 
 type RealtimeHttpServer = HttpServer & { __brightonSocketIO?: SocketIOServer }
 
@@ -41,45 +39,7 @@ function registerConnection(socket: Socket): void {
     socket.emit(message.type, message)
   }))
 
-  // The in-process bus gives low-latency delivery, while this small database
-  // poller also covers notifications created by another app instance.
-  let cursor = new Date()
-  const seenIds = new Set<string>()
-  const poll = setInterval(async () => {
-    try {
-      const notifications = await prisma.notification.findMany({
-        where: {
-          recipientId: user.id,
-          createdAt: { gte: cursor },
-          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
-        },
-        orderBy: { createdAt: 'asc' },
-        take: 100
-      })
-      for (const notification of notifications) {
-        cursor = notification.createdAt
-        if (seenIds.has(notification.id)) continue
-        seenIds.add(notification.id)
-        socket.emit('notification.created', {
-          id: notification.id,
-          type: 'notification.created',
-          recipientId: user.id,
-          payload: serializeNotification(notification),
-          occurredAt: notification.createdAt.toISOString()
-        })
-      }
-      if (seenIds.size > 500) {
-        const oldest = [...seenIds].slice(0, 100)
-        oldest.forEach((id) => seenIds.delete(id))
-      }
-    } catch (error) {
-      console.error('[notifications] realtime polling failed', { userId: user.id, error })
-    }
-  }, 2000)
-  poll.unref?.()
-
   socket.on('disconnect', () => unsubscribers.forEach((unsubscribe) => unsubscribe()))
-  socket.on('disconnect', () => clearInterval(poll))
 }
 
 export function installSocketIO(httpServer: RealtimeHttpServer): SocketIOServer {
@@ -87,7 +47,8 @@ export function installSocketIO(httpServer: RealtimeHttpServer): SocketIOServer 
 
   const io = new SocketIOServer(httpServer, {
     path: '/socket.io',
-    transports: ['websocket', 'polling'],
+    transports: ['websocket'],
+    allowUpgrades: false,
     cors: { origin: false },
     serveClient: false
   })

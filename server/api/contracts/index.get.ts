@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
   const holderDni = typeof query.holderDni === 'string' ? query.holderDni.trim() : ''
   const advisorName = typeof query.advisorName === 'string' ? query.advisorName.trim() : ''
   const status = typeof query.status === 'string' ? query.status.trim() : ''
+  const missingExpedient = query.expedientStatus === 'sin_expediente'
 
   const statusFilter = status === 'revision'
     ? { status: 'REVISION' as const }
@@ -37,6 +38,7 @@ export default defineEventHandler(async (event) => {
       }
     } : {}),
     ...(advisorName ? { user: { name: { contains: advisorName, mode: 'insensitive' as const } } } : {}),
+    ...(missingExpedient ? { expedient: { is: null } } : {}),
     ...statusFilter
   }
 

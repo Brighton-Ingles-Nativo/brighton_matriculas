@@ -95,7 +95,9 @@ async function deliverWebPush(notification: {
       status: { in: ['pending', 'failed', 'partial'] },
       attempts: { lt: 3 }
     },
-    data: { status: 'processing' }
+    // Count delivery rounds, not individual device attempts. Each round may
+    // retry a subscription up to three times below.
+    data: { status: 'processing', attempts: { increment: 1 } }
   })
   if (!claimed.count) return
 
@@ -128,7 +130,6 @@ async function deliverWebPush(notification: {
     return
   }
 
-  let attempts = 0
   let delivered = 0
   const errors: string[] = []
 
@@ -142,7 +143,6 @@ async function deliverWebPush(notification: {
         data: notification.data
       })
       for (let attempt = 1; attempt <= 3; attempt += 1) {
-        attempts += 1
         try {
           await webpush.sendNotification({ endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } }, payload)
           await prisma.pushSubscription.update({ where: { id: subscription.id }, data: { lastUsedAt: new Date() } })
@@ -168,7 +168,6 @@ async function deliverWebPush(notification: {
     where: { id: delivery.id },
     data: {
       status: delivered === subscriptions.length ? 'sent' : delivered ? 'partial' : 'failed',
-      attempts,
       sentAt: delivered ? new Date() : null,
       errorMessage: errors.length ? errors.join('; ').slice(0, 10000) : null
     }

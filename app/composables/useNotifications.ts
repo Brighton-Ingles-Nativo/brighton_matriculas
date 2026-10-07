@@ -81,7 +81,7 @@ export const useNotifications = () => {
     startPromise = (async () => {
       await load()
       const { io } = await import('socket.io-client')
-      activeSocket = io({ path: '/socket.io', withCredentials: true, transports: ['websocket', 'polling'] })
+      activeSocket = io({ path: '/socket.io', withCredentials: true, transports: ['websocket'], upgrade: false })
       activeSocket.on('connect', () => {
         const reconnecting = connected.value
         connected.value = true
@@ -141,10 +141,16 @@ export const useNotifications = () => {
   }
 
   const disablePush = async () => {
-    if (!import.meta.client || !('serviceWorker' in navigator)) return
+    if (!import.meta.client || !('serviceWorker' in navigator)) {
+      pushEnabled.value = false
+      return
+    }
     const registration = await navigator.serviceWorker.getRegistration('/sw.js')
     const subscription = await registration?.pushManager.getSubscription()
-    if (!subscription) return
+    if (!subscription) {
+      pushEnabled.value = false
+      return
+    }
     await $fetch('/api/notifications/push-subscriptions', {
       method: 'DELETE',
       credentials: 'include',
