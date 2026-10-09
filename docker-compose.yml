@@ -2,8 +2,6 @@ services:
   app:
     build: .
     restart: unless-stopped
-    command: >-
-      sh -c "pnpm exec prisma migrate reset --force && exec node .output/server/index.mjs"
     ports:
       - "${APP_PORT:-3000}:3000"
     environment:

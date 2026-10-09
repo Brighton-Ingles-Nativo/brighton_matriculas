@@ -31,7 +31,13 @@ const labels: Record<DocumentType, string> = { DNI: 'DNI del titular', VOUCHER: 
 const selectedFile = (type: DocumentType) => files[type]
 const formatSize = (value: number | null) => value ? `${(value / 1024 / 1024).toFixed(2)} MB` : '—'
 const documentFor = (type: DocumentType) => expedient.value?.documents.find((document) => document.type === type)
-const canManageDocuments = computed(() => ['asesor', 'supervisor'].includes(user.value?.role?.name || '') && (!expedient.value || expedient.value.currentLocation === 'ASESOR'))
+const canManageDocuments = computed(() => {
+  const role = user.value?.role?.name
+  if (role === 'admin') return true
+  if (role === 'asesor') return !expedient.value || expedient.value.currentLocation === 'ASESOR'
+  if (role === 'supervisor') return !expedient.value
+  return false
+})
 
 const load = async () => {
   loading.value = true

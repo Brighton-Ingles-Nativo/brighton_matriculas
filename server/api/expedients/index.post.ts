@@ -9,8 +9,8 @@ const filePart = (parts: Awaited<ReturnType<typeof readMultipartFormData>>, name
 export default defineEventHandler(async (event) => {
   assertCsrf(event)
   const user = await requireExpedientUser(event)
-  if (!['asesor', 'supervisor'].includes(user.role?.name || '')) {
-    throw createError({ statusCode: 403, statusMessage: 'Solo el asesor o supervisor puede crear un expediente.' })
+  if (!['asesor', 'supervisor', 'admin'].includes(user.role?.name || '')) {
+    throw createError({ statusCode: 403, statusMessage: 'Solo el asesor, supervisor o administrador puede crear un expediente.' })
   }
   const parts = await readMultipartFormData(event)
   const contractId = String(parts?.find((part) => part.name === 'contractId')?.data?.toString() || '').trim()

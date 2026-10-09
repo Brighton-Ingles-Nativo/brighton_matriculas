@@ -11,8 +11,9 @@ export default defineEventHandler(async (event) => {
   const expedient = await prisma.expedient.findUnique({ where: { id: expedientId }, include: { contract: { select: { id: true, userId: true, signedAt: true } } } })
   if (!expedient) throw createError({ statusCode: 404, statusMessage: 'Expediente no encontrado' })
   await getAccessibleContract(expedient.contract.id, user)
-  if (user.role?.name !== 'asesor' || expedient.currentLocation !== 'ASESOR') {
-    throw createError({ statusCode: 403, statusMessage: 'Los documentos solo pueden modificarse cuando el expediente está con el asesor.' })
+  const isAdmin = user.role?.name === 'admin'
+  if (!isAdmin && (user.role?.name !== 'asesor' || expedient.currentLocation !== 'ASESOR')) {
+    throw createError({ statusCode: 403, statusMessage: 'Los documentos solo pueden modificarse cuando el expediente está con el asesor, salvo el administrador.' })
   }
   if (!expedient.contract.signedAt) throw createError({ statusCode: 409, statusMessage: 'El contrato aún no está firmado.' })
 
