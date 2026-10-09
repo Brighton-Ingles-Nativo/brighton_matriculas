@@ -60,14 +60,34 @@ function parseSqlValue(value: string): unknown {
   return trimmed
 }
 
+function findStatementEnd(sql: string, start: number): number {
+  let inString = false
+  let escaped = false
+  for (let index = start; index < sql.length; index += 1) {
+    const character = sql[index]
+    const next = sql[index + 1]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (character === '\\') escaped = true
+      else if (character === "'" && next === "'") index += 1
+      else if (character === "'") inString = false
+    } else if (character === "'") inString = true
+    else if (character === ';') return index
+  }
+  return -1
+}
+
 function parseInsertRows(sql: string, table: string): SqlRow[] {
-  const expression = new RegExp('INSERT\\s+INTO\\s+[^\\w]*' + table + '[^\\w]*\\(([^)]*)\\)\\s+VALUES\\s*([\\s\\S]*?);', 'g')
+  const expression = new RegExp('INSERT\\s+INTO\\s+[^\\w]*' + table + '[^\\w]*\\(([^)]*)\\)\\s+VALUES\\s*', 'g')
   const rows: SqlRow[] = []
   let match: RegExpExecArray | null
 
   while ((match = expression.exec(sql))) {
     const columns = match[1].split(',').map((column) => column.trim().replace(/^`|`$/g, ''))
-    const values = match[2]
+    const statementEnd = findStatementEnd(sql, expression.lastIndex)
+    if (statementEnd < 0) throw new Error(`La sentencia INSERT de ${table} está incompleta`)
+    const values = sql.slice(expression.lastIndex, statementEnd)
+    expression.lastIndex = statementEnd + 1
     let row: string[] = []
     let token = ''
     let inString = false
