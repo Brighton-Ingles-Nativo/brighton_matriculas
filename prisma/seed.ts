@@ -364,7 +364,11 @@ async function main(): Promise<void> {
       }
       if (!studentData.name) {
         if (studentData.birthDate || studentData.dni || studentData.email || studentData.phone) {
-          throw new Error(`Beneficiario ${slot} de la matrícula ${sourceId} tiene datos, pero no nombre.`)
+          // The legacy form allowed partial beneficiary fields. There is no
+          // valid normalized student without a name, so keep the contract
+          // importable and report the orphaned fields instead of aborting the
+          // complete migration.
+          console.warn(`Beneficiario ${slot} de la matrícula ${sourceId} omitido: tiene datos, pero no nombre.`)
         }
         continue
       }
