@@ -1,7 +1,6 @@
-import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import { getAccessibleContract, requireExpedientUser, safeRelativePath, uploadRoot } from '../../../../utils/expedients'
+import { getAccessibleContract, requireExpedientUser } from '../../../../utils/expedients'
 import { prisma } from '../../../../utils/prisma'
+import { getS3DownloadUrl } from '../../../../utils/s3'
 
 export default defineEventHandler(async (event) => {
   const user = await requireExpedientUser(event)
@@ -11,9 +10,6 @@ export default defineEventHandler(async (event) => {
   const document = await prisma.expedientDocument.findFirst({ where: { id: documentId, expedientId }, include: { expedient: { include: { contract: { select: { id: true } } } } } })
   if (!document) throw createError({ statusCode: 404, statusMessage: 'Documento no encontrado' })
   await getAccessibleContract(document.expedient.contract.id, user)
-  const file = await readFile(join(uploadRoot(), safeRelativePath(document.filePath))).catch(() => null)
-  if (!file) throw createError({ statusCode: 404, statusMessage: 'Archivo no encontrado en el almacenamiento' })
-  setHeader(event, 'Content-Type', document.mimeType)
-  setHeader(event, 'Content-Disposition', `inline; filename="${document.fileName.replace(/[\r\n"]/g, '')}"`)
-  return file
+  const downloadUrl = await getS3DownloadUrl(document.filePath, document.mimeType, document.fileName)
+  return sendRedirect(event, downloadUrl, 302)
 })

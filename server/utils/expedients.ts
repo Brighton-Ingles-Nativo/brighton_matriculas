@@ -1,10 +1,10 @@
-import { mkdir, unlink, writeFile } from 'node:fs/promises'
-import { join, relative, resolve } from 'node:path'
+import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { H3Event } from 'h3'
 import { prisma } from './prisma'
 import { getUserBySession } from './auth'
 import { assertContractAccess } from './contract-access'
+import { removeS3Object, storeS3Object } from './s3'
 
 export const EXPEDIENT_ROLES = ['admin', 'asesor', 'supervisor', 'asistente_comercial', 'verificador'] as const
 export const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
@@ -37,11 +37,6 @@ export async function getAccessibleContract(contractId: string, user: Awaited<Re
   return contract
 }
 
-export function uploadRoot(): string {
-  const configured = String(useRuntimeConfig().expedientUploadDir || '.data/expedients')
-  return resolve(process.cwd(), configured)
-}
-
 export function validateDocumentType(value: unknown): asserts value is ExpedientDocumentType {
   if (!DOCUMENT_TYPES.includes(value as ExpedientDocumentType)) {
     throw createError({ statusCode: 400, statusMessage: 'Tipo de documento inválido' })
@@ -65,33 +60,17 @@ export async function storeUpload(contractId: string, file: { data?: Buffer; typ
   validateUpload(file)
   const mimeType = String(file.type).toLowerCase()
   const extension = MIME_EXTENSIONS[mimeType]
-  const directory = join(uploadRoot(), contractId)
-  await mkdir(directory, { recursive: true })
   const storedName = `${randomUUID()}${extension}`
-  const relativePath = join(contractId, storedName)
-  await writeFile(join(directory, storedName), file.data as Buffer, { flag: 'wx' })
+  const filePath = join('matriculas', contractId, storedName).replaceAll('\\', '/')
+  await storeS3Object(filePath, file.data as Buffer, mimeType)
   return {
     fileName: String(file.filename || storedName).slice(0, 255),
-    filePath: relativePath,
+    filePath,
     mimeType,
     fileSize: (file.data as Buffer).length
   }
 }
 
 export async function removeStoredFile(filePath: string | null | undefined): Promise<void> {
-  if (!filePath) return
-  const root = resolve(uploadRoot())
-  const target = resolve(root, filePath)
-  if (target !== root && !target.startsWith(`${root}/`)) return
-  await unlink(target).catch(() => undefined)
-}
-
-export function safeRelativePath(filePath: string): string {
-  const root = resolve(uploadRoot())
-  const target = resolve(root, filePath)
-  const path = relative(root, target)
-  if (!path || path.startsWith('..') || path.includes(`..${process.platform === 'win32' ? '\\' : '/'}`)) {
-    throw createError({ statusCode: 400, statusMessage: 'Ruta de documento inválida' })
-  }
-  return path
+  await removeS3Object(filePath)
 }
