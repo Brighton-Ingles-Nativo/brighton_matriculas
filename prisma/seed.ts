@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
+import bcrypt from 'bcryptjs'
 import { Prisma, PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
@@ -49,53 +50,55 @@ function strategyCode(name: string, usedCodes: Set<string>): string {
   return code
 }
 
-function decodeCopyField(value: string): unknown {
-  if (value === '\\N') return null
-  let decoded = ''
-  for (let index = 0; index < value.length; index += 1) {
-    const character = value[index]
-    if (character !== '\\' || index + 1 >= value.length) {
-      decoded += character
-      continue
-    }
-
-    const escaped = value[++index]
-    const simpleEscapes: Record<string, string> = {
-      b: '\b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v', '\\': '\\'
-    }
-    if (escaped in simpleEscapes) {
-      decoded += simpleEscapes[escaped]
-    } else if (/[0-7]/.test(escaped)) {
-      let octal = escaped
-      while (octal.length < 3 && index + 1 < value.length && /[0-7]/.test(value[index + 1])) octal += value[++index]
-      decoded += String.fromCharCode(Number.parseInt(octal, 8))
-    } else if (escaped === 'x' && /[\da-f]/i.test(value[index + 1] || '')) {
-      let hex = ''
-      while (hex.length < 2 && index + 1 < value.length && /[\da-f]/i.test(value[index + 1])) hex += value[++index]
-      decoded += String.fromCharCode(Number.parseInt(hex, 16))
-    } else {
-      decoded += escaped
-    }
+function parseSqlValue(value: string): unknown {
+  const trimmed = value.trim()
+  if (trimmed.toUpperCase() === 'NULL') return null
+  if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed)
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return trimmed.slice(1, -1).replace(/\\'/g, "'").replace(/''/g, "'")
   }
-  return decoded
+  return trimmed
 }
 
-function parseCopyRows(sql: string, table: string): SqlRow[] {
-  const header = new RegExp(`^COPY public\\.${table} \\(([^\\n]*)\\) FROM stdin;$`, 'm')
-  const match = header.exec(sql)
-  if (!match || match.index === undefined) throw new Error(`No se encontró COPY public.${table} en ${dumpPath}`)
-  const columns = match[1].split(', ').map((column) => column.trim())
-  const start = match.index + match[0].length + 1
-  const end = sql.indexOf('\n\\.', start)
-  if (end < 0) throw new Error(`La sección COPY de public.${table} está incompleta`)
-  const lines = sql.slice(start, end).split('\n').filter(Boolean)
-  return lines.map((line) => {
-    const values = line.replace(/\r$/, '').split('\t')
-    if (values.length !== columns.length) {
-      throw new Error(`Fila inválida en ${table}: esperaba ${columns.length} valores y recibió ${values.length}`)
+function parseInsertRows(sql: string, table: string): SqlRow[] {
+  const expression = new RegExp('INSERT\\s+INTO\\s+[^\\w]*' + table + '[^\\w]*\\(([^)]*)\\)\\s+VALUES\\s*([\\s\\S]*?);', 'g')
+  const rows: SqlRow[] = []
+  let match: RegExpExecArray | null
+
+  while ((match = expression.exec(sql))) {
+    const columns = match[1].split(',').map((column) => column.trim().replace(/^`|`$/g, ''))
+    const values = match[2]
+    let row: string[] = []
+    let token = ''
+    let inString = false
+    let escaped = false
+    let depth = 0
+    const flush = (): void => { if (token.trim() || row.length) row.push(token.trim()); token = '' }
+
+    for (let index = 0; index < values.length; index += 1) {
+      const character = values[index]
+      const next = values[index + 1]
+      if (inString) {
+        token += character
+        if (escaped) escaped = false
+        else if (character === '\\') escaped = true
+        else if (character === "'" && next === "'") { token += next; index += 1 }
+        else if (character === "'") inString = false
+      } else if (character === "'") { inString = true; token += character }
+      else if (character === '(') depth += 1
+      else if (character === ')') {
+        depth -= 1
+        if (depth === 0) {
+          flush()
+          if (row.length !== columns.length) throw new Error(`Fila inválida en ${table}: esperaba ${columns.length} valores y recibió ${row.length}`)
+          rows.push(Object.fromEntries(columns.map((column, i) => [column, parseSqlValue(row[i] ?? '')])))
+          row = []
+        }
+      } else if (character === ',' && depth === 1) flush()
+      else if (depth > 0) token += character
     }
-    return Object.fromEntries(columns.map((column, index) => [column, decodeCopyField(values[index])]))
-  })
+  }
+  return rows
 }
 
 function text(value: unknown): string | null {
@@ -147,80 +150,69 @@ function integer(value: unknown, field: string): number | null {
 
 async function main(): Promise<void> {
   const sql = await readFile(dumpPath, 'utf8')
-  const sourceRoles = parseCopyRows(sql, 'roles')
-  const sourceUsers = parseCopyRows(sql, 'users')
-  const sourceContracts = parseCopyRows(sql, 'contratos')
-  const sourceReceipts = parseCopyRows(sql, 'recibos')
+  // The backup is the legacy MySQL source. Its tables are deliberately not
+  // treated as the target schema: this function maps them into the current
+  // normalized PostgreSQL models below.
+  const sourceUsers = parseInsertRows(sql, 'usuarios')
+  const sourceContracts = parseInsertRows(sql, 'contratos')
+  const sourceReceipts = parseInsertRows(sql, 'recibos')
   if (!sourceUsers.length || !sourceContracts.length) throw new Error(`El dump no contiene usuarios y matrículas: ${dumpPath}`)
 
-  // Check all source foreign keys before touching the target database.
-  const sourceRoleIds = new Set(sourceRoles.map((row) => requiredText(row.id, 'roles.id')))
-  const sourceUserIds = new Set(sourceUsers.map((row) => requiredText(row.id, 'users.id')))
+  // Check legacy foreign keys before touching the target database.
+  const sourceUserIds = new Set(sourceUsers.map((row) => requiredText(row.id, 'usuarios.id')))
   const sourceContractIds = new Set(sourceContracts.map((row) => requiredText(row.id, 'contratos.id')))
-  const invalidUserRoles = sourceUsers.filter((row) => !sourceRoleIds.has(requiredText(row.role_id, `role_id de ${String(row.username)}`)))
-  const invalidContractUsers = sourceContracts.filter((row) => !sourceUserIds.has(requiredText(row.usuario_id, `usuario_id de ${String(row.nro_contrato)}`)))
+  const invalidContractUsers = sourceContracts.filter((row) => !sourceUserIds.has(requiredText(row.usuario_id, `usuario_id del contrato ${String(row.id)}`)))
   const invalidReceiptContracts = sourceReceipts.filter((row) => !sourceContractIds.has(requiredText(row.contrato_id, `contrato_id del recibo ${String(row.id)}`)))
   const invalidReceiptUsers = sourceReceipts.filter((row) => !sourceUserIds.has(requiredText(row.usuario_id, `usuario_id del recibo ${String(row.id)}`)))
-  if (invalidUserRoles.length || invalidContractUsers.length || invalidReceiptContracts.length || invalidReceiptUsers.length) {
+  if (invalidContractUsers.length || invalidReceiptContracts.length || invalidReceiptUsers.length) {
     throw new Error([
       'El dump contiene relaciones incompletas y no se importará parcialmente.',
-      invalidUserRoles.length ? `Usuarios con rol inexistente: ${invalidUserRoles.map((row) => String(row.id)).join(', ')}` : '',
       invalidContractUsers.length ? `Matrículas sin asesor: ${invalidContractUsers.map((row) => String(row.id)).join(', ')}` : '',
       invalidReceiptContracts.length ? `Recibos sin matrícula: ${invalidReceiptContracts.map((row) => String(row.id)).join(', ')}` : '',
       invalidReceiptUsers.length ? `Recibos sin registrador: ${invalidReceiptUsers.map((row) => String(row.id)).join(', ')}` : ''
     ].filter(Boolean).join('\n'))
   }
 
-  const roleIds = new Map<string, string>()
-  for (const source of sourceRoles) {
-    const sourceId = requiredText(source.id, 'roles.id')
-    const name = requiredText(source.name, `name del rol ${sourceId}`)
-    const roleData = {
-      name,
-      permissions: json(source.permissions),
-      createdAt: date(source.created_at) ?? new Date()
-    }
-    const role = await prisma.role.upsert({
-      where: { name },
-      update: roleData,
-      create: { id: sourceId, ...roleData }
-    })
-    roleIds.set(sourceId, role.id)
+  // These are target roles, not legacy roles. The legacy `rol` value is only
+  // used as a mapping key; permissions and target role definitions remain
+  // owned by the new system/migrations.
+  const legacyRoleMap: Record<string, string> = {
+    admin: 'admin',
+    asesor: 'asesor',
+    verificador: 'verificador'
   }
-
-  // Roles requeridos por el flujo de matrículas que no existían en el dump legado.
-  await prisma.role.upsert({
-    where: { name: 'supervisor' },
-    update: { permissions: { manageContracts: true } },
-    create: { name: 'supervisor', permissions: { manageContracts: true } }
-  })
-  await prisma.role.upsert({
-    where: { name: 'asistente_comercial' },
-    update: { permissions: { viewContracts: true, exportContracts: true } },
-    create: { name: 'asistente_comercial', permissions: { viewContracts: true, exportContracts: true } }
-  })
+  const targetRoleDefinitions = [
+    { name: 'admin', permissions: { manageUsers: true, manageContracts: true } },
+    { name: 'asesor', permissions: { manageContracts: true } },
+    { name: 'verificador', permissions: { verifyContracts: true } }
+  ] as const
+  for (const role of targetRoleDefinitions) {
+    await prisma.role.upsert({ where: { name: role.name }, update: {}, create: role })
+  }
+  const roleIds = new Map((await prisma.role.findMany({ where: { name: { in: Object.values(legacyRoleMap) } } })).map((role) => [role.name, role.id]))
+  const temporaryPassword = process.env.LEGACY_DEFAULT_PASSWORD
+  if (!temporaryPassword || temporaryPassword.length < 12) throw new Error('Define LEGACY_DEFAULT_PASSWORD con al menos 12 caracteres antes de ejecutar la migración.')
+  const temporaryPasswordHash = await bcrypt.hash(temporaryPassword, 12)
 
   const userIds = new Map<string, string>()
   for (const source of sourceUsers) {
-    const sourceId = requiredText(source.id, 'users.id')
-    const username = requiredText(source.username, `username del usuario ${sourceId}`)
-    const roleId = roleIds.get(requiredText(source.role_id, `role_id de ${username}`))
-    if (!roleId) throw new Error(`No se pudo resolver el rol del usuario ${username}`)
+    const sourceId = requiredText(source.id, 'usuarios.id')
+    const legacyRole = requiredText(source.rol, `rol del usuario ${sourceId}`).trim().toLowerCase()
+    const targetRole = legacyRoleMap[legacyRole]
+    const roleId = targetRole ? roleIds.get(targetRole) : undefined
+    if (!roleId) throw new Error(`Rol legado no soportado: ${legacyRole}`)
+    const username = requiredText(source.usuario, `usuario(${sourceId})`)
     const existing = await prisma.user.findUnique({ where: { username } })
-    const id = existing?.id ?? sourceId
+    const id = existing?.id ?? stableUuid('user', sourceId)
     const userData = {
       username,
-      email: requiredText(source.email, `email de ${username}`),
-      password: requiredText(source.password, `password de ${username}`),
-      name: requiredText(source.name, `name de ${username}`),
-      picUser: text(source.pic_user),
-      active: boolean(source.active),
-      emailVerified: boolean(source.email_verified),
+      email: text(source.email) ?? `${username}@legacy.invalid`,
+      name: requiredText(source.nombre, `nombre de ${username}`),
+      active: boolean(source.activo),
       roleId,
-      createdAt: date(source.created_at) ?? new Date(),
-      updatedAt: date(source.updated_at) ?? new Date()
+      createdAt: date(source.fecha_registro) ?? new Date()
     }
-    await prisma.user.upsert({ where: { id }, update: userData, create: { id, ...userData } })
+    await prisma.user.upsert({ where: { id }, update: userData, create: { id, ...userData, password: temporaryPasswordHash } })
     userIds.set(sourceId, id)
   }
 
@@ -297,7 +289,7 @@ async function main(): Promise<void> {
     customerIds.add(customerId)
 
     const existingContract = await prisma.contract.findUnique({ where: { contractNumber } })
-    const id = existingContract?.id ?? sourceId
+    const id = existingContract?.id ?? stableUuid('contract', sourceId)
     const contractData = {
       userId,
       customerId,
@@ -424,7 +416,8 @@ async function main(): Promise<void> {
       transactionDate: date(source.fecha_transaccion),
       registeredAt: date(source.fecha_registro) ?? new Date()
     }
-    await prisma.receipt.upsert({ where: { id: sourceId }, update: receiptData, create: { id: sourceId, ...receiptData } })
+    const id = stableUuid('receipt', sourceId)
+    await prisma.receipt.upsert({ where: { id }, update: receiptData, create: { id, ...receiptData } })
   }
 
   console.log(`Migración completada: ${sourceUsers.length} usuarios, ${strategyNames.length} estrategias, ${customerIds.size} perfiles de cliente, ${sourceContracts.length} matrículas, ${studentLinks} relaciones matrícula-alumno, ${historicalSiteMembers.size} sedes, ${teamMemberships} miembros de equipos y ${sourceReceipts.length} recibos procesados.`)
