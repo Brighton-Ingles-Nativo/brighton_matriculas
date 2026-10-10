@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ArrowLeft, Save } from '@lucide/vue'
+import { ubigeoPeru } from '~/shared/ubigeo'
 
 definePageMeta({ middleware: 'auth', ssr: false })
 
@@ -18,8 +19,7 @@ const cancellationError = ref('')
 const canRequestCancellation = computed(() => [ 'supervisor', 'admin'].includes(user.value?.role?.name || ''))
 const canReviewCancellation = computed(() => ['supervisor', 'admin'].includes(user.value?.role?.name || ''))
 
-const departments = ['Amazonas', 'Ancash', 'Apurímac', 'Arequipa', 'Ayacucho', 'Cajamarca', 'Callao', 'Cusco', 'Huancavelica', 'Huánuco', 'Ica', 'Junín', 'La Libertad', 'Lambayeque', 'Lima', 'Loreto', 'Madre de Dios', 'Moquegua', 'Pasco', 'Piura', 'Puno', 'San Martín', 'Tacna', 'Tumbes', 'Ucayali']; 
-const districts = ['Arequipa', 'Alto Selva Alegre', 'Cayma', 'Cerro Colorado', 'Characato', 'Jacobo Hunter', 'José Luis Bustamante y Rivero', 'Mariano Melgar', 'Miraflores', 'Paucarpata', 'Sabandía', 'Sachaca', 'Socabaya', 'Tiabaya', 'Yanahuara', 'Yura', 'La Joya']; 
+const departments = Object.keys(ubigeoPeru).sort((a, b) => a.localeCompare(b, 'es'))
 const teams = ref<{ id: string; name: string; site: { id: string; name: string } }[]>([])
 const strategies = ref<{ id: string; code: string | null; name: string; description: string | null }[]>([])
 type Beneficiary = { name: string; birthDate: string; dni: string; email: string; phone: string }
@@ -59,6 +59,8 @@ const form = reactive<{ students: Beneficiary[]; [key: string]: any }>({
   testimonials: false, 
   dataUsage: false 
 })
+const holderProvinces = computed(() => Object.keys(ubigeoPeru[form.holderDepartment] || {}).sort((a, b) => a.localeCompare(b, 'es')))
+const holderDistricts = computed(() => ubigeoPeru[form.holderDepartment]?.[form.holderProvince] || [])
 
 const contractNumber = ref(''); 
 const isCash = computed(() => form.paymentMode === 'contado'); 
@@ -186,6 +188,15 @@ watch(() => [
   form.installmentCount], 
   calculateAmounts
 )
+watch(() => form.holderDepartment, () => {
+  if (!holderProvinces.value.includes(form.holderProvince)) {
+    form.holderProvince = ''
+    form.holderDistrict = ''
+  }
+})
+watch(() => form.holderProvince, () => {
+  if (!holderDistricts.value.includes(form.holderDistrict)) form.holderDistrict = ''
+})
 
 const submit = async () => { 
   if (isLocked.value) {
@@ -292,10 +303,10 @@ onMounted(async () => { await Promise.all([loadTeams(), loadStrategies(), loadCo
               <UiLabel>Departamento</UiLabel><UiSelect v-model="form.holderDepartment"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="item in departments" :key="item" :value="item">{{ item }}</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="space-y-2">
-              <UiLabel>Provincia</UiLabel><UiSelect v-model="form.holderProvince"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem value="Arequipa">Arequipa</UiSelectItem></UiSelectContent></UiSelect>
+              <UiLabel>Provincia</UiLabel><UiSelect v-model="form.holderProvince"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="item in holderProvinces" :key="item" :value="item">{{ item }}</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="space-y-2">
-              <UiLabel>Distrito</UiLabel><UiSelect v-model="form.holderDistrict"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="item in districts" :key="item" :value="item">{{ item }}</UiSelectItem></UiSelectContent></UiSelect>
+              <UiLabel>Distrito</UiLabel><UiSelect v-model="form.holderDistrict"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="item in holderDistricts" :key="item" :value="item">{{ item }}</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="space-y-2">
               <UiLabel>Situación laboral</UiLabel>
