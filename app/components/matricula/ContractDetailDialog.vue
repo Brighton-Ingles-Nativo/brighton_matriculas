@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckCircle2, ExternalLink, FileDown } from '@lucide/vue'
+import { ArrowLeft, Check, CheckCircle2, Copy, ExternalLink, FileDown, Mail } from '@lucide/vue'
 
 interface Receipt {
   id: string
@@ -79,6 +79,12 @@ const termsLoading = ref(false)
 const termsError = ref(false)
 const termsRead = ref(false)
 const acceptedChecked = ref(false)
+const sendPreviewOpen = ref(false)
+const sendLoading = ref(false)
+const sendError = ref('')
+const copyError = ref('')
+const publicUrl = ref('')
+const copiedTarget = ref<'message' | 'link' | null>(null)
 
 const statusLabel = computed(() => {
   if (!props.contract) return '—'
@@ -101,6 +107,23 @@ const formatDateTime = (value: string | null | undefined) => value ? new Intl.Da
 const formatCurrency = (value: string | null | undefined) => value ? new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(value)) : '—'
 const display = (value: string | number | null | undefined) => value === null || value === undefined || value === '' ? '—' : value
 const paymentMode = (contract: Contract) => contract.cashPayment ? 'CONTADO' : contract.financedPayment ? 'FINANCIADO' : '—'
+const emailSubject = computed(() => props.contract ? `Tu matrícula Brighton - ${props.contract.contractNumber}` : '')
+const emailMessage = computed(() => {
+  if (!props.contract) return ''
+  return `Hola ${props.contract.holderName},
+
+Tu matrícula con Brighton Inglés Nativo está lista para ser visualizada y descargada.
+
+Matrícula: ${props.contract.contractNumber}
+
+Puedes revisar la información completa desde el siguiente enlace:
+${publicUrl.value}
+
+Este enlace es personal y estará disponible durante 5 días.
+
+Saludos,
+Brighton Inglés Nativo`
+})
 
 const loadTerms = async () => {
   if (!termsAvailable.value || termsHtml.value) return
@@ -122,6 +145,36 @@ const updateTermsRead = () => {
   termsRead.value = target.scrollHeight - target.scrollTop <= target.clientHeight + 8
 }
 
+const prepareSendPreview = async () => {
+  if (!props.contract) return
+  sendError.value = ''
+  copyError.value = ''
+  publicUrl.value = ''
+  sendPreviewOpen.value = true
+  sendLoading.value = true
+  try {
+    const response = await $fetch<{ success: boolean; url: string }>(`/api/contracts/${props.contract.id}/public-link`, { credentials: 'include' })
+    publicUrl.value = response.url
+  } catch (error: any) {
+    sendError.value = error?.data?.statusMessage || 'No se pudo preparar el enlace público del contrato.'
+  } finally {
+    sendLoading.value = false
+  }
+}
+
+const copyToClipboard = async (value: string, target: 'message' | 'link') => {
+  try {
+    await navigator.clipboard.writeText(value)
+    copyError.value = ''
+    copiedTarget.value = target
+    window.setTimeout(() => {
+      if (copiedTarget.value === target) copiedTarget.value = null
+    }, 1800)
+  } catch {
+    copyError.value = 'No se pudo copiar el contenido. Copia el texto manualmente.'
+  }
+}
+
 watch([() => props.open, termsHtml, termsLoading], async () => {
   await nextTick()
   updateTermsRead()
@@ -132,6 +185,8 @@ watch(() => props.open, (open) => {
     termsRead.value = false
     acceptedChecked.value = false
     loadTerms()
+  } else {
+    sendPreviewOpen.value = false
   }
 })
 
@@ -140,24 +195,69 @@ watch(() => props.contract?.id, () => {
   termsError.value = false
   termsRead.value = false
   acceptedChecked.value = false
+  sendPreviewOpen.value = false
+  publicUrl.value = ''
+  sendError.value = ''
   loadTerms()
 })
 </script>
 
 <template>
   <UiDialog :open="open" @update:open="emit('update:open', $event)">
-    <UiDialogScrollContent class="max-h-[94vh] max-w-6xl overflow-y-auto p-0">
-      <div class="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-6 py-4 pr-14">
+    <UiDialogScrollContent :class="['flex min-w-0 flex-col max-h-[calc(100vh-4rem)] overflow-hidden p-0', sendPreviewOpen ? 'max-w-2xl' : 'max-w-6xl']">
+      <div class="flex shrink-0 items-center justify-between border-b bg-background px-6 py-4 pr-25">
+        <UiButton type="button" variant="ghost" size="sm" class="-ml-3 gap-2" @click="sendPreviewOpen = false"><ArrowLeft class="size-4" /> Regresar</UiButton>
         <div>
-          <UiDialogTitle>{{ contract ? `Contrato ${contract.contractNumber}` : 'Detalle del contrato' }}</UiDialogTitle>
-          <UiDialogDescription>Detalle completo del registro, contrato y movimientos de pago.</UiDialogDescription>
+          <UiDialogTitle>{{ sendPreviewOpen ? 'Preparar envío del contrato' : contract ? `Contrato ${contract.contractNumber}` : 'Detalle del contrato' }}</UiDialogTitle>
+          <UiDialogDescription>{{ sendPreviewOpen ? 'Revisa y copia el contenido para enviarlo manualmente al cliente.' : 'Detalle completo del registro, contrato y movimientos de pago.' }}</UiDialogDescription>
         </div>
-  <div v-if="contract" class="flex gap-2"><UiButton variant="outline" size="sm" class="gap-2" @click="emit('publicView')"><ExternalLink class="size-4" /> Vista pública</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('pdf')"><FileDown class="size-4" /> Abrir PDF</UiButton></div>
+        <div v-if="contract && !sendPreviewOpen" class="flex flex-wrap justify-end gap-2"><UiButton variant="outline" size="sm" class="gap-2" :disabled="sendLoading" @click="prepareSendPreview"><Mail class="size-4" /> {{ sendLoading ? 'Preparando…' : 'Enviar contrato' }}</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('publicView')"><ExternalLink class="size-4" /> Vista pública</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('pdf')"><FileDown class="size-4" /> Abrir PDF</UiButton></div>
       </div>
 
-      <div v-if="loading" class="space-y-4 p-6"><UiSkeleton v-for="item in 10" :key="item" class="h-12 w-full" /></div>
+      <div v-if="sendPreviewOpen" class="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto p-6">
+
+        <!-- <UiAlert class="border-amber-200 bg-amber-50 text-amber-950">
+          <UiAlertDescription>Este botón no envía correos automáticamente. Copia el contenido y envíalo desde tu correo o medio habitual.</UiAlertDescription>
+        </UiAlert> -->
+
+        <div v-if="sendLoading" class="space-y-3 py-2">
+          <UiSkeleton class="h-5 w-2/3" />
+          <UiSkeleton class="h-10 w-full" />
+          <UiSkeleton class="h-40 w-full" />
+          <p class="text-sm text-muted-foreground">Preparando el enlace público del contrato…</p>
+        </div>
+        <UiAlert v-else-if="sendError" variant="destructive"><UiAlertDescription>{{ sendError }}</UiAlertDescription></UiAlert>
+        <div v-else-if="contract" class="min-w-0 space-y-4">
+          <div class="min-w-0 space-y-2">
+            <UiLabel for="contract-email-recipient">Destinatario</UiLabel>
+            <UiInput id="contract-email-recipient" :model-value="contract.holderEmail" readonly />
+          </div>
+          <div class="min-w-0 space-y-2">
+            <UiLabel for="contract-email-subject">Asunto</UiLabel>
+            <UiInput id="contract-email-subject" :model-value="emailSubject" readonly />
+          </div>
+          <div class="min-w-0 space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <UiLabel for="contract-email-message">Contenido del mensaje</UiLabel>
+              <UiButton type="button" variant="outline" size="sm" class="gap-2" @click="copyToClipboard(emailMessage, 'message')"><Check v-if="copiedTarget === 'message'" class="size-4" /><Copy v-else class="size-4" />{{ copiedTarget === 'message' ? 'Copiado' : 'Copiar mensaje' }}</UiButton>
+            </div>
+            <UiTextarea id="contract-email-message" :model-value="emailMessage" readonly wrap="soft" rows="12" class="min-h-64 min-w-0 w-full max-w-full resize-y bg-muted/20 field-sizing-fixed" />
+          </div>
+          <div class="min-w-0 space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <UiLabel for="contract-public-link">Enlace público</UiLabel>
+              <UiButton type="button" variant="outline" size="sm" class="gap-2" @click="copyToClipboard(publicUrl, 'link')"><Check v-if="copiedTarget === 'link'" class="size-4" /><Copy v-else class="size-4" />{{ copiedTarget === 'link' ? 'Copiado' : 'Copiar enlace' }}</UiButton>
+            </div>
+            <UiInput id="contract-public-link" :model-value="publicUrl" readonly class="font-mono text-xs" />
+          </div>
+          <UiAlert v-if="copyError" variant="destructive"><UiAlertDescription>{{ copyError }}</UiAlertDescription></UiAlert>
+        </div>
+
+      </div>
+
+      <div v-else-if="loading" class="min-h-0 flex-1 space-y-4 overflow-y-auto p-6"><UiSkeleton v-for="item in 10" :key="item" class="h-12 w-full" /></div>
       <UiAlert v-else-if="error" variant="destructive" class="m-6"><UiAlertDescription>{{ error }}</UiAlertDescription></UiAlert>
-      <div v-else-if="contract" class="space-y-5 bg-muted/20 p-6">
+      <div v-else-if="contract" class="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto bg-muted/20 p-6">
         <section class="rounded-lg border bg-card p-5 shadow-sm">
           <div class="flex flex-col justify-between gap-4 md:flex-row md:items-center">
             <div class="flex items-center gap-4"><div class="grid size-12 place-items-center rounded-full bg-primary text-primary-foreground"><CheckCircle2 class="size-6" /></div><div><h2 class="text-lg font-semibold">Contrato {{ contract.contractNumber }}</h2><p class="text-sm text-muted-foreground">{{ contract.signedAt ? `Firmado digitalmente el ${formatDateTime(contract.signedAt)}.` : 'Seguimiento del contrato registrado.' }}</p></div></div>
