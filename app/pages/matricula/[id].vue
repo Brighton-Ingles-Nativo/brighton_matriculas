@@ -15,7 +15,7 @@ const cancellationReason = ref('')
 const cancellationRequest = ref<any>(null)
 const cancellationLoading = ref(false)
 const cancellationError = ref('')
-const canRequestCancellation = computed(() => ['asesor', 'supervisor', 'admin'].includes(user.value?.role?.name || ''))
+const canRequestCancellation = computed(() => [ 'supervisor', 'admin'].includes(user.value?.role?.name || ''))
 const canReviewCancellation = computed(() => ['supervisor', 'admin'].includes(user.value?.role?.name || ''))
 
 const departments = ['Amazonas', 'Ancash', 'Apurímac', 'Arequipa', 'Ayacucho', 'Cajamarca', 'Callao', 'Cusco', 'Huancavelica', 'Huánuco', 'Ica', 'Junín', 'La Libertad', 'Lambayeque', 'Lima', 'Loreto', 'Madre de Dios', 'Moquegua', 'Pasco', 'Piura', 'Puno', 'San Martín', 'Tacna', 'Tumbes', 'Ucayali']; 

@@ -5,7 +5,7 @@ definePageMeta({ layout: 'public', middleware: 'guest' })
 
 const { login } = useAuth()
 const router = useRouter()
-const form = reactive({ username: '', password: '', rememberMe: false })
+const form = reactive({ username: '', password: '', rememberMe: true })
 const loading = ref(false)
 const error = ref('')
 
@@ -65,7 +65,7 @@ const handleLogin = async () => {
                 <UiButton class="w-full gap-2" size="lg" type="submit" :disabled="loading">
                   <LoaderCircle v-if="loading" class="size-4 animate-spin" />{{ loading ? 'Validando…' : 'Ingresar' }}</UiButton>
             </form>
-        <p class="mt-8 text-center text-sm text-muted-foreground">¿Aún no tienes cuenta? <NuxtLink to="/register" class="font-medium text-foreground underline underline-offset-4">Regístrate</NuxtLink></p>
+        <!-- <p class="mt-8 text-center text-sm text-muted-foreground">¿Aún no tienes cuenta? <NuxtLink to="/register" class="font-medium text-foreground underline underline-offset-4">Regístrate</NuxtLink></p> -->
       </div>
     </section>
 

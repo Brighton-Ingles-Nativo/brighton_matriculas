@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ArrowLeft, CheckCircle2, CircleAlert, History, LoaderCircle, Send, XCircle } from '@lucide/vue'
 
-definePageMeta({ middleware: 'auth', ssr: false })
+definePageMeta({ middleware: ['auth', 'expedients'], ssr: false })
 
 const route = useRoute()
 const loading = ref(true)

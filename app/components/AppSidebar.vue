@@ -6,7 +6,6 @@ const { isDark, toggleTheme } = useTheme()
 const router = useRouter()
 const route = useRoute()
 const isAdmin = computed(() => user.value?.role?.name === 'admin')
-const canViewExpedients = computed(() => ['admin', 'asesor', 'supervisor', 'asistente_comercial', 'verificador'].includes(user.value?.role?.name || ''))
 const isCollapsed = useState('sidebar-collapsed', () => false)
 const isAdminSection = computed(() => route.path.startsWith('/admin') || ['/sites', '/users'].includes(route.path))
 const isAdminHome = computed(() => route.path === '/admin')
@@ -54,7 +53,7 @@ const handleLogout = async () => {
       <NuxtLink to="/matriculas" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Matrículas">
         <ClipboardList class="size-4" /> <span v-if="!isCollapsed">Matrículas</span>
       </NuxtLink>
-      <NuxtLink v-if="canViewExpedients" to="/expedientes" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Expedientes">
+      <NuxtLink v-if="isAdmin" to="/expedientes" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Expedientes">
         <FolderOpen class="size-4" /> <span v-if="!isCollapsed">Expedientes</span>
       </NuxtLink>
       <NuxtLink to="/recibos" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Recibos">
