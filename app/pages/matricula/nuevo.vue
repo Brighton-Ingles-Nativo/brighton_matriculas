@@ -20,6 +20,7 @@ const form = reactive({
 
 const saving = ref(false)
 const formError = ref('')
+const fieldErrors = reactive<Record<string, string>>({})
 const { csrfHeaders } = useAuth()
 const today = new Intl.DateTimeFormat('es-PE', { dateStyle: 'long' }).format(new Date())
 const isCash = computed(() => form.paymentMode === 'contado')
@@ -108,20 +109,62 @@ watch(() => form.holderProvince, () => {
 })
 onMounted(async () => { await Promise.all([loadTeams(), loadStrategies()]) })
 
+const validateForm = () => {
+  Object.keys(fieldErrors).forEach((key) => delete fieldErrors[key])
+  const requiredFields: Array<[string, string, string]> = [
+    ['contractDepartment', 'Departamento de contrato', 'contractDepartment'],
+    ['contractProvince', 'Provincia de contrato', 'contractProvince'],
+    ['contractDistrict', 'Equipo comercial', 'contractDistrict'],
+    ['holderName', 'Nombre del titular', 'holderName'],
+    ['holderDni', 'DNI del titular', 'holderDni'],
+    ['holderBirthDate', 'Fecha de nacimiento del titular', 'holderBirthDate'],
+    ['holderEmail', 'Correo del titular', 'holderEmail'],
+    ['holderAddress', 'Dirección del titular', 'holderAddress'],
+    ['holderPhone', 'Celular del titular', 'holderPhone'],
+    ['holderDepartment', 'Departamento de residencia', 'holderDepartment'],
+    ['holderProvince', 'Provincia de residencia', 'holderProvince'],
+    ['holderDistrict', 'Distrito de residencia', 'holderDistrict'],
+    ['strategyId', 'Estrategia', 'strategy'],
+    ['modality', 'Modalidad', 'modality'],
+    ['program', 'Programa', 'program'],
+    ['paymentMode', 'Modalidad de pago', 'paymentMode'],
+    ['programValue', 'Valor del programa', 'programValue'],
+  ]
+  if (form.program !== 'Kids') requiredFields.push(['plan', 'Plan', 'plan'])
+  if (isFinanced.value) requiredFields.push(['paymentStartDate', 'Fecha de inicio de pago', 'paymentStartDate'])
+
+  for (const [field, label, id] of requiredFields) {
+    if (form[field as keyof typeof form] === null || form[field as keyof typeof form] === undefined || String(form[field as keyof typeof form]).trim() === '') {
+      fieldErrors[field] = `Completa ${label.toLowerCase()}.`
+    }
+  }
+  const firstError = requiredFields.find(([field]) => fieldErrors[field])
+  if (!firstError) return true
+  formError.value = `Falta completar: ${firstError[1]}.`
+  nextTick(() => document.getElementById(firstError[2])?.focus())
+  return false
+}
+
 const handleSubmit = async () => {
   if (saving.value) return
   formError.value = ''
+  if (!validateForm()) return
   if (!form.dataAuthorization) {
     formError.value = 'Debes aceptar la autorización de uso de datos personales para continuar.'
     return
   }
   saving.value = true
   try {
+    const payload = {
+      ...form,
+      programValue: form.programValue === '' || form.programValue == null ? '' : String(form.programValue),
+      students: students.value,
+    }
     await $fetch('/api/contracts', {
       method: 'POST',
       headers: await csrfHeaders(),
       credentials: 'include',
-      body: { ...form, students: students.value },
+      body: payload,
     })
     await navigateTo('/matriculas')
   } catch (error: any) {
@@ -217,62 +260,71 @@ const handleSubmit = async () => {
             <UiCardDescription>Información principal de la persona que suscribe la matrícula.</UiCardDescription>
           </UiCardHeader>
           <UiCardContent class="grid gap-5 p-6 sm:grid-cols-2 lg:grid-cols-4">
-            <div class="space-y-2 lg:col-span-2">
-              <UiLabel for="holderName">Nombre completo *</UiLabel>
-              <UiInput id="holderName" v-model="form.holderName" required />
-            </div>
             <div class="space-y-2">
               <UiLabel for="holderDni">DNI / CE *</UiLabel>
-              <DniLookupField v-model="form.holderDni" required @lookup="applyDniLookup('holder', $event)" />
+              <DniLookupField id="holderDni" v-model="form.holderDni" required @lookup="applyDniLookup('holder', $event)" />
+              <p v-if="fieldErrors.holderDni" class="text-xs text-destructive">{{ fieldErrors.holderDni }}</p>
             </div>
             <div class="space-y-2">
               <UiLabel for="holderBirthDate">Fecha nacimiento *</UiLabel>
               <UiDatePicker id="holderBirthDate" v-model="form.holderBirthDate" required />
+              <p v-if="fieldErrors.holderBirthDate" class="text-xs text-destructive">{{ fieldErrors.holderBirthDate }}</p>
+            </div>
+            <div class="space-y-2 lg:col-span-2">
+              <UiLabel for="holderName">Nombre completo *</UiLabel>
+              <UiInput id="holderName" v-model="form.holderName" :class="{ 'border-destructive': fieldErrors.holderName }" required />
+              <p v-if="fieldErrors.holderName" class="text-xs text-destructive">{{ fieldErrors.holderName }}</p>
             </div>
             <div class="space-y-2">
               <UiLabel for="holderEmail">Email *</UiLabel>
-              <UiInput id="holderEmail" v-model="form.holderEmail" required type="email" />
+              <UiInput id="holderEmail" v-model="form.holderEmail" :class="{ 'border-destructive': fieldErrors.holderEmail }" required type="email" />
+              <p v-if="fieldErrors.holderEmail" class="text-xs text-destructive">{{ fieldErrors.holderEmail }}</p>
             </div>
             <div class="space-y-2">
               <UiLabel for="holderPhone">Celular *</UiLabel>
-              <UiInput id="holderPhone" v-model="form.holderPhone" required type="tel" />
+              <UiInput id="holderPhone" v-model="form.holderPhone" :class="{ 'border-destructive': fieldErrors.holderPhone }" required type="tel" />
+              <p v-if="fieldErrors.holderPhone" class="text-xs text-destructive">{{ fieldErrors.holderPhone }}</p>
             </div>
             <div class="space-y-2 lg:col-span-2">
               <UiLabel for="holderAddress">Dirección *</UiLabel>
-              <UiInput id="holderAddress" v-model="form.holderAddress" required />
+              <UiInput id="holderAddress" v-model="form.holderAddress" :class="{ 'border-destructive': fieldErrors.holderAddress }" required />
+              <p v-if="fieldErrors.holderAddress" class="text-xs text-destructive">{{ fieldErrors.holderAddress }}</p>
             </div>
             <div class="space-y-2">
               <UiLabel for="holderDepartment">Departamento residencia *</UiLabel>
               <UiSelect v-model="form.holderDepartment" required>
-                <UiSelectTrigger id="holderDepartment" class="w-full">
+                <UiSelectTrigger id="holderDepartment" class="w-full" :class="{ 'border-destructive': fieldErrors.holderDepartment }">
                   <UiSelectValue placeholder="Seleccione..." />
                 </UiSelectTrigger>
                 <UiSelectContent>
                   <UiSelectItem v-for="item in departments" :key="item" :value="item">{{ item }}</UiSelectItem>
                 </UiSelectContent>
               </UiSelect>
+              <p v-if="fieldErrors.holderDepartment" class="text-xs text-destructive">{{ fieldErrors.holderDepartment }}</p>
             </div>
             <div class="space-y-2">
               <UiLabel for="holderProvince">Provincia residencia *</UiLabel>
               <UiSelect v-model="form.holderProvince" required>
-                <UiSelectTrigger id="holderProvince" class="w-full">
+                <UiSelectTrigger id="holderProvince" class="w-full" :class="{ 'border-destructive': fieldErrors.holderProvince }">
                   <UiSelectValue placeholder="Seleccione..." />
                 </UiSelectTrigger>
                 <UiSelectContent>
                   <UiSelectItem v-for="item in holderProvinces" :key="item" :value="item">{{ item }}</UiSelectItem>
                 </UiSelectContent>
               </UiSelect>
+              <p v-if="fieldErrors.holderProvince" class="text-xs text-destructive">{{ fieldErrors.holderProvince }}</p>
             </div>
             <div class="space-y-2">
               <UiLabel for="holderDistrict">Distrito residencia *</UiLabel>
               <UiSelect v-model="form.holderDistrict" required>
-                <UiSelectTrigger id="holderDistrict" class="w-full">
+                <UiSelectTrigger id="holderDistrict" class="w-full" :class="{ 'border-destructive': fieldErrors.holderDistrict }">
                   <UiSelectValue placeholder="Seleccione..." />
                 </UiSelectTrigger>
                 <UiSelectContent>
                   <UiSelectItem v-for="item in holderDistricts" :key="item" :value="item">{{ item }}</UiSelectItem>
                 </UiSelectContent>
               </UiSelect>
+              <p v-if="fieldErrors.holderDistrict" class="text-xs text-destructive">{{ fieldErrors.holderDistrict }}</p>
             </div>
             <div class="space-y-2">
               <UiLabel for="strategy">Estrategia *</UiLabel>
@@ -429,8 +481,9 @@ const handleSubmit = async () => {
           <UiCardContent class="grid gap-5 p-6 sm:grid-cols-2 lg:grid-cols-6">
             <div class="space-y-2 lg:col-span-2">
               <UiLabel for="programValue">Valor programa (S/) *</UiLabel>
-              <UiInput id="programValue" v-model="form.programValue" required type="number" min="0" step="0.01"
+              <UiInput id="programValue" v-model="form.programValue" :class="{ 'border-destructive': fieldErrors.programValue }" required type="number" min="0" step="0.01"
                 :readonly="isCash" @input="calculateAmounts" />
+              <p v-if="fieldErrors.programValue" class="text-xs text-destructive">{{ fieldErrors.programValue }}</p>
             </div>
             <div class="space-y-2 lg:col-span-2">
               <UiLabel for="initialPayment">Cuota inicial (S/)</UiLabel>
