@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ArrowLeft, Save } from '@lucide/vue'
+import { ubigeoPeru } from '~/shared/ubigeo'
 
 definePageMeta({ middleware: 'auth', ssr: false })
 
 const strategies = ref<{ id: string; code: string | null; name: string; description: string | null }[]>([])
-const departments = ['Amazonas', 'Ancash', 'Apurímac', 'Arequipa', 'Ayacucho', 'Cajamarca', 'Callao', 'Cusco', 'Huancavelica', 'Huánuco', 'Ica', 'Junín', 'La Libertad', 'Lambayeque', 'Lima', 'Loreto', 'Madre de Dios', 'Moquegua', 'Pasco', 'Piura', 'Puno', 'San Martín', 'Tacna', 'Tumbes', 'Ucayali']
-const residenceDistricts = ['Arequipa', 'Alto Selva Alegre', 'Cayma', 'Cerro Colorado', 'Characato', 'Jacobo Hunter', 'José Luis Bustamante y Rivero', 'Mariano Melgar', 'Miraflores', 'Paucarpata', 'Sabandía', 'Sachaca', 'Socabaya', 'Tiabaya', 'Yanahuara', 'Yura', 'La Joya']
+const departments = Object.keys(ubigeoPeru).sort((a, b) => a.localeCompare(b, 'es'))
 const teams = ref<{ id: string; name: string; site: { id: string; name: string } }[]>([])
 const installments = Array.from({ length: 13 }, (_, index) => index + 2)
 type Beneficiary = { name: string; birthDate: string; dni: string; email: string; phone: string }
@@ -25,6 +25,8 @@ const today = new Intl.DateTimeFormat('es-PE', { dateStyle: 'long' }).format(new
 const isCash = computed(() => form.paymentMode === 'contado')
 const isFinanced = computed(() => form.paymentMode === 'financiado')
 const showPlan = computed(() => form.program !== '' && form.program !== 'Kids')
+const holderProvinces = computed(() => Object.keys(ubigeoPeru[form.holderDepartment] || {}).sort((a, b) => a.localeCompare(b, 'es')))
+const holderDistricts = computed(() => ubigeoPeru[form.holderDepartment]?.[form.holderProvince] || [])
 
 const loadTeams = async () => {
   try {
@@ -97,6 +99,13 @@ watch(() => [form.paymentMode, form.program, form.plan, form.modality], () => {
   else if (isFinanced.value) calculateAmounts()
 })
 watch(() => [form.programValue, form.initialPayment, form.installmentCount, form.otherPayment], calculateAmounts)
+watch(() => form.holderDepartment, () => {
+  form.holderProvince = ''
+  form.holderDistrict = ''
+})
+watch(() => form.holderProvince, () => {
+  form.holderDistrict = ''
+})
 onMounted(async () => { await Promise.all([loadTeams(), loadStrategies()]) })
 
 const handleSubmit = async () => {
@@ -250,7 +259,7 @@ const handleSubmit = async () => {
                   <UiSelectValue placeholder="Seleccione..." />
                 </UiSelectTrigger>
                 <UiSelectContent>
-                  <UiSelectItem value="Arequipa">Arequipa</UiSelectItem>
+                  <UiSelectItem v-for="item in holderProvinces" :key="item" :value="item">{{ item }}</UiSelectItem>
                 </UiSelectContent>
               </UiSelect>
             </div>
@@ -261,7 +270,7 @@ const handleSubmit = async () => {
                   <UiSelectValue placeholder="Seleccione..." />
                 </UiSelectTrigger>
                 <UiSelectContent>
-                  <UiSelectItem v-for="item in residenceDistricts" :key="item" :value="item">{{ item }}</UiSelectItem>
+                  <UiSelectItem v-for="item in holderDistricts" :key="item" :value="item">{{ item }}</UiSelectItem>
                 </UiSelectContent>
               </UiSelect>
             </div>
