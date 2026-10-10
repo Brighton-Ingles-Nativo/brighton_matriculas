@@ -22,9 +22,11 @@ const departments = ['Amazonas', 'Ancash', 'Apurímac', 'Arequipa', 'Ayacucho', 
 const districts = ['Arequipa', 'Alto Selva Alegre', 'Cayma', 'Cerro Colorado', 'Characato', 'Jacobo Hunter', 'José Luis Bustamante y Rivero', 'Mariano Melgar', 'Miraflores', 'Paucarpata', 'Sabandía', 'Sachaca', 'Socabaya', 'Tiabaya', 'Yanahuara', 'Yura', 'La Joya']; 
 const teams = ref<{ id: string; name: string; site: { id: string; name: string } }[]>([])
 const strategies = ref<{ id: string; code: string | null; name: string; description: string | null }[]>([])
+type Beneficiary = { name: string; birthDate: string; dni: string; email: string; phone: string }
+const emptyBeneficiary = (): Beneficiary => ({ name: '', birthDate: '', dni: '', email: '', phone: '' })
 
 const installments = Array.from({ length: 13 }, (_, index) => index + 2)
-const form = reactive<Record<string, any>>({ 
+const form = reactive<{ students: Beneficiary[]; [key: string]: any }>({
   contractDepartment: 'Arequipa', 
   contractProvince: 'Arequipa', 
   contractDistrict: '', 
@@ -37,16 +39,7 @@ const form = reactive<Record<string, any>>({
   holderProvince: '', 
   holderDistrict: '', 
   holderPhone: '', 
-  beneficiary1Name: '', 
-  beneficiary1BirthDate: '', 
-  beneficiary1Dni: '', 
-  beneficiary1Email: '', 
-  beneficiary1Phone: '', 
-  beneficiary2Name: '', 
-  beneficiary2BirthDate: '', 
-  beneficiary2Dni: '', 
-  beneficiary2Email: '', 
-  beneficiary2Phone: '', 
+  students: [] as Beneficiary[],
   currentSituation: 'Empleado', 
   housingType: 'Propia', 
   strategyId: '',
@@ -72,10 +65,22 @@ const isCash = computed(() => form.paymentMode === 'contado');
 const isFinanced = computed(() => form.paymentMode === 'financiado'); 
 const showPlan = computed(() => form.program && form.program !== 'Kids')
 
-const applyDniLookup = (target: 'holder' | 'beneficiary1' | 'beneficiary2', data: { nombres: string; apellidoPaterno: string; apellidoMaterno: string; fechaNacimiento?: string }) => {
+const applyDniLookup = (target: 'holder' | number, data: { nombres: string; apellidoPaterno: string; apellidoMaterno: string; fechaNacimiento?: string }) => {
   const name = `${data.nombres} ${data.apellidoPaterno} ${data.apellidoMaterno}`.replace(/\s+/g, ' ').trim()
-  form[`${target}Name`] = name
-  if (data.fechaNacimiento) form[`${target}BirthDate`] = data.fechaNacimiento
+  if (target === 'holder') {
+    form.holderName = name
+    if (data.fechaNacimiento) form.holderBirthDate = data.fechaNacimiento
+  } else {
+    const student = form.students[target]
+    if (!student) return
+    student.name = name
+    if (data.fechaNacimiento) student.birthDate = data.fechaNacimiento
+  }
+}
+
+const addBeneficiary = () => form.students.push(emptyBeneficiary())
+const removeBeneficiary = (index: number) => {
+  if (form.students.length > 1) form.students.splice(index, 1)
 }
 
 const dateInput = (value: string | null) => value ? value.slice(0, 10) : ''
@@ -110,14 +115,20 @@ const loadContract = async () => {
     isLocked.value = Boolean(contract.signedAt) || contract.status !== 'REVISION'
     contractNumber.value = 
     contract.contractNumber; 
+    const loadedStudents = Array.isArray(contract.students) && contract.students.length
+      ? contract.students.map((student: any) => ({
+          name: student.name ?? '', birthDate: dateInput(student.birthDate), dni: student.dni ?? '',
+          email: student.email ?? '', phone: student.phone ?? ''
+        }))
+      : [1, 2].map((number) => ({
+          name: contract[`beneficiary${number}Name`] ?? '', birthDate: dateInput(contract[`beneficiary${number}BirthDate`]),
+          dni: contract[`beneficiary${number}Dni`] ?? '', email: contract[`beneficiary${number}Email`] ?? '',
+          phone: contract[`beneficiary${number}Phone`] ?? ''
+        })).filter((student) => student.name)
     Object.assign(form, { 
       ...contract, 
-      holderDni: contract.holderDni ?? '',
-      beneficiary1Dni: contract.beneficiary1Dni ?? '',
-      beneficiary2Dni: contract.beneficiary2Dni ?? '',
+      students: loadedStudents.length ? loadedStudents : [emptyBeneficiary()],
       holderBirthDate: dateInput(contract.holderBirthDate), 
-      beneficiary1BirthDate: dateInput(contract.beneficiary1BirthDate), 
-      beneficiary2BirthDate: dateInput(contract.beneficiary2BirthDate), 
       paymentMode: contract.cashPayment ? 'contado' : 'financiado', 
       programValue: money(contract.programValue), 
       initialPayment: money(contract.initialPayment), 
@@ -344,19 +355,19 @@ onMounted(async () => { await Promise.all([loadTeams(), loadStrategies(), loadCo
             <div class="space-y-2">
               <UiLabel>Modalidad de pago</UiLabel><UiSelect v-model="form.paymentMode"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem value="contado">Contado</UiSelectItem><UiSelectItem value="financiado">Financiado</UiSelectItem></UiSelectContent></UiSelect>
             </div>
-            <div v-for="number in [1, 2]" :key="number"
+            <div v-for="(student, index) in form.students" :key="index"
               class="grid gap-3 rounded-lg border p-4 sm:col-span-2 sm:grid-cols-2">
-              <p class="font-medium sm:col-span-2">Beneficiario {{ number }}</p>
-              <UiInput v-model="form[`beneficiary${number}Name` as 'beneficiary1Name' | 'beneficiary2Name']"
-                placeholder="Nombre completo" />
-              <DniLookupField v-model="form[`beneficiary${number}Dni` as 'beneficiary1Dni' | 'beneficiary2Dni']"
-                @lookup="applyDniLookup(`beneficiary${number}`, $event)" />
-              <UiDatePicker v-model="form[`beneficiary${number}BirthDate` as 'beneficiary1BirthDate' | 'beneficiary2BirthDate']" />
-              <UiInput v-model="form[`beneficiary${number}Email` as 'beneficiary1Email' | 'beneficiary2Email']"
-                type="email" placeholder="Email" />
-              <UiInput v-model="form[`beneficiary${number}Phone` as 'beneficiary1Phone' | 'beneficiary2Phone']"
-                placeholder="Celular" />
+              <div class="flex items-center justify-between sm:col-span-2">
+                <p class="font-medium">Beneficiario {{ index + 1 }}</p>
+                <UiButton v-if="form.students.length > 1" type="button" variant="outline" size="sm" @click="removeBeneficiary(index)">Eliminar</UiButton>
+              </div>
+              <UiInput v-model="student.name" placeholder="Nombre completo" />
+              <DniLookupField v-model="student.dni" @lookup="applyDniLookup(index, $event)" />
+              <UiDatePicker v-model="student.birthDate" />
+              <UiInput v-model="student.email" type="email" placeholder="Email" />
+              <UiInput v-model="student.phone" placeholder="Celular" />
             </div>
+            <UiButton type="button" variant="outline" class="sm:col-span-2" @click="addBeneficiary">Agregar beneficiario</UiButton>
           </UiCardContent>
         </UiCard>
         <UiCard>

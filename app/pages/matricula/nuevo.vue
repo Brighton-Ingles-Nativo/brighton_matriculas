@@ -8,11 +8,13 @@ const departments = ['Amazonas', 'Ancash', 'Apurímac', 'Arequipa', 'Ayacucho', 
 const residenceDistricts = ['Arequipa', 'Alto Selva Alegre', 'Cayma', 'Cerro Colorado', 'Characato', 'Jacobo Hunter', 'José Luis Bustamante y Rivero', 'Mariano Melgar', 'Miraflores', 'Paucarpata', 'Sabandía', 'Sachaca', 'Socabaya', 'Tiabaya', 'Yanahuara', 'Yura', 'La Joya']
 const teams = ref<{ id: string; name: string; site: { id: string; name: string } }[]>([])
 const installments = Array.from({ length: 13 }, (_, index) => index + 2)
+type Beneficiary = { name: string; birthDate: string; dni: string; email: string; phone: string }
+const emptyBeneficiary = (): Beneficiary => ({ name: '', birthDate: '', dni: '', email: '', phone: '' })
+const students = ref<Beneficiary[]>([emptyBeneficiary()])
 
 const form = reactive({
   contractDepartment: 'Arequipa', contractProvince: 'Arequipa', contractDistrict: '',
   holderName: '', holderBirthDate: '', holderDni: '', holderEmail: '', holderAddress: '', holderDepartment: '', holderProvince: '', holderDistrict: '', holderPhone: '',
-  beneficiary1Name: '', beneficiary1BirthDate: '', beneficiary1Dni: '', beneficiary1Email: '', beneficiary1Phone: '', beneficiary2Name: '', beneficiary2BirthDate: '', beneficiary2Dni: '', beneficiary2Email: '', beneficiary2Phone: '',
   currentSituation: 'Empleado', housingType: 'Propia', strategyId: '', paymentStartDate: '', modality: '', program: '', plan: '', paymentMode: '', programValue: '', initialPayment: '0', balance: '0', installmentCount: '0', installmentValue: '0', otherPayment: '0', notes: '', dataAuthorization: false, testimonials: false, dataUsage: false,
 })
 
@@ -42,15 +44,22 @@ const loadStrategies = async () => {
   }
 }
 
-const applyDniLookup = (target: 'holder' | 'beneficiary1' | 'beneficiary2', data: { nombres: string; apellidoPaterno: string; apellidoMaterno: string; fechaNacimiento?: string }) => {
+const applyDniLookup = (target: 'holder' | number, data: { nombres: string; apellidoPaterno: string; apellidoMaterno: string; fechaNacimiento?: string }) => {
   const name = `${data.nombres} ${data.apellidoPaterno} ${data.apellidoMaterno}`.replace(/\s+/g, ' ').trim()
   if (target === 'holder') {
     form.holderName = name
     if (data.fechaNacimiento) form.holderBirthDate = data.fechaNacimiento
   } else {
-    form[`${target}Name` as 'beneficiary1Name' | 'beneficiary2Name'] = name
-    if (data.fechaNacimiento) form[`${target}BirthDate` as 'beneficiary1BirthDate' | 'beneficiary2BirthDate'] = data.fechaNacimiento
+    const student = students.value[target]
+    if (!student) return
+    student.name = name
+    if (data.fechaNacimiento) student.birthDate = data.fechaNacimiento
   }
+}
+
+const addBeneficiary = () => students.value.push(emptyBeneficiary())
+const removeBeneficiary = (index: number) => {
+  if (students.value.length > 1) students.value.splice(index, 1)
 }
 
 const calculateAmounts = () => {
@@ -103,7 +112,7 @@ const handleSubmit = async () => {
       method: 'POST',
       headers: await csrfHeaders(),
       credentials: 'include',
-      body: form,
+      body: { ...form, students: students.value },
     })
     await navigateTo('/matriculas')
   } catch (error: any) {
@@ -296,41 +305,41 @@ const handleSubmit = async () => {
           </UiCardContent>
         </UiCard>
 
-        <div class="grid gap-6 lg:grid-cols-2">
-          <UiCard v-for="number in [1, 2]" :key="number">
+        <div class="space-y-4">
+          <UiCard v-for="(student, index) in students" :key="index">
             <UiCardHeader>
-              <UiCardTitle>Beneficiario {{ number }}</UiCardTitle>
-              <UiCardDescription>Datos opcionales del beneficiario.</UiCardDescription>
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <UiCardTitle>Beneficiario {{ index + 1 }}</UiCardTitle>
+                  <UiCardDescription>Datos opcionales del beneficiario.</UiCardDescription>
+                </div>
+                <UiButton v-if="students.length > 1" type="button" variant="outline" size="sm" @click="removeBeneficiary(index)">Eliminar</UiButton>
+              </div>
             </UiCardHeader>
             <UiCardContent class="grid gap-5 p-6 sm:grid-cols-2">
               <div class="space-y-2 sm:col-span-2">
-                <UiLabel :for="`beneficiary${number}Name`">Nombre completo</UiLabel>
-                <UiInput :id="`beneficiary${number}Name`"
-                  v-model="form[`beneficiary${number}Name` as 'beneficiary1Name' | 'beneficiary2Name']" />
+                <UiLabel :for="`beneficiary${index}Name`">Nombre completo</UiLabel>
+                <UiInput :id="`beneficiary${index}Name`" v-model="student.name" />
               </div>
               <div class="space-y-2">
-                <UiLabel :for="`beneficiary${number}BirthDate`">Fecha nacimiento</UiLabel>
-                <UiDatePicker :id="`beneficiary${number}BirthDate`"
-                  v-model="form[`beneficiary${number}BirthDate` as 'beneficiary1BirthDate' | 'beneficiary2BirthDate']" />
+                <UiLabel :for="`beneficiary${index}BirthDate`">Fecha nacimiento</UiLabel>
+                <UiDatePicker :id="`beneficiary${index}BirthDate`" v-model="student.birthDate" />
               </div>
               <div class="space-y-2">
-                <UiLabel :for="`beneficiary${number}Dni`">DNI / CE</UiLabel>
-                <DniLookupField v-model="form[`beneficiary${number}Dni` as 'beneficiary1Dni' | 'beneficiary2Dni']"
-                  @lookup="applyDniLookup(`beneficiary${number}`, $event)" />
+                <UiLabel :for="`beneficiary${index}Dni`">DNI / CE</UiLabel>
+                <DniLookupField :id="`beneficiary${index}Dni`" v-model="student.dni" @lookup="applyDniLookup(index, $event)" />
               </div>
               <div class="space-y-2">
-                <UiLabel :for="`beneficiary${number}Email`">Email</UiLabel>
-                <UiInput :id="`beneficiary${number}Email`"
-                  v-model="form[`beneficiary${number}Email` as 'beneficiary1Email' | 'beneficiary2Email']"
-                  type="email" />
+                <UiLabel :for="`beneficiary${index}Email`">Email</UiLabel>
+                <UiInput :id="`beneficiary${index}Email`" v-model="student.email" type="email" />
               </div>
               <div class="space-y-2">
-                <UiLabel :for="`beneficiary${number}Phone`">Celular</UiLabel>
-                <UiInput :id="`beneficiary${number}Phone`"
-                  v-model="form[`beneficiary${number}Phone` as 'beneficiary1Phone' | 'beneficiary2Phone']" type="tel" />
+                <UiLabel :for="`beneficiary${index}Phone`">Celular</UiLabel>
+                <UiInput :id="`beneficiary${index}Phone`" v-model="student.phone" type="tel" />
               </div>
             </UiCardContent>
           </UiCard>
+          <UiButton type="button" variant="outline" class="w-full" @click="addBeneficiary">Agregar beneficiario</UiButton>
         </div>
 
         <UiCard>
