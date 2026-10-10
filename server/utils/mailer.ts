@@ -35,14 +35,18 @@ const assertHeaderValue = (value: string, field: string) => {
   }
 }
 
-export const isMailEnabled = () => Boolean(useRuntimeConfig().mail?.enabled)
+export const isMailEnabled = () => Boolean(useRuntimeConfig().mail?.enabled || process.env.MAIL_ENABLED === 'true')
 
 export const sendEmail = async (input: SendEmailInput) => {
   const config = useRuntimeConfig().mail as MailRuntimeConfig
-  if (!config.enabled) {
+  const enabled = config.enabled || process.env.MAIL_ENABLED === 'true'
+  const providerUrl = config.providerUrl || process.env.MAIL_PROVIDER_URL || ''
+  const fromName = config.fromName || process.env.MAIL_FROM_NAME || 'Brighton Inglés Nativo'
+
+  if (!enabled) {
     throw createError({ statusCode: 503, statusMessage: 'El envío de correos no está habilitado.' })
   }
-  if (!config.providerUrl) {
+  if (!providerUrl) {
     throw createError({ statusCode: 503, statusMessage: 'El servicio AWS de correo no está configurado.' })
   }
 
@@ -59,14 +63,14 @@ export const sendEmail = async (input: SendEmailInput) => {
 
   let response: Response
   try {
-    response = await fetch(config.providerUrl, {
+    response = await fetch(providerUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         subject,
         message,
         to: recipients[0],
-        name: input.name || config.fromName || 'Brighton Inglés Nativo',
+        name: input.name || fromName,
         email: input.email || '',
         phone: input.phone || '',
       }),
