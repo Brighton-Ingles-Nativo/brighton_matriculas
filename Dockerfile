@@ -40,4 +40,4 @@ COPY --from=build /app/.output ./.output
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "pnpm exec prisma migrate reset --force --skip-seed && pnpm exec prisma db seed && exec node .output/server/index.mjs"]
+CMD ["sh", "-c", "pnpm exec prisma migrate deploy && if [ \"${SEED_DATABASE:-false}\" = \"true\" ]; then pnpm exec prisma db seed; fi && exec node .output/server/index.mjs"]

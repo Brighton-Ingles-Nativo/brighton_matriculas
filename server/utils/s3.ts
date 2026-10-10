@@ -2,12 +2,11 @@ import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } fro
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 const config = () => {
-  const runtimeConfig = useRuntimeConfig()
   const values = {
-    region: runtimeConfig.awsRegion,
-    bucket: runtimeConfig.awsBucketName,
-    accessKeyId: runtimeConfig.awsAccessKeyId,
-    secretAccessKey: runtimeConfig.awsSecretAccessKey,
+    region: process.env.AWS_REGION,
+    bucket: process.env.AWS_BUCKET_NAME,
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   }
 
   const missing = Object.entries({

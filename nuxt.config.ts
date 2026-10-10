@@ -14,10 +14,6 @@ export default defineNuxtConfig({
       from: process.env.MAIL_FROM || '',
       fromName: process.env.MAIL_FROM_NAME || 'Brighton Inglés Nativo',
     },
-    awsRegion: process.env.AWS_REGION || '',
-    awsBucketName: process.env.AWS_BUCKET_NAME || '',
-    awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-    awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
   },
 
   css: ['~/assets/css/main.css'],
