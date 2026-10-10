@@ -5,6 +5,7 @@ definePageMeta({ layout: 'public' })
 
 const { user, isLoggedIn, logout } = useAuth()
 const router = useRouter()
+router.push('/login')
 
 const handleLogout = async () => {
   await logout()

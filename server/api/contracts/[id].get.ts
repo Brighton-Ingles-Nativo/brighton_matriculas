@@ -1,4 +1,5 @@
 import { getUserBySession } from '../../utils/auth'
+import { assertContractAccess } from '../../utils/contract-access'
 import { prisma } from '../../utils/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -16,6 +17,13 @@ export default defineEventHandler(async (event) => {
       customer: true,
       students: { include: { student: true }, orderBy: { id: 'asc' } },
       otherData: true,
+      strategyDefinition: { select: { id: true, code: true, name: true } },
+      cancellationRequest: {
+        include: {
+          requestedBy: { select: { id: true, name: true } },
+          reviewedBy: { select: { id: true, name: true } }
+        }
+      },
       receipts: {
         orderBy: { registeredAt: 'desc' },
         select: {
@@ -35,9 +43,7 @@ export default defineEventHandler(async (event) => {
   })
 
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'Contrato no encontrado' })
-  if (user.role?.name === 'asesor' && contract.userId !== user.id) {
-    throw createError({ statusCode: 403, statusMessage: 'No tienes acceso a este contrato' })
-  }
+  await assertContractAccess(user, contract.id)
 
   const { accessToken: _accessToken, ...safeContract } = contract
   const students = contract.students.map(({ student }) => ({
@@ -65,23 +71,15 @@ export default defineEventHandler(async (event) => {
       holderDistrict: contract.customer.district,
       holderPhone: contract.customer.phone,
       students,
-      beneficiary1Name: students[0]?.name ?? null,
-      beneficiary1BirthDate: students[0]?.birthDate ?? null,
-      beneficiary1Dni: students[0]?.dni ?? null,
-      beneficiary1Email: students[0]?.email ?? null,
-      beneficiary1Phone: students[0]?.phone ?? null,
-      beneficiary2Name: students[1]?.name ?? null,
-      beneficiary2BirthDate: students[1]?.birthDate ?? null,
-      beneficiary2Dni: students[1]?.dni ?? null,
-      beneficiary2Email: students[1]?.email ?? null,
-      beneficiary2Phone: students[1]?.phone ?? null,
       currentSituation: otherData?.currentSituation ?? '—',
       housingType: otherData?.housingType ?? '—',
-      strategy: otherData?.strategy ?? '—',
       notes: otherData?.notes ?? null,
       dataAuthorization: otherData?.dataAuthorization ?? false,
       testimonials: otherData?.testimonials ?? false,
       dataUsage: otherData?.dataUsage ?? null,
+      strategyId: contract.strategyId,
+      strategyNameSnapshot: contract.strategyNameSnapshot,
+      strategy: contract.strategyNameSnapshot ?? contract.strategyDefinition?.name ?? otherData?.strategy ?? '—',
       programValue: contract.programValue.toString(),
       initialPayment: contract.initialPayment?.toString() ?? null,
       balance: contract.balance?.toString() ?? null,

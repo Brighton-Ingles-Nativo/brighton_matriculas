@@ -1,4 +1,5 @@
 import { getUserBySession } from '../../../utils/auth'
+import { assertContractAccess } from '../../../utils/contract-access'
 import { prisma } from '../../../utils/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -9,7 +10,7 @@ export default defineEventHandler(async (event) => {
 
   const contract = await prisma.contract.findUnique({ where: { id }, select: { userId: true, accessToken: true, tokenExpiresAt: true } })
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'Matrícula no encontrada' })
-  if (user.role?.name === 'asesor' && contract.userId !== user.id) throw createError({ statusCode: 403, statusMessage: 'No tienes acceso a esta matrícula' })
+  await assertContractAccess(user, id)
   if (!contract.accessToken || !contract.tokenExpiresAt || contract.tokenExpiresAt <= new Date()) throw createError({ statusCode: 409, statusMessage: 'El enlace público ha expirado' })
 
   const config = useRuntimeConfig()

@@ -9,7 +9,7 @@
         </div>
         <div class="flex flex-wrap gap-2">
           <UiButton v-if="canExport" variant="outline" class="gap-2" as-child><a :href="exportUrl">
-              <Download class="size-4" /> Exportar CSV
+              <Download class="size-4" /> Exportar Excel
             </a></UiButton>
           <UiButton class="gap-2" as-child>
             <NuxtLink to="/matricula/nuevo">
@@ -24,16 +24,12 @@
             <UiCardTitle>Matrículas</UiCardTitle>
             <UiCardDescription>{{ pagination.total }} matrículas encontradas</UiCardDescription>
           </div>
-          <form class="flex w-full gap-2 sm:w-auto" @submit.prevent="submitSearch">
-            <div class="relative w-full sm:w-72">
-              <Search
-                class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <UiInput v-model="search" class="pl-9" placeholder="Buscar matrícula, titular o DNI" />
-            </div>
-            <UiButton type="submit" variant="outline" size="icon" aria-label="Buscar">
-              <SlidersHorizontal class="size-4" />
-            </UiButton>
-          </form>
+          <div class="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:grid-cols-4">
+            <UiInput v-model="holderName" placeholder="Nombre del titular" aria-label="Nombre del titular" />
+            <UiInput v-model="holderDni" placeholder="DNI del titular" aria-label="DNI del titular" />
+            <UiInput v-if="canFilterAdvisor" v-model="advisorName" placeholder="Nombre del asesor" aria-label="Nombre del asesor" />
+            <UiSelect v-model="status"><UiSelectTrigger class="w-full" aria-label="Estado"><UiSelectValue placeholder="Todos los estados" /></UiSelectTrigger><UiSelectContent><UiSelectItem value="revision">En revisión</UiSelectItem><UiSelectItem value="firmado">Firmado</UiSelectItem><UiSelectItem value="anulado">Anulado</UiSelectItem></UiSelectContent></UiSelect>
+          </div>
         </UiCardHeader>
         <UiCardContent class="p-0">
           <div v-if="loading" class="space-y-3 p-6">
@@ -54,7 +50,7 @@
               <UiTableRow>
                 <UiTableHead>Matrícula</UiTableHead>
                 <UiTableHead>Titular</UiTableHead>
-                <UiTableHead class="hidden md:table-cell">DNI</UiTableHead>
+                <!-- <UiTableHead class="hidden md:table-cell">DNI</UiTableHead> -->
                 <UiTableHead v-if="user?.role?.name === 'admin'" class="hidden lg:table-cell">Asesor</UiTableHead>
                 <UiTableHead>Programa</UiTableHead>
                 <UiTableHead>Plan</UiTableHead>
@@ -69,9 +65,9 @@
                 <UiTableCell class="font-semibold text-primary">{{ row.contractNumber }}</UiTableCell>
                 <UiTableCell>
                   <div class="max-w-52 truncate font-medium uppercase">{{ row.holderName }}</div>
-                  <div class="text-xs text-muted-foreground md:hidden">{{ row.holderDni }}</div>
+                  <div class="text-xs text-muted-foreground">DNI:{{ row.holderDni }}</div>
                 </UiTableCell>
-                <UiTableCell class="hidden md:table-cell">{{ row.holderDni }}</UiTableCell>
+                <!-- <UiTableCell class="hidden md:table-cell">{{ row.holderDni }}</UiTableCell> -->
                 <UiTableCell v-if="user?.role?.name === 'admin'"
                   class="hidden max-w-36 truncate text-muted-foreground lg:table-cell">{{ row.advisor.name }}
                 </UiTableCell>
@@ -91,8 +87,8 @@
                     <UiButton size="icon" title="Ver detalle" aria-label="Ver detalle" @click="openDetail(row)">
                       <Eye class="size-4" />
                     </UiButton>
-                    <UiButton size="icon" :title="canEdit ? 'Editar matrícula' : 'Editar matrícula: sin permisos'"
-                      aria-label="Editar matrícula" :disabled="!canEdit">
+                    <UiButton size="icon" :title="!canEdit ? 'Editar matrícula: sin permisos' : isContractLocked(row) ? 'Matrícula firmada: edición bloqueada' : 'Editar matrícula'"
+                      aria-label="Editar matrícula" :disabled="!canEdit || isContractLocked(row)">
                       <Pencil class="size-4" />
                     </UiButton>
                     <UiButton size="icon" title="Generar recibo: disponible próximamente" aria-label="Generar recibo"
@@ -137,13 +133,14 @@
       </UiCard>
     </main>
     <MatriculaContractDetailDialog v-model:open="detailOpen" :contract="selectedContract" :loading="detailLoading"
-      :error="detailError" :can-approve="canApprove" :action-loading="detailActionLoading" @approve="approveContract"
+      :error="detailError" :action-loading="detailActionLoading"
       @accept="acceptContract" @public-view="openPublicView" @pdf="openContractPdf" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ChevronLeft, ChevronRight, Download, Eye, FileCheck2, FilePlus2, Pencil, Plus, Search, SlidersHorizontal } from '@lucide/vue'
+import { useDebounceFn } from '@vueuse/core'
+import { ChevronLeft, ChevronRight, Download, Eye, FileCheck2, FilePlus2, Pencil, Plus } from '@lucide/vue'
 
 interface ContractRow { 
   id: string; 
@@ -153,8 +150,8 @@ interface ContractRow {
   program: string; 
   plan: string | null; 
   programValue: string; 
-  status: string | null; 
-  accepted: boolean; 
+  status: 'REVISION' | 'FIRMADO' | 'ANULADO';
+  signedAt: string | null;
   registeredAt: string; 
   advisor: { 
     name: string; 
@@ -201,16 +198,6 @@ interface ContractDetail extends ContractRow {
   holderProvince: string | null; 
   holderDistrict: string | null; 
   holderPhone: string; 
-  beneficiary1Name: string | null; 
-  beneficiary1BirthDate: string | null; 
-  beneficiary1Dni: string | null; 
-  beneficiary1Email: string | null; 
-  beneficiary1Phone: string | null; 
-  beneficiary2Name: string | null; 
-  beneficiary2BirthDate: string | null; 
-  beneficiary2Dni: string | null; 
-  beneficiary2Email: string | null; 
-  beneficiary2Phone: string | null; 
   currentSituation: string; 
   housingType: string; 
   dataAuthorization: boolean; 
@@ -227,8 +214,7 @@ interface ContractDetail extends ContractRow {
   notes: string | null; 
   testimonials: boolean; 
   dataUsage: boolean | null; 
-  acceptedAt: string | null; 
-  acceptedIp: string | null; 
+  signedIp: string | null;
   receipts: ReceiptDetail[] 
 }
 
@@ -239,8 +225,13 @@ definePageMeta({
 })
 
 const { user, verifyToken, csrfHeaders } = useAuth(); 
+const route = useRoute()
 
-const search = ref(''); 
+const holderName = ref(typeof route.query.holderName === 'string' ? route.query.holderName : '');
+const holderDni = ref(typeof route.query.holderDni === 'string' ? route.query.holderDni : '');
+const advisorName = ref('');
+const status = ref(typeof route.query.status === 'string' ? route.query.status : '');
+const expedientStatus = route.query.expedientStatus === 'sin_expediente' ? 'sin_expediente' : '';
 const page = ref(1); 
 const loading = ref(true); 
 const error = ref(''); 
@@ -258,11 +249,22 @@ const detailError = ref('');
 const detailActionLoading = ref(false); 
 const selectedContract = ref<ContractDetail | null>(null)
 
-const canExport = computed(() => ['admin', 'verificador'].includes(user.value?.role?.name || '')); 
+const canExport = computed(() => ['admin', 'asesor', 'supervisor', 'asistente_comercial', 'verificador'].includes(user.value?.role?.name || ''));
 const canEdit = computed(() => true); 
-const canApprove = computed(() => ['admin', 'verificador'].includes(user.value?.role?.name || ''))
+const canFilterAdvisor = computed(() => user.value?.role?.name !== 'asesor')
+const isContractLocked = (row?: ContractRow) => !row || row.status !== 'REVISION' || Boolean(row.signedAt)
 
-const exportUrl = computed(() => `/api/contracts/export${search.value ? `?search=${encodeURIComponent(search.value)}` : ''}`)
+const exportUrl = computed(() => {
+  const params = new URLSearchParams()
+  if (holderName.value) params.set('holderName', holderName.value)
+  if (holderDni.value) params.set('holderDni', holderDni.value)
+  if (canFilterAdvisor.value && advisorName.value) params.set('advisorName', advisorName.value)
+  if (status.value) params.set('status', status.value)
+  if (expedientStatus) params.set('expedientStatus', expedientStatus)
+  params.set('format', 'xlsx')
+  const query = params.toString()
+  return `/api/contracts/export${query ? `?${query}` : ''}`
+})
 
 const loadContracts = async () => { 
   loading.value = true; 
@@ -271,7 +273,12 @@ const loadContracts = async () => {
     const response = await $fetch<ContractsResponse>('/api/contracts', { 
       query: { 
         page: page.value, 
-        search: search.value || undefined } 
+        holderName: holderName.value || undefined,
+        holderDni: holderDni.value || undefined,
+        advisorName: canFilterAdvisor.value ? advisorName.value || undefined : undefined,
+        status: status.value || undefined,
+        expedientStatus: expedientStatus || undefined
+      } 
       }); 
     contracts.value = response.data; 
     pagination.value = response.pagination 
@@ -286,6 +293,8 @@ const submitSearch = async () => {
   page.value = 1; 
   await loadContracts() 
 }; 
+
+const debouncedLoadContracts = useDebounceFn(() => submitSearch(), 350)
 
 const goToPage = async (nextPage: number) => { 
   if (nextPage < 1 || nextPage > pagination.value.totalPages || nextPage === page.value) 
@@ -341,37 +350,17 @@ const openDetail = async (row: ContractRow) => {
   } 
 }
 
-const approveContract = async () => { 
-  if (!selectedContract.value) return; 
-  detailActionLoading.value = true; 
-  detailError.value = ''; 
-  try { 
-    await $fetch(`/api/contracts/${selectedContract.value.id}/approve`, { 
-      method: 'POST', 
-      headers: await csrfHeaders(), 
-      credentials: 'include' 
-    }); 
-    selectedContract.value.status = '1'; 
-    await loadContracts() 
-  } catch (error: any) { 
-    detailError.value = error?.data?.statusMessage || 'No pudimos aprobar la matrícula.' 
-  } finally { 
-    detailActionLoading.value = false 
-  } 
-}
-
 const acceptContract = async () => { 
   if (!selectedContract.value) return; 
   detailActionLoading.value = true; 
   detailError.value = ''; 
   try { 
-    await $fetch(`/api/contracts/${selectedContract.value.id}/accept`, { 
+    const response = await $fetch<{ data: Pick<ContractDetail, 'status' | 'signedAt' | 'signedIp'> }>(`/api/contracts/${selectedContract.value.id}/accept`, {
       method: 'POST', 
       headers: await csrfHeaders(), 
       credentials: 'include' }); 
-      selectedContract.value.accepted = true; 
-      selectedContract.value.acceptedAt = new Date().toISOString(); 
-      await loadContracts() 
+    Object.assign(selectedContract.value, response.data)
+    await loadContracts()
   } catch (
     error: any) { 
       detailError.value = error?.data?.statusMessage || 'No pudimos aceptar el contrato.' 
@@ -434,24 +423,19 @@ watch(contracts, async (rows) => {
   const receiptRole = ['admin', 'asesor'].includes(user.value?.role?.name || '');
 
   document.querySelectorAll<HTMLButtonElement>('button[aria-label="Editar matrícula"]')
-    .forEach((button) => { 
-      button.disabled = false 
-    });
+    .forEach((button, index) => {
+      button.disabled = !canEdit.value || isContractLocked(rows[index])
+    }); 
 
   document.querySelectorAll<HTMLButtonElement>('button[aria-label="Ver recibo"]')
     .forEach((button, index) => { 
       button.disabled = !receiptRole || !rows[index]?.receiptCount 
     }); 
   
-  document.querySelectorAll<HTMLButtonElement>('button[aria-label="Generar recibo"]')
-    .forEach((button, index) => { 
-      button.disabled = !receiptRole || Number(rows[index]?.status) !== 1 || Boolean(rows[index]?.receiptCount); 
-      button.title = button.disabled ? 'Disponible para matrículas revisadas sin recibo' : 'Generar recibo' 
-    })
 })
 
-const statusLabel = (row: ContractRow) => Number(row.status) === -5 ? 'Anulado' : row.accepted ? 'Firmado' : Number(row.status) === 1 ? 'Revisado' : 'En revisión';
-const statusVariant = (row: ContractRow): 'default' | 'secondary' | 'outline' | 'destructive' => Number(row.status) === -5 ? 'destructive' : row.accepted ? 'default' : Number(row.status) === 1 ? 'secondary' : 'outline';
+const statusLabel = (row: ContractRow) => row.status === 'ANULADO' ? 'Anulado' : row.status === 'FIRMADO' || row.signedAt ? 'Firmado' : 'En revisión';
+const statusVariant = (row: ContractRow): 'default' | 'outline' | 'destructive' => row.status === 'ANULADO' ? 'destructive' : row.status === 'FIRMADO' || row.signedAt ? 'default' : 'outline';
 
 const planClass = (plan: string | null) => ({ 
   Light: 'bg-amber-100 text-amber-800 border-amber-200', 
@@ -466,6 +450,8 @@ onMounted(async () => {
   if (!user.value) await verifyToken(); 
   await loadContracts() 
 })
+
+watch([holderName, holderDni, advisorName, status], () => debouncedLoadContracts())
 
 onBeforeUnmount(() => { 
   document.removeEventListener('click', handleEditAction); 

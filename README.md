@@ -53,10 +53,34 @@ pnpm prisma:migrate
 pnpm prisma:generate
 ```
 
-Seed inicial (roles y usuario administrador):
+Como esta base corresponde al ambiente de desarrollo y sus datos pueden
+eliminarse, para reconstruirla completamente desde las migraciones usa:
 
 ```bash
-pnpm dlx prisma db seed
+pnpm prisma:reset:dev
+```
+
+Este comando elimina las tablas, ejecuta las 16 migraciones desde cero y
+ejecuta el seed configurado. No se ejecuta automáticamente al iniciar Docker,
+porque borraría la base en cada reinicio del contenedor.
+
+En una base existente, no uses `prisma db push`. Primero verifica que la base
+ya tenga la estructura representada por las migraciones históricas y registra
+el baseline una sola vez:
+
+```bash
+pnpm prisma:baseline
+pnpm prisma:deploy
+```
+
+La migración `20261003100000_normalize_contract_expedient_workflow` transforma
+los campos legacy del contrato (`acepto`, `acepto_fecha` y `acepto_ip`) y debe
+ejecutarse mediante `prisma migrate deploy`, antes del seed.
+
+Seed inicial (roles, usuario administrador y datos del respaldo legacy):
+
+```bash
+pnpm prisma:seed
 ```
 
 ## Desarrollo
@@ -80,6 +104,39 @@ Preview local del build:
 ```bash
 pnpm preview
 ```
+
+## Docker
+
+Levantar la aplicación y PostgreSQL:
+
+```bash
+docker compose up -d --build
+```
+
+La aplicación estará disponible en `http://localhost:3000`. En este ambiente
+de desarrollo, el servicio `app` reinicia la base al levantarse mediante
+`prisma migrate reset --force`: ejecuta las migraciones desde cero y luego el
+seed. Esto elimina los datos actuales en cada recreación o reinicio del
+contenedor.
+
+Para una base existente que no deba borrarse, no se debe usar este compose;
+debe utilizarse `prisma migrate deploy` con un baseline previamente registrado.
+Nunca se debe usar `prisma db push --accept-data-loss` sobre datos que deban
+conservarse.
+
+El contenedor de la aplicación tiene reinicio automático (`unless-stopped`). La
+persistencia y los respaldos de PostgreSQL quedan a cargo del servicio externo
+de base de datos.
+
+Para detener los servicios:
+
+```bash
+docker compose down
+```
+
+Los datos de PostgreSQL se conservan en el volumen `postgres_data`. Para
+configurar credenciales, puertos o correo, copiar `.env.example` a `.env` y
+ajustar las variables antes de levantar los contenedores.
 
 ## Variables de entorno
 

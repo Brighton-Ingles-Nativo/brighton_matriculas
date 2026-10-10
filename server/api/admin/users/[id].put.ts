@@ -9,12 +9,20 @@ export default defineEventHandler(async (event) => {
   const roleName = body.role === undefined ? undefined : String(body.role)
   const role = roleName ? await prisma.role.findUnique({ where: { name: roleName } }) : null
   if (roleName && !role) throw createError({ statusCode: 400, statusMessage: 'El rol seleccionado no existe.' })
+  const supervisorId = body.supervisorId === null || body.supervisorId === '' ? null : body.supervisorId === undefined ? undefined : String(body.supervisorId)
   const data: any = {}
   if (body.name !== undefined) data.name = String(body.name).trim()
   if (body.username !== undefined) data.username = String(body.username).trim()
   if (body.email !== undefined) data.email = String(body.email).trim().toLowerCase()
   if (body.active !== undefined) data.active = Boolean(body.active)
   if (role) data.roleId = role.id
+  if (supervisorId !== undefined) {
+    if (supervisorId === id) throw createError({ statusCode: 400, statusMessage: 'Un usuario no puede supervisarse a sí mismo.' })
+    const supervisor = supervisorId ? await prisma.user.findFirst({ where: { id: supervisorId, active: true, role: { name: 'supervisor' } }, select: { id: true } }) : true
+    if (!supervisor) throw createError({ statusCode: 400, statusMessage: 'El supervisor seleccionado no es válido.' })
+    data.supervisorId = supervisorId
+  }
+  if (roleName === 'supervisor') data.supervisorId = null
   if (body.password) { if (String(body.password).length < 6) throw createError({ statusCode: 400, statusMessage: 'La contraseña debe tener al menos 6 caracteres.' }); data.password = await hashPassword(String(body.password)) }
   try {
     const user = await prisma.user.update({ where: { id }, data, include: { role: true } })

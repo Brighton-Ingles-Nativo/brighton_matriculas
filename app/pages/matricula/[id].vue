@@ -5,17 +5,28 @@ definePageMeta({ middleware: 'auth', ssr: false })
 
 const route = useRoute(); 
 const { csrfHeaders } = useAuth(); 
+const { user } = useAuth()
 const loading = ref(true); 
 const saving = ref(false); 
 const error = ref(''); 
 const success = ref('')
+const isLocked = ref(false)
+const cancellationReason = ref('')
+const cancellationRequest = ref<any>(null)
+const cancellationLoading = ref(false)
+const cancellationError = ref('')
+const canRequestCancellation = computed(() => ['asesor', 'supervisor', 'admin'].includes(user.value?.role?.name || ''))
+const canReviewCancellation = computed(() => ['supervisor', 'admin'].includes(user.value?.role?.name || ''))
 
 const departments = ['Amazonas', 'Ancash', 'Apurímac', 'Arequipa', 'Ayacucho', 'Cajamarca', 'Callao', 'Cusco', 'Huancavelica', 'Huánuco', 'Ica', 'Junín', 'La Libertad', 'Lambayeque', 'Lima', 'Loreto', 'Madre de Dios', 'Moquegua', 'Pasco', 'Piura', 'Puno', 'San Martín', 'Tacna', 'Tumbes', 'Ucayali']; 
 const districts = ['Arequipa', 'Alto Selva Alegre', 'Cayma', 'Cerro Colorado', 'Characato', 'Jacobo Hunter', 'José Luis Bustamante y Rivero', 'Mariano Melgar', 'Miraflores', 'Paucarpata', 'Sabandía', 'Sachaca', 'Socabaya', 'Tiabaya', 'Yanahuara', 'Yura', 'La Joya']; 
-const teams = ['Yanahuara', 'José Luis Bustamante y Rivero', 'Virtual'];
+const teams = ref<{ id: string; name: string; site: { id: string; name: string } }[]>([])
+const strategies = ref<{ id: string; code: string | null; name: string; description: string | null }[]>([])
+type Beneficiary = { name: string; birthDate: string; dni: string; email: string; phone: string }
+const emptyBeneficiary = (): Beneficiary => ({ name: '', birthDate: '', dni: '', email: '', phone: '' })
 
 const installments = Array.from({ length: 13 }, (_, index) => index + 2)
-const form = reactive<Record<string, any>>({ 
+const form = reactive<{ students: Beneficiary[]; [key: string]: any }>({
   contractDepartment: 'Arequipa', 
   contractProvince: 'Arequipa', 
   contractDistrict: '', 
@@ -28,19 +39,10 @@ const form = reactive<Record<string, any>>({
   holderProvince: '', 
   holderDistrict: '', 
   holderPhone: '', 
-  beneficiary1Name: '', 
-  beneficiary1BirthDate: '', 
-  beneficiary1Dni: '', 
-  beneficiary1Email: '', 
-  beneficiary1Phone: '', 
-  beneficiary2Name: '', 
-  beneficiary2BirthDate: '', 
-  beneficiary2Dni: '', 
-  beneficiary2Email: '', 
-  beneficiary2Phone: '', 
+  students: [] as Beneficiary[],
   currentSituation: 'Empleado', 
   housingType: 'Propia', 
-  strategy: '', 
+  strategyId: '',
   paymentStartDate: '', 
   modality: '', 
   program: '',
@@ -63,7 +65,43 @@ const isCash = computed(() => form.paymentMode === 'contado');
 const isFinanced = computed(() => form.paymentMode === 'financiado'); 
 const showPlan = computed(() => form.program && form.program !== 'Kids')
 
+const applyDniLookup = (target: 'holder' | number, data: { nombres: string; apellidoPaterno: string; apellidoMaterno: string; fechaNacimiento?: string }) => {
+  const name = `${data.nombres} ${data.apellidoPaterno} ${data.apellidoMaterno}`.replace(/\s+/g, ' ').trim()
+  if (target === 'holder') {
+    form.holderName = name
+    if (data.fechaNacimiento) form.holderBirthDate = data.fechaNacimiento
+  } else {
+    const student = form.students[target]
+    if (!student) return
+    student.name = name
+    if (data.fechaNacimiento) student.birthDate = data.fechaNacimiento
+  }
+}
+
+const addBeneficiary = () => form.students.push(emptyBeneficiary())
+const removeBeneficiary = (index: number) => {
+  if (form.students.length > 1) form.students.splice(index, 1)
+}
+
 const dateInput = (value: string | null) => value ? value.slice(0, 10) : ''
+
+const loadTeams = async () => {
+  try {
+    const response = await $fetch<{ data: typeof teams.value }>('/api/teams', { credentials: 'include' })
+    teams.value = response.data
+  } catch {
+    error.value = 'No se pudieron cargar los equipos comerciales.'
+  }
+}
+
+const loadStrategies = async () => {
+  try {
+    const response = await $fetch<{ data: typeof strategies.value }>('/api/strategies', { credentials: 'include' })
+    strategies.value = response.data
+  } catch {
+    error.value = 'No se pudieron cargar las estrategias.'
+  }
+}
 
 const money = (value: unknown) => Number(value || 0).toFixed(2)
 
@@ -73,13 +111,20 @@ const loadContract = async () => {
       credentials: 'include' 
     }); 
     const contract = response.data; 
+    cancellationRequest.value = contract.cancellationRequest || null
+    isLocked.value = Boolean(contract.signedAt) || contract.status !== 'REVISION'
     contractNumber.value = 
     contract.contractNumber; 
+    const loadedStudents = Array.isArray(contract.students)
+      ? contract.students.map((student: any) => ({
+          name: student.name ?? '', birthDate: dateInput(student.birthDate), dni: student.dni ?? '',
+          email: student.email ?? '', phone: student.phone ?? ''
+        }))
+      : []
     Object.assign(form, { 
       ...contract, 
+      students: loadedStudents.length ? loadedStudents : [emptyBeneficiary()],
       holderBirthDate: dateInput(contract.holderBirthDate), 
-      beneficiary1BirthDate: dateInput(contract.beneficiary1BirthDate), 
-      beneficiary2BirthDate: dateInput(contract.beneficiary2BirthDate), 
       paymentMode: contract.cashPayment ? 'contado' : 'financiado', 
       programValue: money(contract.programValue), 
       initialPayment: money(contract.initialPayment), 
@@ -93,6 +138,31 @@ const loadContract = async () => {
   } finally { 
     loading.value = false 
   } 
+}
+
+const requestCancellation = async () => {
+  cancellationLoading.value = true
+  cancellationError.value = ''
+  try {
+    const response = await $fetch<{ data: any }>(`/api/contracts/${route.params.id}/cancellation-requests`, { method: 'POST', headers: await csrfHeaders(), credentials: 'include', body: { reason: cancellationReason.value } })
+    cancellationRequest.value = { ...response.data, reason: cancellationReason.value }
+    cancellationReason.value = ''
+  } catch (err: any) {
+    cancellationError.value = err?.data?.statusMessage || 'No se pudo registrar la solicitud.'
+  } finally { cancellationLoading.value = false }
+}
+
+const reviewCancellation = async (decision: 'APROBAR' | 'RECHAZAR') => {
+  if (!cancellationRequest.value) return
+  cancellationLoading.value = true
+  cancellationError.value = ''
+  try {
+    const response = await $fetch<{ data: any }>(`/api/cancellation-requests/${cancellationRequest.value.id}`, { method: 'PATCH', headers: await csrfHeaders(), credentials: 'include', body: { decision } })
+    cancellationRequest.value = { ...cancellationRequest.value, ...response.data }
+    if (decision === 'APROBAR') isLocked.value = true
+  } catch (err: any) {
+    cancellationError.value = err?.data?.statusMessage || 'No se pudo revisar la solicitud.'
+  } finally { cancellationLoading.value = false }
 }
 
 const calculateAmounts = () => { 
@@ -118,15 +188,20 @@ watch(() => [
 )
 
 const submit = async () => { 
+  if (isLocked.value) {
+    error.value = 'No se puede editar una matrícula firmada.'
+    return
+  }
   saving.value = true; 
   error.value = ''; 
   success.value = ''; 
   try { 
+    const { strategy: _strategy, strategyNameSnapshot: _strategyNameSnapshot, strategyDefinition: _strategyDefinition, ...editableForm } = form
     await $fetch<any>(`/api/contracts/${route.params.id}`, { 
       method: 'PUT' as any, 
       headers: await csrfHeaders(), 
       credentials: 'include', 
-      body: form 
+      body: editableForm
     }); 
     success.value = 'Matrícula actualizada correctamente.' 
   } catch (err: any) { 
@@ -136,7 +211,7 @@ const submit = async () => {
   } 
 }
 
-onMounted(loadContract)
+onMounted(async () => { await Promise.all([loadTeams(), loadStrategies(), loadContract()]) })
 </script>
 
 <template>
@@ -161,6 +236,28 @@ onMounted(loadContract)
         <UiAlertDescription>{{ error }}</UiAlertDescription>
       </UiAlert>
       <form v-else class="space-y-6" @submit.prevent="submit">
+        <UiCard v-if="canRequestCancellation || cancellationRequest">
+          <UiCardHeader><UiCardTitle>Solicitud de anulación</UiCardTitle><UiCardDescription>La solicitud será notificada al supervisor responsable.</UiCardDescription></UiCardHeader>
+          <UiCardContent class="space-y-4">
+            <UiAlert v-if="cancellationError" variant="destructive"><UiAlertDescription>{{ cancellationError }}</UiAlertDescription></UiAlert>
+            <div v-if="cancellationRequest" class="rounded-xl border bg-muted/30 p-4 text-sm">
+              <p><span class="font-medium">Estado:</span> {{ cancellationRequest.status }}</p>
+              <p class="mt-1"><span class="font-medium">Motivo:</span> {{ cancellationRequest.reason }}</p>
+            </div>
+            <template v-if="canRequestCancellation && !cancellationRequest">
+              <UiTextarea v-model="cancellationReason" placeholder="Indica el motivo de la solicitud de anulación." />
+              <UiButton type="button" variant="destructive" :disabled="cancellationLoading || !cancellationReason.trim()" @click="requestCancellation">Solicitar anulación</UiButton>
+            </template>
+            <div v-if="canReviewCancellation && cancellationRequest?.status === 'PENDIENTE'" class="flex flex-wrap gap-2">
+              <UiButton type="button" :disabled="cancellationLoading" @click="reviewCancellation('APROBAR')">Aprobar anulación</UiButton>
+              <UiButton type="button" variant="outline" :disabled="cancellationLoading" @click="reviewCancellation('RECHAZAR')">Rechazar anulación</UiButton>
+            </div>
+          </UiCardContent>
+        </UiCard>
+        <UiAlert v-if="isLocked" class="border-amber-200 bg-amber-50 text-amber-900">
+          <UiAlertDescription>Esta matrícula está firmada. El registro es de solo lectura y no admite modificaciones.</UiAlertDescription>
+        </UiAlert>
+        <fieldset :disabled="isLocked" class="space-y-6">
         <UiCard>
           <UiCardHeader>
             <UiCardTitle>Datos del titular</UiCardTitle>
@@ -173,11 +270,11 @@ onMounted(loadContract)
             </div>
             <div class="space-y-2">
               <UiLabel>DNI / CE</UiLabel>
-              <UiInput v-model="form.holderDni" required />
+              <DniLookupField v-model="form.holderDni" required @lookup="applyDniLookup('holder', $event)" />
             </div>
             <div class="space-y-2">
               <UiLabel>Fecha nacimiento</UiLabel>
-              <UiInput v-model="form.holderBirthDate" type="date" required />
+              <UiDatePicker v-model="form.holderBirthDate" required />
             </div>
             <div class="space-y-2">
               <UiLabel>Email</UiLabel>
@@ -192,19 +289,13 @@ onMounted(loadContract)
               <UiInput v-model="form.holderAddress" required />
             </div>
             <div class="space-y-2">
-              <UiLabel>Departamento</UiLabel><select v-model="form.holderDepartment" class="select">
-                <option v-for="item in departments" :key="item">{{ item }}</option>
-              </select>
+              <UiLabel>Departamento</UiLabel><UiSelect v-model="form.holderDepartment"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="item in departments" :key="item" :value="item">{{ item }}</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="space-y-2">
-              <UiLabel>Provincia</UiLabel><select v-model="form.holderProvince" class="select">
-                <option>Arequipa</option>
-              </select>
+              <UiLabel>Provincia</UiLabel><UiSelect v-model="form.holderProvince"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem value="Arequipa">Arequipa</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="space-y-2">
-              <UiLabel>Distrito</UiLabel><select v-model="form.holderDistrict" class="select">
-                <option v-for="item in districts" :key="item">{{ item }}</option>
-              </select>
+              <UiLabel>Distrito</UiLabel><UiSelect v-model="form.holderDistrict"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="item in districts" :key="item" :value="item">{{ item }}</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="space-y-2">
               <UiLabel>Situación laboral</UiLabel>
@@ -216,7 +307,14 @@ onMounted(loadContract)
             </div>
             <div class="space-y-2">
               <UiLabel>Estrategia</UiLabel>
-              <UiInput v-model="form.strategy" required />
+              <UiSelect v-model="form.strategyId" required>
+                <UiSelectTrigger class="w-full">
+                  <UiSelectValue placeholder="Seleccione una estrategia" />
+                </UiSelectTrigger>
+                <UiSelectContent>
+                  <UiSelectItem v-for="item in strategies" :key="item.id" :value="item.id">{{ item.name }}</UiSelectItem>
+                </UiSelectContent>
+              </UiSelect>
             </div>
           </UiCardContent>
         </UiCard>
@@ -226,19 +324,13 @@ onMounted(loadContract)
           </UiCardHeader>
           <UiCardContent class="grid gap-5 p-6 sm:grid-cols-2 lg:grid-cols-4">
             <div class="space-y-2">
-              <UiLabel>Departamento contrato</UiLabel><select v-model="form.contractDepartment" class="select">
-                <option v-for="item in departments" :key="item">{{ item }}</option>
-              </select>
+              <UiLabel>Departamento contrato</UiLabel><UiSelect v-model="form.contractDepartment"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="item in departments" :key="item" :value="item">{{ item }}</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="space-y-2">
-              <UiLabel>Provincia contrato</UiLabel><select v-model="form.contractProvince" class="select">
-                <option>Arequipa</option>
-              </select>
+              <UiLabel>Provincia contrato</UiLabel><UiSelect v-model="form.contractProvince"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem value="Arequipa">Arequipa</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="space-y-2">
-              <UiLabel>Equipo comercial</UiLabel><select v-model="form.contractDistrict" class="select">
-                <option v-for="item in teams" :key="item">{{ item }}</option>
-              </select>
+              <UiLabel>Equipo comercial</UiLabel><UiSelect v-model="form.contractDistrict"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="item in teams" :key="item.id" :value="item.name">{{ item.name }} · {{ item.site.name }}</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="space-y-2">
               <UiLabel>Modalidad</UiLabel>
@@ -257,26 +349,21 @@ onMounted(loadContract)
               <UiInput v-model="form.paymentStartDate" />
             </div>
             <div class="space-y-2">
-              <UiLabel>Modalidad de pago</UiLabel><select v-model="form.paymentMode" class="select">
-                <option value="contado">Contado</option>
-                <option value="financiado">Financiado</option>
-              </select>
+              <UiLabel>Modalidad de pago</UiLabel><UiSelect v-model="form.paymentMode"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem value="contado">Contado</UiSelectItem><UiSelectItem value="financiado">Financiado</UiSelectItem></UiSelectContent></UiSelect>
             </div>
-            <div v-for="number in [1, 2]" :key="number"
+            <div v-for="(student, index) in form.students" :key="index"
               class="grid gap-3 rounded-lg border p-4 sm:col-span-2 sm:grid-cols-2">
-              <p class="font-medium sm:col-span-2">Beneficiario {{ number }}</p>
-              <UiInput v-model="form[`beneficiary${number}Name` as 'beneficiary1Name' | 'beneficiary2Name']"
-                placeholder="Nombre completo" />
-              <UiInput v-model="form[`beneficiary${number}Dni` as 'beneficiary1Dni' | 'beneficiary2Dni']"
-                placeholder="DNI / CE" />
-              <UiInput
-                v-model="form[`beneficiary${number}BirthDate` as 'beneficiary1BirthDate' | 'beneficiary2BirthDate']"
-                type="date" />
-              <UiInput v-model="form[`beneficiary${number}Email` as 'beneficiary1Email' | 'beneficiary2Email']"
-                type="email" placeholder="Email" />
-              <UiInput v-model="form[`beneficiary${number}Phone` as 'beneficiary1Phone' | 'beneficiary2Phone']"
-                placeholder="Celular" />
+              <div class="flex items-center justify-between sm:col-span-2">
+                <p class="font-medium">Beneficiario {{ index + 1 }}</p>
+                <UiButton v-if="form.students.length > 1" type="button" variant="outline" size="sm" @click="removeBeneficiary(index)">Eliminar</UiButton>
+              </div>
+              <UiInput v-model="student.name" placeholder="Nombre completo" />
+              <DniLookupField v-model="student.dni" @lookup="applyDniLookup(index, $event)" />
+              <UiDatePicker v-model="student.birthDate" />
+              <UiInput v-model="student.email" type="email" placeholder="Email" />
+              <UiInput v-model="student.phone" placeholder="Celular" />
             </div>
+            <UiButton type="button" variant="outline" class="sm:col-span-2" @click="addBeneficiary">Agregar beneficiario</UiButton>
           </UiCardContent>
         </UiCard>
         <UiCard>
@@ -297,10 +384,7 @@ onMounted(loadContract)
               <UiInput v-model="form.balance" type="number" readonly />
             </div>
             <div v-if="isFinanced" class="space-y-2">
-              <UiLabel>Nro. cuotas</UiLabel><select v-model="form.installmentCount" class="select">
-                <option value="0">0</option>
-                <option v-for="item in installments" :key="item" :value="String(item)">{{ item }}</option>
-              </select>
+              <UiLabel>Nro. cuotas</UiLabel><UiSelect v-model="form.installmentCount"><UiSelectTrigger class="w-full"><UiSelectValue /></UiSelectTrigger><UiSelectContent><UiSelectItem value="0">0</UiSelectItem><UiSelectItem v-for="item in installments" :key="item" :value="String(item)">{{ item }}</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div v-if="isFinanced" class="space-y-2">
               <UiLabel>Valor cuota</UiLabel>
@@ -323,12 +407,13 @@ onMounted(loadContract)
             </UiAlert>
           </UiCardContent>
         </UiCard>
+        </fieldset>
         <div class="flex justify-end gap-3">
           <UiButton variant="outline" as-child>
             <NuxtLink to="/matriculas">Cancelar</NuxtLink>
           </UiButton>
-          <UiButton type="submit" class="gap-2" :disabled="saving">
-            <Save class="size-4" /> {{ saving ? 'Guardando…' : 'Guardar cambios' }}
+          <UiButton type="submit" class="gap-2" :disabled="saving || isLocked">
+            <Save class="size-4" /> {{ isLocked ? 'Edición bloqueada' : saving ? 'Guardando…' : 'Guardar cambios' }}
           </UiButton>
         </div>
       </form>

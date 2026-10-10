@@ -25,3 +25,5 @@ logs
 .env
 .env.*
 !.env.example
+REQUERIMIENTO DE PLATAFOMA DE MATRICULAS.md
+Flujo_manual.md

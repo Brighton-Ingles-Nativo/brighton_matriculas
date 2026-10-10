@@ -1,4 +1,5 @@
 import { getUserBySession } from '../../utils/auth'
+import { contractAccessWhere } from '../../utils/contract-access'
 import { prisma } from '../../utils/prisma'
 
 export default defineEventHandler(async (event) => {
@@ -14,17 +15,31 @@ export default defineEventHandler(async (event) => {
   const limit = Number.isInteger(requestedLimit) && requestedLimit > 0
     ? Math.min(requestedLimit, 50)
     : 15
-  const search = typeof query.search === 'string' ? query.search.trim() : ''
+  const holderName = typeof query.holderName === 'string' ? query.holderName.trim() : ''
+  const holderDni = typeof query.holderDni === 'string' ? query.holderDni.trim() : ''
+  const advisorName = typeof query.advisorName === 'string' ? query.advisorName.trim() : ''
+  const status = typeof query.status === 'string' ? query.status.trim() : ''
+  const missingExpedient = query.expedientStatus === 'sin_expediente'
+
+  const statusFilter = status === 'revision'
+    ? { status: 'REVISION' as const }
+    : status === 'firmado'
+      ? { status: 'FIRMADO' as const }
+      : status === 'anulado'
+        ? { status: 'ANULADO' as const }
+        : {}
 
   const where = {
-    ...(user.role?.name === 'asesor' ? { userId: user.id } : {}),
-    ...(search ? {
-      OR: [
-        { contractNumber: { contains: search, mode: 'insensitive' as const } },
-        { customer: { name: { contains: search, mode: 'insensitive' as const } } },
-        { customer: { dni: { contains: search, mode: 'insensitive' as const } } }
-      ]
-    } : {})
+    ...contractAccessWhere(user),
+    ...(holderName || holderDni ? {
+      customer: {
+        ...(holderName ? { name: { contains: holderName, mode: 'insensitive' as const } } : {}),
+        ...(holderDni ? { dni: { contains: holderDni, mode: 'insensitive' as const } } : {})
+      }
+    } : {}),
+    ...(advisorName ? { user: { name: { contains: advisorName, mode: 'insensitive' as const } } } : {}),
+    ...(missingExpedient ? { expedient: { is: null } } : {}),
+    ...statusFilter
   }
 
   const [total, contracts] = await Promise.all([
@@ -53,7 +68,7 @@ export default defineEventHandler(async (event) => {
       plan: contract.plan,
       programValue: contract.programValue.toString(),
       status: contract.status,
-      accepted: contract.accepted,
+      signedAt: contract.signedAt,
       registeredAt: contract.registeredAt,
       advisor: contract.user,
       receiptCount: contract.receipts.length,

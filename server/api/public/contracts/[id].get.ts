@@ -44,8 +44,6 @@ export default defineEventHandler(async (event) => {
       holderProvince: contract.customer.province,
       holderDistrict: contract.customer.district,
       students,
-      beneficiary1Name: students[0]?.name ?? null,
-      beneficiary2Name: students[1]?.name ?? null,
       currentSituation: contract.otherData?.currentSituation ?? '—',
       housingType: contract.otherData?.housingType ?? '—',
       strategy: contract.otherData?.strategy ?? '—',

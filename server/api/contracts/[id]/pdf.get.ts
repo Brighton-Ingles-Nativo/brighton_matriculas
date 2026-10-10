@@ -1,5 +1,6 @@
 import { getQuery } from 'h3'
 import { getUserBySession } from '../../../utils/auth'
+import { assertContractAccess } from '../../../utils/contract-access'
 import { prisma } from '../../../utils/prisma'
 
 type PdfContract = {
@@ -11,7 +12,7 @@ type PdfContract = {
   customer: { name: string; birthDate: Date; dni: string; email: string; address: string; department: string | null; province: string | null; district: string | null; phone: string }
   students: Array<{ student: { name: string; birthDate: Date | null; dni: string | null; email: string | null; phone: string | null } }>
   otherData: { currentSituation: string; housingType: string; dataAuthorization: boolean; strategy: string; notes: string | null; testimonials: boolean; dataUsage: boolean | null } | null
-  accepted: boolean
+  signedAt: Date | null
   paymentStartDate: string | null
   modality: string | null
   program: string
@@ -25,8 +26,7 @@ type PdfContract = {
   installmentValue: { toString(): string } | null
   otherPayment: string | null
   status: string | null
-  acceptedAt: Date | null
-  acceptedIp: string | null
+  signedIp: string | null
   user: { id: string; name: string; username: string }
   receipts: Array<{
     amount: { toString(): string } | null
@@ -77,8 +77,8 @@ function buildPdf(contract: PdfContract): Buffer {
     `Situacion: ${contract.otherData?.currentSituation || '-'}    Vivienda: ${contract.otherData?.housingType || '-'}`,
     `Estrategia: ${contract.otherData?.strategy || '-'}    Estado: ${contract.status || '-'}`,
     `Autorizacion de datos: ${yesNo(contract.otherData?.dataAuthorization ?? null)}    Uso de datos: ${yesNo(contract.otherData?.dataUsage ?? null)}`,
-    `Aceptado: ${yesNo(contract.accepted)}    Testimonios: ${yesNo(contract.otherData?.testimonials ?? null)}`,
-    `Fecha aceptacion: ${date(contract.acceptedAt)}    IP: ${contract.acceptedIp || '-'}`,
+    `Firmado: ${yesNo(Boolean(contract.signedAt))}    Testimonios: ${yesNo(contract.otherData?.testimonials ?? null)}`,
+    `Fecha firma: ${date(contract.signedAt)}    IP: ${contract.signedIp || '-'}`,
     '',
     'RECIBOS',
     ...(contract.receipts.length ? contract.receipts.flatMap((receipt, index) => [
@@ -131,7 +131,7 @@ export default defineEventHandler(async (event) => {
   if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, statusMessage: 'ID de contrato invalido' })
   const contract = await prisma.contract.findFirst({ where: { id, ...(user ? {} : { accessToken: publicToken!, tokenExpiresAt: { gt: new Date() } }) }, include: { user: { select: { id: true, name: true, username: true } }, customer: true, students: { include: { student: true }, orderBy: { id: 'asc' } }, otherData: true, receipts: { orderBy: { registeredAt: 'desc' }, select: { amount: true, concepts: true, otherConcept: true, paymentMethod: true, operationNumber: true, bank: true, transactionDate: true, registeredAt: true } } } }) as PdfContract | null
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'Contrato no encontrado' })
-  if (user && user.role?.name === 'asesor' && contract.user.id !== user.id) throw createError({ statusCode: 403, statusMessage: 'No tienes acceso a este contrato' })
+  if (user) await assertContractAccess(user, id)
   setHeader(event, 'Content-Type', 'application/pdf')
   setHeader(event, 'Content-Disposition', `inline; filename="contrato-${contract.contractNumber}.pdf"`)
   return buildPdf(contract)

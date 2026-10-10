@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { assertCsrf, getUserBySession } from '../../utils/auth'
 import { prisma } from '../../utils/prisma'
+import { resolveActiveStrategy } from '../../utils/strategies'
 
 type ContractPayload = {
   contractDepartment?: string
@@ -15,19 +16,9 @@ type ContractPayload = {
   holderProvince?: string
   holderDistrict?: string
   holderPhone?: string
-  beneficiary1Name?: string
-  beneficiary1BirthDate?: string
-  beneficiary1Dni?: string
-  beneficiary1Email?: string
-  beneficiary1Phone?: string
-  beneficiary2Name?: string
-  beneficiary2BirthDate?: string
-  beneficiary2Dni?: string
-  beneficiary2Email?: string
-  beneficiary2Phone?: string
   currentSituation?: string
   housingType?: string
-  strategy?: string
+  strategyId?: string
   paymentStartDate?: string
   modality?: string
   program?: string
@@ -83,6 +74,8 @@ export default defineEventHandler(async (event) => {
   if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
 
   const body = await readBody<ContractPayload>(event)
+  const selectedStrategy = await resolveActiveStrategy(body.strategyId)
+  const strategyName = selectedStrategy?.name || ''
   const required: Array<[string, unknown]> = [
     ['departamento de contrato', body.contractDepartment],
     ['provincia de contrato', body.contractProvince],
@@ -96,7 +89,7 @@ export default defineEventHandler(async (event) => {
     ['departamento de residencia', body.holderDepartment],
     ['provincia de residencia', body.holderProvince],
     ['distrito de residencia', body.holderDistrict],
-    ['estrategia', body.strategy],
+    ['estrategia', strategyName],
     ['modalidad', body.modality],
     ['programa', body.program],
     ['modalidad de pago', body.paymentMode],
@@ -121,16 +114,7 @@ export default defineEventHandler(async (event) => {
         email: optionalText(student.email),
         phone: optionalText(student.phone)
       })).filter((student) => student.name)
-    : [1, 2].map((number) => {
-        const value = body as Record<string, unknown>
-        return {
-          name: text(value[`beneficiary${number}Name`]),
-          birthDate: optionalDate(value[`beneficiary${number}BirthDate`]),
-          dni: optionalText(value[`beneficiary${number}Dni`]),
-          email: optionalText(value[`beneficiary${number}Email`]),
-          phone: optionalText(value[`beneficiary${number}Phone`])
-        }
-      })
+    : []
   const seenStudentKeys = new Set<string>()
   const students = studentInputs.filter((student) => {
     if (!student.name) return false
@@ -167,6 +151,8 @@ export default defineEventHandler(async (event) => {
           contractProvince: text(body.contractProvince),
           contractDistrict: text(body.contractDistrict),
           contractNumber,
+          strategyId: selectedStrategy?.id ?? null,
+          strategyNameSnapshot: strategyName,
           paymentStartDate: optionalText(body.paymentStartDate),
           modality: text(body.modality),
           program: text(body.program),
@@ -179,14 +165,14 @@ export default defineEventHandler(async (event) => {
           installmentCount: Math.max(0, Math.trunc(Number(body.installmentCount) || 0)),
           installmentValue: money(body.installmentValue),
           otherPayment: optionalText(body.otherPayment),
-          status: '0',
+          status: 'REVISION',
           accessToken: token,
           tokenExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
           otherData: { create: {
             currentSituation: text(body.currentSituation) || 'Empleado',
             housingType: text(body.housingType) || 'Propia',
             dataAuthorization: Boolean(body.dataAuthorization),
-            strategy: text(body.strategy),
+            strategy: strategyName,
             notes: optionalText(body.notes),
             testimonials: Boolean(body.testimonials),
             dataUsage: Boolean(body.dataUsage)

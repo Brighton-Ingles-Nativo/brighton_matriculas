@@ -1,5 +1,6 @@
 import { assertCsrf, getUserBySession } from '../../utils/auth'
 import { prisma } from '../../utils/prisma'
+import { resolveActiveStrategy } from '../../utils/strategies'
 
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 const optionalText = (value: unknown) => text(value) || null
@@ -13,26 +14,33 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, statusMessage: 'ID de matrícula inválido' })
 
-  const contract = await prisma.contract.findUnique({ where: { id }, select: { id: true, userId: true, customerId: true, status: true } })
+  const contract = await prisma.contract.findUnique({ where: { id }, select: {
+    id: true, userId: true, customerId: true, status: true, signedAt: true, strategyNameSnapshot: true,
+    strategyDefinition: { select: { name: true } }
+  } })
   if (!contract) throw createError({ statusCode: 404, statusMessage: 'Matrícula no encontrada' })
+  if (contract.signedAt || contract.status === 'FIRMADO' || contract.status === 'ANULADO') {
+    throw createError({ statusCode: 409, statusMessage: 'No se puede editar una matrícula firmada.' })
+  }
   if (!['admin', 'asesor', 'verificador'].includes(user.role?.name || '')) throw createError({ statusCode: 403, statusMessage: 'No tienes permiso para editar matrículas' })
   if (user.role?.name === 'asesor' && contract.userId !== user.id) throw createError({ statusCode: 403, statusMessage: 'No tienes acceso a esta matrícula' })
-  if (user.role?.name === 'asesor' && Number(contract.status) !== 0) throw createError({ statusCode: 409, statusMessage: 'Los asesores solo pueden editar matrículas en revisión' })
+  if (user.role?.name === 'asesor' && contract.status !== 'REVISION') throw createError({ statusCode: 409, statusMessage: 'Los asesores solo pueden editar matrículas en revisión' })
 
   const body = await readBody<Record<string, unknown>>(event)
-  const required = ['contractDepartment', 'contractProvince', 'contractDistrict', 'holderName', 'holderBirthDate', 'holderDni', 'holderEmail', 'holderAddress', 'holderDepartment', 'holderProvince', 'holderDistrict', 'holderPhone', 'strategy', 'modality', 'program', 'paymentMode', 'programValue']
+  const strategyIdProvided = Object.prototype.hasOwnProperty.call(body, 'strategyId')
+  const selectedStrategy = strategyIdProvided ? await resolveActiveStrategy(body.strategyId) : null
+  const strategyName = selectedStrategy?.name || contract.strategyNameSnapshot || contract.strategyDefinition?.name || ''
+  const required = ['contractDepartment', 'contractProvince', 'contractDistrict', 'holderName', 'holderBirthDate', 'holderDni', 'holderEmail', 'holderAddress', 'holderDepartment', 'holderProvince', 'holderDistrict', 'holderPhone', 'modality', 'program', 'paymentMode', 'programValue']
   const missing = required.find((field) => !text(body[field]))
   if (missing) throw createError({ statusCode: 400, statusMessage: `El campo ${missing} es obligatorio.` })
+  if (strategyIdProvided && !selectedStrategy) throw createError({ statusCode: 400, statusMessage: 'La estrategia seleccionada es obligatoria.' })
   if (!body.dataAuthorization) throw createError({ statusCode: 400, statusMessage: 'La autorización de datos personales es obligatoria.' })
   if (text(body.program) !== 'Kids' && !text(body.plan)) throw createError({ statusCode: 400, statusMessage: 'El plan es obligatorio para este programa.' })
 
   const paymentMode = text(body.paymentMode)
   const studentInputs = Array.isArray(body.students)
     ? body.students as Array<Record<string, unknown>>
-    : [1, 2].map((number) => ({
-        name: body[`beneficiary${number}Name`], birthDate: body[`beneficiary${number}BirthDate`],
-        dni: body[`beneficiary${number}Dni`], email: body[`beneficiary${number}Email`], phone: body[`beneficiary${number}Phone`]
-      }))
+    : []
   const students = studentInputs.map((student) => ({
     name: text(student.name), birthDate: dateValue(student.birthDate), dni: optionalText(student.dni),
     email: optionalText(student.email), phone: optionalText(student.phone)
@@ -52,15 +60,16 @@ export default defineEventHandler(async (event) => {
       financedPayment: paymentMode === 'financiado', programValue: money(body.programValue), initialPayment: money(body.initialPayment),
       balance: money(body.balance), installmentCount: Math.max(0, Math.trunc(Number(body.installmentCount) || 0)),
       installmentValue: money(body.installmentValue), otherPayment: optionalText(body.otherPayment),
+      ...(strategyIdProvided ? { strategyId: selectedStrategy?.id, strategyNameSnapshot: strategyName } : {}),
       students: { deleteMany: {} }
     } })
     await tx.contractOtherData.upsert({ where: { contractId: id }, create: {
       contractId: id, currentSituation: text(body.currentSituation) || 'Empleado', housingType: text(body.housingType) || 'Propia',
-      strategy: text(body.strategy), notes: optionalText(body.notes), dataAuthorization: Boolean(body.dataAuthorization),
+      strategy: strategyName, notes: optionalText(body.notes), dataAuthorization: Boolean(body.dataAuthorization),
       testimonials: Boolean(body.testimonials), dataUsage: Boolean(body.dataUsage)
     }, update: {
       currentSituation: text(body.currentSituation) || 'Empleado', housingType: text(body.housingType) || 'Propia',
-      strategy: text(body.strategy), notes: optionalText(body.notes), dataAuthorization: Boolean(body.dataAuthorization),
+      strategy: strategyName, notes: optionalText(body.notes), dataAuthorization: Boolean(body.dataAuthorization),
       testimonials: Boolean(body.testimonials), dataUsage: Boolean(body.dataUsage)
     } })
     const seen = new Set<string>()
