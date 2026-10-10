@@ -5,7 +5,7 @@ import { prisma } from '../../utils/prisma'
 export default defineEventHandler(async (event) => {
   const user = await requireExpedientUser(event)
   if (!['asesor', 'supervisor','admin'].includes(user.role?.name || '')) {
-    throw createError({ statusCode: 403, statusMessage: 'Solo el asesor o supervisor puede crear un expediente.' })
+    throw createError({ statusCode: 403, message: 'Solo el asesor o supervisor puede crear un expediente.' })
   }
   const contracts = await prisma.contract.findMany({
     where: {

@@ -11,8 +11,8 @@ export default defineNuxtConfig({
     rememberSessionTtlDays: 30,
     mail: {
       enabled: process.env.MAIL_ENABLED === 'true',
-      from: process.env.MAIL_FROM || '',
       fromName: process.env.MAIL_FROM_NAME || 'Brighton Inglés Nativo',
+      providerUrl: process.env.MAIL_PROVIDER_URL || '',
     },
   },
 

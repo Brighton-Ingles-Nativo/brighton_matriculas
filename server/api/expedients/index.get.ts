@@ -5,11 +5,11 @@ import { Prisma } from '@prisma/client'
 
 export default defineEventHandler(async (event) => {
   const user = await getUserBySession(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
+  if (!user) throw createError({ statusCode: 401, message: 'Sesión no válida' })
 
   const allowedRoles = ['admin', 'asesor', 'supervisor', 'asistente_comercial', 'verificador']
   if (!allowedRoles.includes(user.role?.name || '')) {
-    throw createError({ statusCode: 403, statusMessage: 'No tienes permiso para consultar expedientes' })
+    throw createError({ statusCode: 403, message: 'No tienes permiso para consultar expedientes' })
   }
 
   const query = getQuery(event)

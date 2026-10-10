@@ -20,7 +20,7 @@ export function contractAccessWhere(user: AccessUser): Prisma.ContractWhereInput
 export async function assertContractAccess(user: AccessUser, contractId: string): Promise<void> {
   if (!['asesor', 'supervisor'].includes(user.role?.name || '')) return
   const accessible = await prisma.contract.count({ where: { id: contractId, ...contractAccessWhere(user) } })
-  if (!accessible) throw createError({ statusCode: 403, statusMessage: 'No tienes acceso a esta matrícula' })
+  if (!accessible) throw createError({ statusCode: 403, message: 'No tienes acceso a esta matrícula' })
 }
 
 export async function supervisorRecipientIds(advisorId: string): Promise<string[]> {

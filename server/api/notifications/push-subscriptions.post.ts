@@ -4,11 +4,11 @@ import { prisma } from '../../utils/prisma'
 export default defineEventHandler(async (event) => {
   assertCsrf(event)
   const user = await getUserBySession(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
+  if (!user) throw createError({ statusCode: 401, message: 'Sesión no válida' })
 
   const body = await readBody<{ endpoint?: string; keys?: { p256dh?: string; auth?: string }; userAgent?: string }>(event)
   if (!body.endpoint || !body.keys?.p256dh || !body.keys.auth) {
-    throw createError({ statusCode: 400, statusMessage: 'Suscripción inválida' })
+    throw createError({ statusCode: 400, message: 'Suscripción inválida' })
   }
 
   const subscription = await prisma.pushSubscription.upsert({

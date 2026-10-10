@@ -363,7 +363,7 @@ const acceptContract = async () => {
     await loadContracts()
   } catch (
     error: any) { 
-      detailError.value = error?.data?.statusMessage || 'No pudimos aceptar el contrato.' 
+      detailError.value = error?.data?.message || error?.data?.statusMessage || 'No pudimos aceptar el contrato.'
   } finally { 
     detailActionLoading.value = false 
   } 
@@ -377,7 +377,7 @@ const openPublicView = async () => {
     }); 
     window.open(response.url, '_blank', 'noopener,noreferrer') 
   } catch (error: any) { 
-    detailError.value = error?.data?.statusMessage || 'No pudimos abrir la vista pública.' 
+    detailError.value = error?.data?.message || error?.data?.statusMessage || 'No pudimos abrir la vista pública.'
   } 
 }
 

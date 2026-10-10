@@ -10,19 +10,19 @@ export default defineEventHandler(async (event) => {
   assertCsrf(event)
   const user = await requireExpedientUser(event)
   if (!['asesor', 'supervisor', 'admin'].includes(user.role?.name || '')) {
-    throw createError({ statusCode: 403, statusMessage: 'Solo el asesor, supervisor o administrador puede crear un expediente.' })
+    throw createError({ statusCode: 403, message: 'Solo el asesor, supervisor o administrador puede crear un expediente.' })
   }
   const parts = await readMultipartFormData(event)
   const contractId = String(parts?.find((part) => part.name === 'contractId')?.data?.toString() || '').trim()
-  if (!/^[0-9a-f-]{36}$/i.test(contractId)) throw createError({ statusCode: 400, statusMessage: 'Matrícula inválida' })
+  if (!/^[0-9a-f-]{36}$/i.test(contractId)) throw createError({ statusCode: 400, message: 'Matrícula inválida' })
 
   const contract = await getAccessibleContract(contractId, user)
-  if (!contract.signedAt) throw createError({ statusCode: 409, statusMessage: 'El expediente se puede crear cuando el contrato esté firmado.' })
+  if (!contract.signedAt) throw createError({ statusCode: 409, message: 'El expediente se puede crear cuando el contrato esté firmado.' })
 
   const dni = filePart(parts, 'dni')
   const voucher = filePart(parts, 'voucher')
   const additional = filePart(parts, 'additional')
-  if (!dni || !voucher) throw createError({ statusCode: 400, statusMessage: 'El DNI y el voucher son obligatorios.' })
+  if (!dni || !voucher) throw createError({ statusCode: 400, message: 'El DNI y el voucher son obligatorios.' })
 
   const uploaded: Array<{ type: ExpedientDocumentType; file: NonNullable<typeof dni> }> = [
     { type: 'DNI', file: dni },

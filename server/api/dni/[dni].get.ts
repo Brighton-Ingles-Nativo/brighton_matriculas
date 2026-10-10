@@ -13,18 +13,18 @@ const normalizeDate = (value: unknown) => {
 export default defineEventHandler(async (event) => {
   const user = await getUserBySession(event)
   if (!user) {
-    throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
+    throw createError({ statusCode: 401, message: 'Sesión no válida' })
   } 
 
   const dni = String(getRouterParam(event, 'dni') || '').trim()
   if (!/^\d{8}$/.test(dni)) {
-    throw createError({ statusCode: 400, statusMessage: 'El DNI debe contener 8 dígitos.' })
+    throw createError({ statusCode: 400, message: 'El DNI debe contener 8 dígitos.' })
   }
 
   try {
     const data = await new LookupService().getDni(dni)
     return { success: true, data: { ...data, fechaNacimiento: normalizeDate(data.fechaNacimiento) } }
   } catch {
-    throw createError({ statusCode: 404, statusMessage: 'No se encontraron datos para el DNI.' })
+    throw createError({ statusCode: 404, message: 'No se encontraron datos para el DNI.' })
   }
 })

@@ -14,7 +14,7 @@ export default defineNuxtRouteMiddleware(async () => {
   if (!hasRole('admin') && !hasPermission('admin')) {
     throw createError({
       statusCode: 403,
-      statusMessage: 'Acceso denegado: Se requieren permisos de administrador'
+      message: 'Acceso denegado: Se requieren permisos de administrador'
     })
   }
 })

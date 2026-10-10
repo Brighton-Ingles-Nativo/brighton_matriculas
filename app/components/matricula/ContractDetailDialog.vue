@@ -82,6 +82,9 @@ const acceptedChecked = ref(false)
 const sendPreviewOpen = ref(false)
 const sendLoading = ref(false)
 const sendError = ref('')
+const emailSending = ref(false)
+const emailSent = ref(false)
+const emailSendError = ref('')
 const copyError = ref('')
 const publicUrl = ref('')
 const copiedTarget = ref<'message' | 'link' | null>(null)
@@ -151,6 +154,8 @@ const prepareSendPreview = async () => {
   if (!props.contract) return
   sendError.value = ''
   copyError.value = ''
+  emailSent.value = false
+  emailSendError.value = ''
   publicUrl.value = ''
   linkExpired.value = false
   sendPreviewOpen.value = true
@@ -159,7 +164,7 @@ const prepareSendPreview = async () => {
     const response = await $fetch<{ success: boolean; url: string }>(`/api/contracts/${props.contract.id}/public-link`, { credentials: 'include' })
     publicUrl.value = response.url
   } catch (error: any) {
-    sendError.value = error?.data?.statusMessage || 'No se pudo preparar el enlace público del contrato.'
+    sendError.value = error?.data?.message || error?.data?.statusMessage || 'No se pudo preparar el enlace público del contrato.'
     linkExpired.value = error?.data?.statusCode === 409 || error?.statusCode === 409 || error?.status === 409
   } finally {
     sendLoading.value = false
@@ -170,6 +175,7 @@ const regeneratePublicLink = async () => {
   if (!props.contract) return
   sendLoading.value = true
   sendError.value = ''
+  emailSendError.value = ''
   try {
     const response = await $fetch<{ success: boolean; url: string }>(`/api/contracts/${props.contract.id}/public-link`, {
       method: 'POST',
@@ -179,9 +185,29 @@ const regeneratePublicLink = async () => {
     publicUrl.value = response.url
     linkExpired.value = false
   } catch (error: any) {
-    sendError.value = error?.data?.statusMessage || 'No se pudo regenerar el enlace público.'
+    sendError.value = error?.data?.message || error?.data?.statusMessage || 'No se pudo regenerar el enlace público.'
   } finally {
     sendLoading.value = false
+  }
+}
+
+const sendClientEmail = async () => {
+  if (!props.contract || !publicUrl.value) return
+  emailSending.value = true
+  emailSent.value = false
+  emailSendError.value = ''
+  try {
+    await $fetch(`/api/contracts/${props.contract.id}/send-email`, {
+      method: 'POST',
+      headers: await csrfHeaders(),
+      credentials: 'include'
+    })
+    emailSent.value = true
+  } catch (error: any) {
+    emailSendError.value = error?.data?.message || error?.data?.statusMessage || 'No se pudo enviar el correo al cliente.'
+    if (error?.data?.statusCode === 409 || error?.statusCode === 409 || error?.status === 409) linkExpired.value = true
+  } finally {
+    emailSending.value = false
   }
 }
 
@@ -241,6 +267,8 @@ watch(() => props.contract?.id, () => {
   sendPreviewOpen.value = false
   publicUrl.value = ''
   sendError.value = ''
+  emailSent.value = false
+  emailSendError.value = ''
   linkExpired.value = false
   loadTerms()
 })
@@ -253,16 +281,12 @@ watch(() => props.contract?.id, () => {
         <UiButton v-if="sendPreviewOpen" type="button" variant="ghost" size="sm" class="-ml-3 gap-2" @click="sendPreviewOpen = false"><ArrowLeft class="size-4" /> Regresar</UiButton>
         <div>
           <UiDialogTitle>{{ sendPreviewOpen ? 'Preparar envío del contrato' : contract ? `Contrato ${contract.contractNumber}` : 'Detalle del contrato' }}</UiDialogTitle>
-          <UiDialogDescription>{{ sendPreviewOpen ? 'Revisa y copia el contenido para enviarlo manualmente al cliente.' : 'Detalle completo del registro, contrato y movimientos de pago.' }}</UiDialogDescription>
+          <UiDialogDescription>{{ sendPreviewOpen ? 'Revisa el contenido y envíalo directamente al correo del cliente.' : 'Detalle completo del registro, contrato y movimientos de pago.' }}</UiDialogDescription>
         </div>
         <div v-if="contract && !sendPreviewOpen" class="flex flex-wrap justify-end gap-2"><UiButton v-if="contract.status !== 'FIRMADO' && !contract.signedAt" variant="outline" size="sm" class="gap-2" :disabled="sendLoading" @click="prepareSendPreview"><Mail class="size-4" /> {{ sendLoading ? 'Preparando…' : 'Enviar contrato' }}</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('publicView')"><ExternalLink class="size-4" /> Vista pública</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('pdf')"><FileDown class="size-4" /> Abrir PDF</UiButton></div>
       </div>
 
       <div v-if="sendPreviewOpen" class="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto p-6">
-
-        <!-- <UiAlert class="border-amber-200 bg-amber-50 text-amber-950">
-          <UiAlertDescription>Este botón no envía correos automáticamente. Copia el contenido y envíalo desde tu correo o medio habitual.</UiAlertDescription>
-        </UiAlert> -->
 
         <div v-if="sendLoading" class="space-y-3 py-2">
           <UiSkeleton class="h-5 w-2/3" />
@@ -290,10 +314,19 @@ watch(() => props.contract?.id, () => {
           <div class="min-w-0 space-y-2">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <UiLabel for="contract-email-message">Contenido del mensaje</UiLabel>
-              <UiButton type="button" variant="outline" size="sm" class="gap-2" @click="copyToClipboard(emailMessage, 'message')"><Check v-if="copiedTarget === 'message'" class="size-4" /><Copy v-else class="size-4" />{{ copiedTarget === 'message' ? 'Copiado' : 'Copiar mensaje' }}</UiButton>
+              <UiButton type="button" variant="outline" size="sm" class="gap-2" :disabled="emailSending || emailSent" @click="sendClientEmail"><Check v-if="emailSent" class="size-4" /><Mail v-else class="size-4" />{{ emailSent ? 'Enviado' : emailSending ? 'Enviando…' : 'Enviar a cliente' }}</UiButton>
             </div>
             <UiTextarea id="contract-email-message" :model-value="emailMessage" readonly wrap="soft" rows="12" class="min-h-64 min-w-0 w-full max-w-full resize-y bg-muted/20 field-sizing-fixed" />
           </div>
+          <UiAlert v-if="emailSendError" variant="destructive">
+            <UiAlertDescription class="flex flex-wrap items-center justify-between gap-3">
+              <span>{{ emailSendError }}</span>
+              <UiButton v-if="linkExpired" type="button" variant="outline" size="sm" class="shrink-0 gap-2" :disabled="sendLoading" @click="regeneratePublicLink">
+                <RefreshCw class="size-4" /> {{ sendLoading ? 'Regenerando…' : 'Regenerar enlace' }}
+              </UiButton>
+            </UiAlertDescription>
+          </UiAlert>
+          <UiAlert v-if="emailSent" class="border-emerald-200 bg-emerald-50 text-emerald-800"><UiAlertDescription>El correo fue enviado correctamente al cliente.</UiAlertDescription></UiAlert>
           <div class="min-w-0 space-y-2">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <UiLabel for="contract-public-link">Enlace público</UiLabel>

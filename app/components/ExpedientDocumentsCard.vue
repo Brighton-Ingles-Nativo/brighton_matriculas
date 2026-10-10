@@ -46,7 +46,7 @@ const load = async () => {
     const response = await $fetch<{ data: Expedient }>(`/api/expedients/by-contract/${props.contractId}`, { credentials: 'include' })
     expedient.value = response.data
   } catch (err: any) {
-    if (err?.statusCode !== 404 && err?.data?.statusCode !== 404) error.value = err?.data?.statusMessage || 'No se pudo cargar el expediente.'
+    if (err?.statusCode !== 404 && err?.data?.statusCode !== 404) error.value = err?.data?.message || err?.data?.statusMessage || 'No se pudo cargar el expediente.'
   } finally {
     loading.value = false
   }
@@ -94,7 +94,7 @@ const upload = async (type: DocumentType) => {
     await load()
     return response
   } catch (err: any) {
-    error.value = err?.data?.statusMessage || err?.message || 'No se pudo cargar el documento.'
+    error.value = err?.data?.message || err?.data?.statusMessage || err?.message || 'No se pudo cargar el documento.'
   } finally {
     saving.value = false
   }
@@ -109,7 +109,7 @@ const remove = async (document: ExpedientDocument) => {
     success.value = 'Documento eliminado.'
     await load()
   } catch (err: any) {
-    error.value = err?.data?.statusMessage || 'No se pudo eliminar el documento.'
+    error.value = err?.data?.message || err?.data?.statusMessage || 'No se pudo eliminar el documento.'
   } finally {
     saving.value = false
   }

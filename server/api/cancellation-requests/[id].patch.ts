@@ -6,14 +6,14 @@ import { prisma } from '../../utils/prisma'
 export default defineEventHandler(async (event) => {
   assertCsrf(event)
   const user = await getUserBySession(event)
-  if (!user || !['supervisor', 'admin'].includes(user.role?.name || '')) throw createError({ statusCode: 403, statusMessage: 'Solo un supervisor puede revisar la solicitud' })
+  if (!user || !['supervisor', 'admin'].includes(user.role?.name || '')) throw createError({ statusCode: 403, message: 'Solo un supervisor puede revisar la solicitud' })
   const id = getRouterParam(event, 'id')
   const body = await readBody<{ decision?: string; reviewNote?: string }>(event)
-  if (!id || !['APROBAR', 'RECHAZAR'].includes(body.decision || '')) throw createError({ statusCode: 400, statusMessage: 'Decisión inválida' })
+  if (!id || !['APROBAR', 'RECHAZAR'].includes(body.decision || '')) throw createError({ statusCode: 400, message: 'Decisión inválida' })
   const request = await prisma.cancellationRequest.findUnique({ where: { id }, include: { contract: { select: { id: true, contractNumber: true, userId: true } } } })
-  if (!request) throw createError({ statusCode: 404, statusMessage: 'Solicitud no encontrada' })
+  if (!request) throw createError({ statusCode: 404, message: 'Solicitud no encontrada' })
   await assertContractAccess(user, request.contract.id)
-  if (request.status !== 'PENDIENTE') throw createError({ statusCode: 409, statusMessage: 'La solicitud ya fue revisada' })
+  if (request.status !== 'PENDIENTE') throw createError({ statusCode: 409, message: 'La solicitud ya fue revisada' })
   const approved = body.decision === 'APROBAR'
   const updated = await prisma.$transaction(async (tx) => {
     const result = await tx.cancellationRequest.update({ where: { id }, data: { status: approved ? 'APROBADA' : 'RECHAZADA', reviewedById: user.id, reviewedAt: new Date(), reviewNote: String(body.reviewNote || '').trim() || null } })

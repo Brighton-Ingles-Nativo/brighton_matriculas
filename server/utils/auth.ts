@@ -189,21 +189,21 @@ export function assertCsrf(event: H3Event): void {
   const cookieToken = getCookie(event, csrfCookieName())
   const headerToken = getHeader(event, CSRF_HEADER)
   if (!cookieToken || !headerToken) {
-    throw createError({ statusCode: 403, statusMessage: 'CSRF token requerido' })
+    throw createError({ statusCode: 403, message: 'CSRF token requerido' })
   }
 
   const cookieBuffer = Buffer.from(cookieToken)
   const headerBuffer = Buffer.from(headerToken)
   if (cookieBuffer.length !== headerBuffer.length || !timingSafeEqual(cookieBuffer, headerBuffer)) {
-    throw createError({ statusCode: 403, statusMessage: 'CSRF token inválido' })
+    throw createError({ statusCode: 403, message: 'CSRF token inválido' })
   }
 }
 
 export async function requireAdmin(event: H3Event): Promise<User> {
   const user = await getUserBySession(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
+  if (!user) throw createError({ statusCode: 401, message: 'Sesión no válida' })
   if (user.role?.name !== 'admin' && !user.role?.permissions?.admin) {
-    throw createError({ statusCode: 403, statusMessage: 'Se requieren permisos de administrador' })
+    throw createError({ statusCode: 403, message: 'Se requieren permisos de administrador' })
   }
   return user
 }

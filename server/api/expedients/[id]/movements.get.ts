@@ -6,14 +6,14 @@ export default defineEventHandler(async (event) => {
   const user = await requireExpedientUser(event)
   const expedientId = getRouterParam(event, 'id')
   if (!expedientId || !/^[0-9a-f-]{36}$/i.test(expedientId)) {
-    throw createError({ statusCode: 400, statusMessage: 'Expediente inválido' })
+    throw createError({ statusCode: 400, message: 'Expediente inválido' })
   }
 
   const expedient = await prisma.expedient.findUnique({
     where: { id: expedientId },
     select: { id: true, contractId: true }
   })
-  if (!expedient) throw createError({ statusCode: 404, statusMessage: 'Expediente no encontrado' })
+  if (!expedient) throw createError({ statusCode: 404, message: 'Expediente no encontrado' })
   await assertContractAccess(user, expedient.contractId)
 
   const movements = await prisma.expedientMovement.findMany({

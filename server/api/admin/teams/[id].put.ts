@@ -5,12 +5,12 @@ export default defineEventHandler(async (event) => {
   await requireAdmin(event); assertCsrf(event)
   const id = getRouterParam(event, 'id')
   const body = await readBody<Record<string, unknown>>(event)
-  if (!id) throw createError({ statusCode: 400, statusMessage: 'Equipo inválido.' })
+  if (!id) throw createError({ statusCode: 400, message: 'Equipo inválido.' })
   const name = body.name === undefined ? undefined : String(body.name).trim()
   const siteId = body.siteId === undefined ? undefined : String(body.siteId)
   const modality = body.modality === undefined ? undefined : String(body.modality)
-  if (name !== undefined && !name) throw createError({ statusCode: 400, statusMessage: 'El nombre del equipo es obligatorio.' })
-  if (modality !== undefined && !['PRESENCIAL', 'VIRTUAL'].includes(modality)) throw createError({ statusCode: 400, statusMessage: 'La modalidad no es válida.' })
+  if (name !== undefined && !name) throw createError({ statusCode: 400, message: 'El nombre del equipo es obligatorio.' })
+  if (modality !== undefined && !['PRESENCIAL', 'VIRTUAL'].includes(modality)) throw createError({ statusCode: 400, message: 'La modalidad no es válida.' })
   const hasSupervisors = Array.isArray(body.supervisorIds)
   const ids = hasSupervisors ? [...new Set((body.supervisorIds as unknown[]).map(String).filter(Boolean))] : []
   const hasMembers = Array.isArray(body.memberIds)
@@ -19,10 +19,10 @@ export default defineEventHandler(async (event) => {
     siteId ? prisma.site.findUnique({ where: { id: siteId }, select: { id: true } }) : Promise.resolve(true),
     hasSupervisors ? prisma.user.count({ where: { id: { in: ids }, active: true, role: { name: 'supervisor' } } }) : Promise.resolve(0),
   ])
-  if (!site) throw createError({ statusCode: 400, statusMessage: 'La sede seleccionada no existe.' })
-  if (valid !== ids.length) throw createError({ statusCode: 400, statusMessage: 'Uno o más supervisores no son válidos.' })
+  if (!site) throw createError({ statusCode: 400, message: 'La sede seleccionada no existe.' })
+  if (valid !== ids.length) throw createError({ statusCode: 400, message: 'Uno o más supervisores no son válidos.' })
   const validMembers = hasMembers ? await prisma.user.count({ where: { id: { in: memberIds }, active: true } }) : 0
-  if (hasMembers && validMembers !== memberIds.length) throw createError({ statusCode: 400, statusMessage: 'Uno o más miembros no son válidos.' })
+  if (hasMembers && validMembers !== memberIds.length) throw createError({ statusCode: 400, message: 'Uno o más miembros no son válidos.' })
   try {
     const team = await prisma.$transaction(async (tx) => {
       const updated = await tx.team.update({ where: { id }, data: { ...(name !== undefined ? { name } : {}), ...(siteId !== undefined ? { siteId } : {}), ...(modality !== undefined ? { modality: modality as 'PRESENCIAL' | 'VIRTUAL' } : {}), ...(body.active !== undefined ? { active: Boolean(body.active) } : {}) } })
@@ -38,7 +38,7 @@ export default defineEventHandler(async (event) => {
     })
     return { success: true, data: team }
   } catch (error: any) {
-    if (error?.code === 'P2002') throw createError({ statusCode: 409, statusMessage: 'Ya existe un equipo con ese nombre.' })
+    if (error?.code === 'P2002') throw createError({ statusCode: 409, message: 'Ya existe un equipo con ese nombre.' })
     throw error
   }
 })

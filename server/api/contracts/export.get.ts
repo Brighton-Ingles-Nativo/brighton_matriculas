@@ -7,9 +7,9 @@ const exportRoles: ExportRole[] = ['admin', 'asesor', 'supervisor', 'asistente_c
 
 export default defineEventHandler(async (event) => {
   const user = await getUserBySession(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
+  if (!user) throw createError({ statusCode: 401, message: 'Sesión no válida' })
   const role = user.role?.name as ExportRole | undefined
-  if (!role || !exportRoles.includes(role)) throw createError({ statusCode: 403, statusMessage: 'No tienes permiso para exportar matrículas' })
+  if (!role || !exportRoles.includes(role)) throw createError({ statusCode: 403, message: 'No tienes permiso para exportar matrículas' })
 
   const query = getQuery(event)
   const format: ExportFormat = query.format === 'csv' ? 'csv' : 'xlsx'

@@ -11,7 +11,7 @@ export const normalizeStrategyCode = (value: unknown): string | null => {
   const code = typeof value === 'string' ? value.trim().toUpperCase() : ''
   if (!code) return null
   if (!/^[A-Z0-9][A-Z0-9_-]{0,49}$/.test(code)) {
-    throw createError({ statusCode: 400, statusMessage: 'El código debe usar solo letras, números, guiones o guiones bajos (máximo 50 caracteres).' })
+    throw createError({ statusCode: 400, message: 'El código debe usar solo letras, números, guiones o guiones bajos (máximo 50 caracteres).' })
   }
   return code
 }
@@ -19,12 +19,12 @@ export const normalizeStrategyCode = (value: unknown): string | null => {
 export async function resolveActiveStrategy(value: unknown): Promise<{ id: string; name: string } | null> {
   const id = typeof value === 'string' ? value.trim() : ''
   if (!id) return null
-  if (!isStrategyId(id)) throw createError({ statusCode: 400, statusMessage: 'La estrategia seleccionada no es válida.' })
+  if (!isStrategyId(id)) throw createError({ statusCode: 400, message: 'La estrategia seleccionada no es válida.' })
 
   const strategy = await prisma.strategy.findFirst({
     where: { id, active: true },
     select: { id: true, name: true }
   })
-  if (!strategy) throw createError({ statusCode: 400, statusMessage: 'La estrategia seleccionada no existe o está inactiva.' })
+  if (!strategy) throw createError({ statusCode: 400, message: 'La estrategia seleccionada no existe o está inactiva.' })
   return strategy
 }

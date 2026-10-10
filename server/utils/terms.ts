@@ -1,0 +1,32 @@
+/** Términos vigentes del contrato. Se mantienen como contenido propio del sistema nuevo. */
+export const TERMS_HTML = `
+<h5 style="text-align:center;line-height:1.5"><strong>TÉRMINOS Y CONDICIONES DE LICENCIA DE USO<br>DE CURSO EDUCATIVO Y COMPRAVENTA DE LIBROS</strong></h5>
+<div style="font-size:12px">
+<p style="text-align:justify">BRIGHTON INGLÉS NATIVO S.A.C., identificada con R.U.C. N.º 20612939765, establece los presentes Términos y Condiciones de Licencia de Uso de Curso Educativo y Compraventa de Libros, que regulan la relación contractual con EL CLIENTE.</p>
+<p style="text-align:justify">Cláusula Primera: Objeto</p>
+<p style="text-align:justify">BRIGHTON otorga a EL CLIENTE una licencia de uso personal, limitada, intransferible y exclusiva sobre el Curso Integral de inglés, que comprende materiales educativos digitales, libros electrónicos, videos, plataforma virtual, recursos audiovisuales y clases en vivo, con una duración aproximada de catorce (14) meses.</p>
+<p style="text-align:justify">Cláusula Segunda: Naturaleza de la Licencia</p>
+<p style="text-align:justify">La licencia no implica transferencia de propiedad intelectual. El curso, su estructura, metodología, materiales, grabaciones y recursos son obras protegidas por derechos de autor y no podrán reproducirse, copiarse, distribuirse, cederse ni utilizarse con fines distintos a los educativos personales.</p>
+<p style="text-align:justify">Cláusula Tercera: Duración y Acceso</p>
+<p style="text-align:justify">La vigencia se computa desde la confirmación del primer pago y la activación de la cuenta. EL CLIENTE tendrá acceso al contenido del programa contratado, plataforma virtual, materiales descargables y clases presenciales o virtuales según corresponda.</p>
+<p style="text-align:justify">Cláusula Cuarta: Uso de Imagen</p>
+<p style="text-align:justify">Cuando EL CLIENTE haya autorizado el uso de datos y testimonios, podrá entregar testimonios grabados y autoriza a BRIGHTON a publicarlos en sus redes sociales conforme a dicha autorización.</p>
+<p style="text-align:justify">Cláusula Quinta: Contraprestación y Forma de Pago</p>
+<p style="text-align:justify">EL CLIENTE abonará el valor del programa conforme a la modalidad de pago elegida, contado o financiado. El pago otorga el derecho de acceso al curso y sus materiales. La valorización de libros y licencia se determina según el programa contratado.</p>
+<p style="text-align:justify">Cláusula Sexta: Acceso Total y Efectos del Pago</p>
+<p style="text-align:justify">Con el pago completo o parcial de la licencia, EL CLIENTE obtiene acceso al programa, materiales y recursos complementarios según la modalidad y plan contratados.</p>
+<p style="text-align:justify">Cláusula Séptima: Resolución</p>
+<p style="text-align:justify">En planes financiados, el incumplimiento de dos o más cuotas o de un periodo de treinta (30) días calendario con cuotas vencidas faculta a BRIGHTON a resolver el contrato mediante notificación al correo electrónico, WhatsApp o dirección consignada.</p>
+<p style="text-align:justify">Cláusula Octava: Política de no Devolución</p>
+<p style="text-align:justify">Debido al acceso total e inmediato al contenido y materiales, no corresponde devolución total ni parcial de los importes pagados, incluso si EL CLIENTE decide no continuar o no utilizar los contenidos.</p>
+<p style="text-align:justify">Cláusula Novena: Obligaciones de las Partes</p>
+<ul style="text-align:justify"><li>EL CLIENTE utilizará el curso y materiales únicamente para su aprendizaje personal.</li><li>EL CLIENTE no copiará, distribuirá, revenderá, grabará ni compartirá los contenidos.</li><li>BRIGHTON prestará las clases y habilitará los talleres y materiales correspondientes al plan elegido.</li></ul>
+<p style="text-align:justify">Cláusula Décima: Política de Promociones</p>
+<p style="text-align:justify">Los descuentos y promociones están condicionados al cumplimiento puntual de las obligaciones de pago. El incumplimiento podrá ocasionar su revocación y la aplicación del precio original.</p>
+<p style="text-align:justify">Cláusula Décima Primera: Confidencialidad</p>
+<p style="text-align:justify">La información, contenidos y materiales proporcionados tienen carácter confidencial y uso restringido durante la vigencia del contrato y por dos (2) años posteriores a su término.</p>
+<p style="text-align:justify">Cláusula Décimo Segunda: Legislación Aplicable y Jurisdicción</p>
+<p style="text-align:justify">El contrato se rige por las leyes de la República del Perú, especialmente el Código Civil, el Decreto Legislativo N.º 822 y la Ley N.º 29571. Las partes se someten a los jueces y tribunales del distrito judicial de Arequipa.</p>
+<p style="text-align:justify">Cláusula Décimo Tercera: Aceptación Digital</p>
+<p style="text-align:justify">EL CLIENTE declara haber leído íntegramente el documento, estar informado sobre sus alcances y aceptar estos Términos y Condiciones digitalmente conforme a la normativa peruana vigente sobre contratación y firmas electrónicas.</p>
+</div>`.trim()

@@ -168,7 +168,7 @@ const handleSubmit = async () => {
     })
     await navigateTo('/matriculas')
   } catch (error: any) {
-    formError.value = error?.data?.statusMessage || error?.data?.message || 'No pudimos registrar la matrícula.'
+    formError.value = error?.data?.message || error?.data?.statusMessage || 'No pudimos registrar la matrícula.'
   } finally {
     saving.value = false
   }
@@ -215,7 +215,7 @@ const handleSubmit = async () => {
         <UiCard>
           <UiCardHeader>
             <UiCardTitle>Ubicación del contrato</UiCardTitle>
-            <UiCardDescription>Datos comerciales utilizados por el sistema anterior.</UiCardDescription>
+            <UiCardDescription>Datos comerciales de la matrícula.</UiCardDescription>
           </UiCardHeader>
           <UiCardContent class="grid gap-5 p-6 sm:grid-cols-3">
             <div class="space-y-2">

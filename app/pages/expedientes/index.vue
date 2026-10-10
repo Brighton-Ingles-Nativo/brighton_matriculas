@@ -62,7 +62,7 @@ const loadExpedients = async () => {
     expedients.value = response.data
     pagination.value = response.pagination
   } catch (err: any) {
-    error.value = err?.data?.statusMessage || 'No pudimos cargar los expedientes.'
+    error.value = err?.data?.message || err?.data?.statusMessage || 'No pudimos cargar los expedientes.'
   } finally {
     loading.value = false
   }

@@ -126,11 +126,11 @@ export default defineEventHandler(async (event) => {
   const user = await getUserBySession(event)
   const tokenQuery = getQuery(event).token
   const publicToken = typeof tokenQuery === 'string' ? tokenQuery : null
-  if (!user && (publicToken === null || !/^[0-9a-f]{64}$/i.test(publicToken))) throw createError({ statusCode: 401, statusMessage: 'Sesion no valida' })
+  if (!user && (publicToken === null || !/^[0-9a-f]{64}$/i.test(publicToken))) throw createError({ statusCode: 401, message: 'Sesion no valida' })
   const id = getRouterParam(event, 'id')
-  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, statusMessage: 'ID de contrato invalido' })
+  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, message: 'ID de contrato invalido' })
   const contract = await prisma.contract.findFirst({ where: { id, ...(user ? {} : { accessToken: publicToken!, tokenExpiresAt: { gt: new Date() } }) }, include: { user: { select: { id: true, name: true, username: true } }, customer: true, students: { include: { student: true }, orderBy: { id: 'asc' } }, otherData: true, receipts: { orderBy: { registeredAt: 'desc' }, select: { amount: true, concepts: true, otherConcept: true, paymentMethod: true, operationNumber: true, bank: true, transactionDate: true, registeredAt: true } } } }) as PdfContract | null
-  if (!contract) throw createError({ statusCode: 404, statusMessage: 'Contrato no encontrado' })
+  if (!contract) throw createError({ statusCode: 404, message: 'Contrato no encontrado' })
   if (user) await assertContractAccess(user, id)
   setHeader(event, 'Content-Type', 'application/pdf')
   setHeader(event, 'Content-Disposition', `inline; filename="contrato-${contract.contractNumber}.pdf"`)

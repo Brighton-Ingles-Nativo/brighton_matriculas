@@ -136,7 +136,7 @@ const loadContract = async () => {
       otherPayment: contract.otherPayment || '' 
     }) 
   } catch (err: any) { 
-    error.value = err?.data?.statusMessage || 'No pudimos cargar la matrícula.' 
+    error.value = err?.data?.message || err?.data?.statusMessage || 'No pudimos cargar la matrícula.'
   } finally { 
     loading.value = false 
   } 
@@ -150,7 +150,7 @@ const requestCancellation = async () => {
     cancellationRequest.value = { ...response.data, reason: cancellationReason.value }
     cancellationReason.value = ''
   } catch (err: any) {
-    cancellationError.value = err?.data?.statusMessage || 'No se pudo registrar la solicitud.'
+    cancellationError.value = err?.data?.message || err?.data?.statusMessage || 'No se pudo registrar la solicitud.'
   } finally { cancellationLoading.value = false }
 }
 
@@ -163,7 +163,7 @@ const reviewCancellation = async (decision: 'APROBAR' | 'RECHAZAR') => {
     cancellationRequest.value = { ...cancellationRequest.value, ...response.data }
     if (decision === 'APROBAR') isLocked.value = true
   } catch (err: any) {
-    cancellationError.value = err?.data?.statusMessage || 'No se pudo revisar la solicitud.'
+    cancellationError.value = err?.data?.message || err?.data?.statusMessage || 'No se pudo revisar la solicitud.'
   } finally { cancellationLoading.value = false }
 }
 
@@ -216,7 +216,7 @@ const submit = async () => {
     }); 
     success.value = 'Matrícula actualizada correctamente.' 
   } catch (err: any) { 
-    error.value = err?.data?.statusMessage || 'No pudimos actualizar la matrícula.' 
+    error.value = err?.data?.message || err?.data?.statusMessage || 'No pudimos actualizar la matrícula.'
   } finally { 
     saving.value = false 
   } 

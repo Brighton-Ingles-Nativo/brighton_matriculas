@@ -108,7 +108,7 @@ onMounted(async () => {
     paymentDate.value = response.data.paymentDate?.slice(0, 10) || ''
     movements.value = response.data.movements || []
   } catch (err: any) {
-    error.value = err?.data?.statusMessage || 'No se pudo cargar el expediente.'
+    error.value = err?.data?.message || err?.data?.statusMessage || 'No se pudo cargar el expediente.'
   } finally {
     loading.value = false
   }
@@ -138,7 +138,7 @@ const saveVerification = async (showSuccess = true): Promise<boolean> => {
     if (showSuccess) verificationSuccess.value = 'Datos de verificación guardados.'
     return true
   } catch (err: any) {
-    verificationError.value = err?.data?.statusMessage || 'No se pudieron guardar los datos de verificación.'
+    verificationError.value = err?.data?.message || err?.data?.statusMessage || 'No se pudieron guardar los datos de verificación.'
     return false
   } finally {
     verificationSaving.value = false
@@ -169,7 +169,7 @@ const workflow = async (action: string) => {
     const history = await $fetch<{ data: typeof movements.value }>(`/api/expedients/${route.params.id}/movements`, { credentials: 'include' })
     movements.value = history.data
   } catch (err: any) {
-    workflowError.value = err?.data?.statusMessage || 'No se pudo actualizar el flujo del expediente.'
+    workflowError.value = err?.data?.message || err?.data?.statusMessage || 'No se pudo actualizar el flujo del expediente.'
   } finally {
     workflowLoading.value = false
   }

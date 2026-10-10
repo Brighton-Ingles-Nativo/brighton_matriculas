@@ -71,7 +71,7 @@ async function nextContractNumber(): Promise<string> {
 export default defineEventHandler(async (event) => {
   assertCsrf(event)
   const user = await getUserBySession(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
+  if (!user) throw createError({ statusCode: 401, message: 'Sesión no válida' })
 
   const body = await readBody<ContractPayload>(event)
   const selectedStrategy = await resolveActiveStrategy(body.strategyId)
@@ -96,12 +96,12 @@ export default defineEventHandler(async (event) => {
     ['valor del programa', body.programValue]
   ]
   const missing = required.find(([, value]) => !text(value))
-  if (missing) throw createError({ statusCode: 400, statusMessage: `El campo ${missing[0]} es obligatorio.` })
-  if (!body.dataAuthorization) throw createError({ statusCode: 400, statusMessage: 'La autorización de datos personales es obligatoria.' })
-  if (text(body.program) !== 'Kids' && !text(body.plan)) throw createError({ statusCode: 400, statusMessage: 'El plan es obligatorio para este programa.' })
+  if (missing) throw createError({ statusCode: 400, message: `El campo ${missing[0]} es obligatorio.` })
+  if (!body.dataAuthorization) throw createError({ statusCode: 400, message: 'La autorización de datos personales es obligatoria.' })
+  if (text(body.program) !== 'Kids' && !text(body.plan)) throw createError({ statusCode: 400, message: 'El plan es obligatorio para este programa.' })
 
   const programValue = money(body.programValue, -1)
-  if (programValue < 0) throw createError({ statusCode: 400, statusMessage: 'El valor del programa no es válido.' })
+  if (programValue < 0) throw createError({ statusCode: 400, message: 'El valor del programa no es válido.' })
   const contractNumber = await nextContractNumber()
   const paymentMode = body.paymentMode
   const token = randomBytes(32).toString('hex')
@@ -195,8 +195,8 @@ export default defineEventHandler(async (event) => {
 
     return { success: true, data: contract }
   } catch (error: any) {
-    if (error?.code === 'P2002') throw createError({ statusCode: 409, statusMessage: 'El número de matrícula ya existe. Intenta nuevamente.' })
+    if (error?.code === 'P2002') throw createError({ statusCode: 409, message: 'El número de matrícula ya existe. Intenta nuevamente.' })
     console.error('Error creando matrícula:', error)
-    throw createError({ statusCode: 500, statusMessage: 'No se pudo registrar la matrícula.' })
+    throw createError({ statusCode: 500, message: 'No se pudo registrar la matrícula.' })
   }
 })
