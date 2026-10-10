@@ -34,16 +34,6 @@ interface Contract {
   strategy: string
   currentSituation: string
   housingType: string
-  beneficiary1Name: string | null
-  beneficiary1BirthDate: string | null
-  beneficiary1Dni: string | null
-  beneficiary1Email: string | null
-  beneficiary1Phone: string | null
-  beneficiary2Name: string | null
-  beneficiary2BirthDate: string | null
-  beneficiary2Dni: string | null
-  beneficiary2Email: string | null
-  beneficiary2Phone: string | null
   modality: string | null
   program: string
   plan: string | null

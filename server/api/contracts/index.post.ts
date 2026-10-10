@@ -16,16 +16,6 @@ type ContractPayload = {
   holderProvince?: string
   holderDistrict?: string
   holderPhone?: string
-  beneficiary1Name?: string
-  beneficiary1BirthDate?: string
-  beneficiary1Dni?: string
-  beneficiary1Email?: string
-  beneficiary1Phone?: string
-  beneficiary2Name?: string
-  beneficiary2BirthDate?: string
-  beneficiary2Dni?: string
-  beneficiary2Email?: string
-  beneficiary2Phone?: string
   currentSituation?: string
   housingType?: string
   strategyId?: string
@@ -124,16 +114,7 @@ export default defineEventHandler(async (event) => {
         email: optionalText(student.email),
         phone: optionalText(student.phone)
       })).filter((student) => student.name)
-    : [1, 2].map((number) => {
-        const value = body as Record<string, unknown>
-        return {
-          name: text(value[`beneficiary${number}Name`]),
-          birthDate: optionalDate(value[`beneficiary${number}BirthDate`]),
-          dni: optionalText(value[`beneficiary${number}Dni`]),
-          email: optionalText(value[`beneficiary${number}Email`]),
-          phone: optionalText(value[`beneficiary${number}Phone`])
-        }
-      })
+    : []
   const seenStudentKeys = new Set<string>()
   const students = studentInputs.filter((student) => {
     if (!student.name) return false

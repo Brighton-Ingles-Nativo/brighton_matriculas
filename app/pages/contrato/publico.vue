@@ -6,7 +6,7 @@ definePageMeta({ layout: 'public' })
 interface Receipt { id: string; amount: string | null; concepts: string | null; paymentMethod: string | null; transactionDate: string | null; registeredAt: string }
 interface Contract {
   id: string; contractNumber: string; holderName: string; holderDni: string; holderBirthDate: string; holderEmail: string; holderPhone: string; holderAddress: string
-  contractDepartment: string | null; contractProvince: string | null; contractDistrict: string | null; beneficiary1Name: string | null; beneficiary2Name: string | null
+  contractDepartment: string | null; contractProvince: string | null; contractDistrict: string | null
   program: string; plan: string | null; modality: string | null; programValue: string; initialPayment: string | null; balance: string | null; installmentCount: number | null; installmentValue: string | null
   strategy: string; currentSituation: string; housingType: string; paymentStartDate: string | null; notes: string | null; dataAuthorization: boolean; testimonials: boolean; dataUsage: boolean | null
   status: 'REVISION' | 'FIRMADO' | 'ANULADO'; signedAt: string | null; signedIp: string | null; registeredAt: string; receipts: Receipt[]

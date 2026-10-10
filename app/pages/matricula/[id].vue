@@ -115,16 +115,12 @@ const loadContract = async () => {
     isLocked.value = Boolean(contract.signedAt) || contract.status !== 'REVISION'
     contractNumber.value = 
     contract.contractNumber; 
-    const loadedStudents = Array.isArray(contract.students) && contract.students.length
+    const loadedStudents = Array.isArray(contract.students)
       ? contract.students.map((student: any) => ({
           name: student.name ?? '', birthDate: dateInput(student.birthDate), dni: student.dni ?? '',
           email: student.email ?? '', phone: student.phone ?? ''
         }))
-      : [1, 2].map((number) => ({
-          name: contract[`beneficiary${number}Name`] ?? '', birthDate: dateInput(contract[`beneficiary${number}BirthDate`]),
-          dni: contract[`beneficiary${number}Dni`] ?? '', email: contract[`beneficiary${number}Email`] ?? '',
-          phone: contract[`beneficiary${number}Phone`] ?? ''
-        })).filter((student) => student.name)
+      : []
     Object.assign(form, { 
       ...contract, 
       students: loadedStudents.length ? loadedStudents : [emptyBeneficiary()],

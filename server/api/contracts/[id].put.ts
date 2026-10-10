@@ -40,10 +40,7 @@ export default defineEventHandler(async (event) => {
   const paymentMode = text(body.paymentMode)
   const studentInputs = Array.isArray(body.students)
     ? body.students as Array<Record<string, unknown>>
-    : [1, 2].map((number) => ({
-        name: body[`beneficiary${number}Name`], birthDate: body[`beneficiary${number}BirthDate`],
-        dni: body[`beneficiary${number}Dni`], email: body[`beneficiary${number}Email`], phone: body[`beneficiary${number}Phone`]
-      }))
+    : []
   const students = studentInputs.map((student) => ({
     name: text(student.name), birthDate: dateValue(student.birthDate), dni: optionalText(student.dni),
     email: optionalText(student.email), phone: optionalText(student.phone)

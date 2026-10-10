@@ -50,7 +50,7 @@
               <UiTableRow>
                 <UiTableHead>Matrícula</UiTableHead>
                 <UiTableHead>Titular</UiTableHead>
-                <UiTableHead class="hidden md:table-cell">DNI</UiTableHead>
+                <!-- <UiTableHead class="hidden md:table-cell">DNI</UiTableHead> -->
                 <UiTableHead v-if="user?.role?.name === 'admin'" class="hidden lg:table-cell">Asesor</UiTableHead>
                 <UiTableHead>Programa</UiTableHead>
                 <UiTableHead>Plan</UiTableHead>
@@ -65,9 +65,9 @@
                 <UiTableCell class="font-semibold text-primary">{{ row.contractNumber }}</UiTableCell>
                 <UiTableCell>
                   <div class="max-w-52 truncate font-medium uppercase">{{ row.holderName }}</div>
-                  <div class="text-xs text-muted-foreground md:hidden">{{ row.holderDni }}</div>
+                  <div class="text-xs text-muted-foreground">DNI:{{ row.holderDni }}</div>
                 </UiTableCell>
-                <UiTableCell class="hidden md:table-cell">{{ row.holderDni }}</UiTableCell>
+                <!-- <UiTableCell class="hidden md:table-cell">{{ row.holderDni }}</UiTableCell> -->
                 <UiTableCell v-if="user?.role?.name === 'admin'"
                   class="hidden max-w-36 truncate text-muted-foreground lg:table-cell">{{ row.advisor.name }}
                 </UiTableCell>
@@ -198,16 +198,6 @@ interface ContractDetail extends ContractRow {
   holderProvince: string | null; 
   holderDistrict: string | null; 
   holderPhone: string; 
-  beneficiary1Name: string | null; 
-  beneficiary1BirthDate: string | null; 
-  beneficiary1Dni: string | null; 
-  beneficiary1Email: string | null; 
-  beneficiary1Phone: string | null; 
-  beneficiary2Name: string | null; 
-  beneficiary2BirthDate: string | null; 
-  beneficiary2Dni: string | null; 
-  beneficiary2Email: string | null; 
-  beneficiary2Phone: string | null; 
   currentSituation: string; 
   housingType: string; 
   dataAuthorization: boolean; 
