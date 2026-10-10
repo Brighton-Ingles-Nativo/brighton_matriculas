@@ -21,7 +21,7 @@ onMounted(async () => {
     }); 
     receipt.value = response.data 
   } catch (err: any) { 
-    error.value = err?.data?.statusMessage || 'No pudimos cargar el recibo.' 
+    error.value = err?.data?.message || err?.data?.statusMessage || 'No pudimos cargar el recibo.'
   } finally { 
     loading.value = false 
   } 

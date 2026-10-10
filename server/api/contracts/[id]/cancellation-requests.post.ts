@@ -6,15 +6,15 @@ import { prisma } from '../../../utils/prisma'
 export default defineEventHandler(async (event) => {
   assertCsrf(event)
   const user = await getUserBySession(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
-  if (!['asesor', 'supervisor', 'admin'].includes(user.role?.name || '')) throw createError({ statusCode: 403, statusMessage: 'No tienes permiso para solicitar la anulación' })
+  if (!user) throw createError({ statusCode: 401, message: 'Sesión no válida' })
+  if (!['asesor', 'supervisor', 'admin'].includes(user.role?.name || '')) throw createError({ statusCode: 403, message: 'No tienes permiso para solicitar la anulación' })
   const contractId = getRouterParam(event, 'id')
   const body = await readBody<{ reason?: string }>(event)
   const reason = String(body.reason || '').trim()
-  if (!contractId || !reason) throw createError({ statusCode: 400, statusMessage: 'El motivo de anulación es obligatorio' })
+  if (!contractId || !reason) throw createError({ statusCode: 400, message: 'El motivo de anulación es obligatorio' })
 
   const contract = await prisma.contract.findUnique({ where: { id: contractId }, select: { id: true, contractNumber: true, userId: true, user: { select: { supervisorId: true } } } })
-  if (!contract) throw createError({ statusCode: 404, statusMessage: 'Matrícula no encontrada' })
+  if (!contract) throw createError({ statusCode: 404, message: 'Matrícula no encontrada' })
   await assertContractAccess(user, contractId)
   const admins = await prisma.user.findMany({ where: { active: true, role: { name: 'admin' } }, select: { id: true } })
   const recipients = [contract.user.supervisorId ?? '', ...admins.map((item) => item.id)]

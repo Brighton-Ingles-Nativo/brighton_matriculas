@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
   assertCsrf(event)
   const user = await requireExpedientUser(event)
   const id = getRouterParam(event, 'id')
-  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, statusMessage: 'Expediente inválido' })
+  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, message: 'Expediente inválido' })
 
   const body = await readBody<{
     action?: WorkflowAction
@@ -35,7 +35,7 @@ export default defineEventHandler(async (event) => {
     advisoryRating?: number
     returnTo?: ReturnLocation
   }>(event)
-  if (!body.action || !ACTIONS.includes(body.action)) throw createError({ statusCode: 400, statusMessage: 'Acción de expediente inválida' })
+  if (!body.action || !ACTIONS.includes(body.action)) throw createError({ statusCode: 400, message: 'Acción de expediente inválida' })
 
   const action = body.action
   const observation = String(body.observation || '').trim()
@@ -47,7 +47,7 @@ export default defineEventHandler(async (event) => {
       documents: { select: { type: true } }
     }
   })
-  if (!expedient) throw createError({ statusCode: 404, statusMessage: 'Expediente no encontrado' })
+  if (!expedient) throw createError({ statusCode: 404, message: 'Expediente no encontrado' })
   await assertContractAccess(user, expedient.contractId)
 
   const isAdvisor = role === 'asesor'
@@ -55,16 +55,16 @@ export default defineEventHandler(async (event) => {
   const isReviewer = role === 'admin' || role === 'verificador'
   const isCommercial = role === 'admin' || role === 'asistente_comercial'
 
-  if (action === 'send_supervisor' && !isAdvisor) throw createError({ statusCode: 403, statusMessage: 'Solo el asesor puede reenviar el expediente al supervisor.' })
+  if (action === 'send_supervisor' && !isAdvisor) throw createError({ statusCode: 403, message: 'Solo el asesor puede reenviar el expediente al supervisor.' })
   if (['approve_supervisor', 'reject_supervisor'].includes(action) && !(isSupervisor || role === 'admin')) {
-    throw createError({ statusCode: 403, statusMessage: 'Solo el supervisor puede revisar este expediente.' })
+    throw createError({ statusCode: 403, message: 'Solo el supervisor puede revisar este expediente.' })
   }
-  if (action === 'send_verification' && !isCommercial) throw createError({ statusCode: 403, statusMessage: 'Solo Comercial puede enviar a verificación.' })
+  if (action === 'send_verification' && !isCommercial) throw createError({ statusCode: 403, message: 'Solo Comercial puede enviar a verificación.' })
   if (['reject_verification', 'schedule_appointment', 'verify_with_observations', 'verify'].includes(action) && !isReviewer) {
-    throw createError({ statusCode: 403, statusMessage: 'Solo Verificación puede realizar esta acción.' })
+    throw createError({ statusCode: 403, message: 'Solo Verificación puede realizar esta acción.' })
   }
-  if (action === 'reject_commercial' && !isCommercial) throw createError({ statusCode: 403, statusMessage: 'Solo Comercial puede rebotar este expediente.' })
-  if (REJECTION_ACTIONS.includes(action) && !observation) throw createError({ statusCode: 400, statusMessage: 'La observación es obligatoria.' })
+  if (action === 'reject_commercial' && !isCommercial) throw createError({ statusCode: 403, message: 'Solo Comercial puede rebotar este expediente.' })
+  if (REJECTION_ACTIONS.includes(action) && !observation) throw createError({ statusCode: 400, message: 'La observación es obligatoria.' })
 
   const expectedLocations: Partial<Record<WorkflowAction, string[]>> = {
     send_supervisor: ['ASESOR'],
@@ -78,24 +78,24 @@ export default defineEventHandler(async (event) => {
     verify: ['VERIFICACION']
   }
   if (!expectedLocations[action]?.includes(expedient.currentLocation)) {
-    throw createError({ statusCode: 409, statusMessage: 'Esta acción no está disponible en la etapa actual del expediente.' })
+    throw createError({ statusCode: 409, message: 'Esta acción no está disponible en la etapa actual del expediente.' })
   }
   if (['approve_supervisor', 'send_verification'].includes(action)) {
     const documentTypes = new Set(expedient.documents.map((document) => document.type))
     if (!documentTypes.has('DNI') || !documentTypes.has('VOUCHER')) {
-      throw createError({ statusCode: 409, statusMessage: 'El expediente debe incluir el DNI y el voucher antes de continuar.' })
+      throw createError({ statusCode: 409, message: 'El expediente debe incluir el DNI y el voucher antes de continuar.' })
     }
   }
 
   const appointmentAt = body.appointmentAt ? new Date(body.appointmentAt) : null
   if (action === 'schedule_appointment' && (!appointmentAt || Number.isNaN(appointmentAt.getTime()))) {
-    throw createError({ statusCode: 400, statusMessage: 'La fecha de cita es obligatoria.' })
+    throw createError({ statusCode: 400, message: 'La fecha de cita es obligatoria.' })
   }
   if (action === 'schedule_appointment' && !['PRESENCIAL', 'VIRTUAL'].includes(body.appointmentType || '')) {
-    throw createError({ statusCode: 400, statusMessage: 'Selecciona un tipo de cita válido.' })
+    throw createError({ statusCode: 400, message: 'Selecciona un tipo de cita válido.' })
   }
   if ((action === 'verify' || action === 'verify_with_observations') && body.advisoryRating !== undefined && body.advisoryRating !== null && (!Number.isInteger(body.advisoryRating) || body.advisoryRating < 0 || body.advisoryRating > 10)) {
-    throw createError({ statusCode: 400, statusMessage: 'La calificación de asesoría debe ser un entero de 0 a 10.' })
+    throw createError({ statusCode: 400, message: 'La calificación de asesoría debe ser un entero de 0 a 10.' })
   }
 
   const returnTo: ReturnLocation = body.returnTo === 'SUPERVISOR' ? 'SUPERVISOR' : 'ASISTENTE_COMERCIAL'

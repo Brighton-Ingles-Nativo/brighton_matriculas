@@ -10,21 +10,21 @@ const money = (value: unknown) => { const result = Number(value); return Number.
 export default defineEventHandler(async (event) => {
   assertCsrf(event)
   const user = await getUserBySession(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
+  if (!user) throw createError({ statusCode: 401, message: 'Sesión no válida' })
   const id = getRouterParam(event, 'id')
-  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, statusMessage: 'ID de matrícula inválido' })
+  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, message: 'ID de matrícula inválido' })
 
   const contract = await prisma.contract.findUnique({ where: { id }, select: {
     id: true, userId: true, customerId: true, status: true, signedAt: true, strategyNameSnapshot: true,
     strategyDefinition: { select: { name: true } }
   } })
-  if (!contract) throw createError({ statusCode: 404, statusMessage: 'Matrícula no encontrada' })
+  if (!contract) throw createError({ statusCode: 404, message: 'Matrícula no encontrada' })
   if (contract.signedAt || contract.status === 'FIRMADO' || contract.status === 'ANULADO') {
-    throw createError({ statusCode: 409, statusMessage: 'No se puede editar una matrícula firmada.' })
+    throw createError({ statusCode: 409, message: 'No se puede editar una matrícula firmada.' })
   }
-  if (!['admin', 'asesor', 'verificador'].includes(user.role?.name || '')) throw createError({ statusCode: 403, statusMessage: 'No tienes permiso para editar matrículas' })
-  if (user.role?.name === 'asesor' && contract.userId !== user.id) throw createError({ statusCode: 403, statusMessage: 'No tienes acceso a esta matrícula' })
-  if (user.role?.name === 'asesor' && contract.status !== 'REVISION') throw createError({ statusCode: 409, statusMessage: 'Los asesores solo pueden editar matrículas en revisión' })
+  if (!['admin', 'asesor', 'verificador'].includes(user.role?.name || '')) throw createError({ statusCode: 403, message: 'No tienes permiso para editar matrículas' })
+  if (user.role?.name === 'asesor' && contract.userId !== user.id) throw createError({ statusCode: 403, message: 'No tienes acceso a esta matrícula' })
+  if (user.role?.name === 'asesor' && contract.status !== 'REVISION') throw createError({ statusCode: 409, message: 'Los asesores solo pueden editar matrículas en revisión' })
 
   const body = await readBody<Record<string, unknown>>(event)
   const strategyIdProvided = Object.prototype.hasOwnProperty.call(body, 'strategyId')
@@ -32,10 +32,10 @@ export default defineEventHandler(async (event) => {
   const strategyName = selectedStrategy?.name || contract.strategyNameSnapshot || contract.strategyDefinition?.name || ''
   const required = ['contractDepartment', 'contractProvince', 'contractDistrict', 'holderName', 'holderBirthDate', 'holderDni', 'holderEmail', 'holderAddress', 'holderDepartment', 'holderProvince', 'holderDistrict', 'holderPhone', 'modality', 'program', 'paymentMode', 'programValue']
   const missing = required.find((field) => !text(body[field]))
-  if (missing) throw createError({ statusCode: 400, statusMessage: `El campo ${missing} es obligatorio.` })
-  if (strategyIdProvided && !selectedStrategy) throw createError({ statusCode: 400, statusMessage: 'La estrategia seleccionada es obligatoria.' })
-  if (!body.dataAuthorization) throw createError({ statusCode: 400, statusMessage: 'La autorización de datos personales es obligatoria.' })
-  if (text(body.program) !== 'Kids' && !text(body.plan)) throw createError({ statusCode: 400, statusMessage: 'El plan es obligatorio para este programa.' })
+  if (missing) throw createError({ statusCode: 400, message: `El campo ${missing} es obligatorio.` })
+  if (strategyIdProvided && !selectedStrategy) throw createError({ statusCode: 400, message: 'La estrategia seleccionada es obligatoria.' })
+  if (!body.dataAuthorization) throw createError({ statusCode: 400, message: 'La autorización de datos personales es obligatoria.' })
+  if (text(body.program) !== 'Kids' && !text(body.plan)) throw createError({ statusCode: 400, message: 'El plan es obligatorio para este programa.' })
 
   const paymentMode = text(body.paymentMode)
   const studentInputs = Array.isArray(body.students)

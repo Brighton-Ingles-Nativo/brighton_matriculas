@@ -41,7 +41,7 @@ const filteredQueue = computed(() => (data.value?.workQueue || []).filter((item)
 const queueStatuses = computed(() => [...new Set((data.value?.workQueue || []).map((item) => item.status))])
 const changeIsGood = (metric: Metric) => ['pendingSignatures', 'commercialReturned', 'overdueAppointments'].includes(metric.key) ? (metric.change || 0) <= 0 : (metric.change || 0) >= 0
 const ageDays = (item: WorkItem) => Math.max(0, Math.floor((Date.now() - new Date(item.queueEnteredAt || item.updatedAt).getTime()) / 86400000))
-const loadDashboard = async () => { loading.value = true; error.value = ''; try { data.value = await $fetch<DashboardData>('/api/dashboard', { credentials: 'include', query: { period: period.value } }) } catch (err: any) { error.value = err?.data?.statusMessage || 'No pudimos cargar el dashboard.' } finally { loading.value = false } }
+const loadDashboard = async () => { loading.value = true; error.value = ''; try { data.value = await $fetch<DashboardData>('/api/dashboard', { credentials: 'include', query: { period: period.value } }) } catch (err: any) { error.value = err?.data?.message || err?.data?.statusMessage || 'No pudimos cargar el dashboard.' } finally { loading.value = false } }
 onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboard() })
 </script>
 

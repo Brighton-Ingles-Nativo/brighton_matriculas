@@ -22,8 +22,8 @@ export const isExpedientRole = (role: string | undefined): boolean => EXPEDIENT_
 
 export async function requireExpedientUser(event: H3Event) {
   const user = await getUserBySession(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
-  if (!isExpedientRole(user.role?.name)) throw createError({ statusCode: 403, statusMessage: 'No tienes permiso para gestionar expedientes' })
+  if (!user) throw createError({ statusCode: 401, message: 'Sesión no válida' })
+  if (!isExpedientRole(user.role?.name)) throw createError({ statusCode: 403, message: 'No tienes permiso para gestionar expedientes' })
   return user
 }
 
@@ -32,27 +32,27 @@ export async function getAccessibleContract(contractId: string, user: Awaited<Re
     where: { id: contractId },
     select: { id: true, userId: true, signedAt: true }
   })
-  if (!contract) throw createError({ statusCode: 404, statusMessage: 'Matrícula no encontrada' })
+  if (!contract) throw createError({ statusCode: 404, message: 'Matrícula no encontrada' })
   await assertContractAccess(user, contractId)
   return contract
 }
 
 export function validateDocumentType(value: unknown): asserts value is ExpedientDocumentType {
   if (!DOCUMENT_TYPES.includes(value as ExpedientDocumentType)) {
-    throw createError({ statusCode: 400, statusMessage: 'Tipo de documento inválido' })
+    throw createError({ statusCode: 400, message: 'Tipo de documento inválido' })
   }
 }
 
 export function validateUpload(file: { data?: Buffer; type?: string; filename?: string }): void {
   const mimeType = String(file.type || '').toLowerCase()
   if (!MIME_EXTENSIONS[mimeType]) {
-    throw createError({ statusCode: 400, statusMessage: 'Solo se permiten archivos PDF, JPG, PNG o WEBP.' })
+    throw createError({ statusCode: 400, message: 'Solo se permiten archivos PDF, JPG, PNG o WEBP.' })
   }
   if (!file.data?.length) {
-    throw createError({ statusCode: 400, statusMessage: 'El archivo está vacío.' })
+    throw createError({ statusCode: 400, message: 'El archivo está vacío.' })
   }
   if (file.data.length > MAX_DOCUMENT_SIZE) {
-    throw createError({ statusCode: 413, statusMessage: 'Cada archivo puede pesar como máximo 10 MB.' })
+    throw createError({ statusCode: 413, message: 'Cada archivo puede pesar como máximo 10 MB.' })
   }
 }
 

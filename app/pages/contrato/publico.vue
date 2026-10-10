@@ -42,7 +42,7 @@ const load = async () => {
     contract.value = response.data
     const terms = await $fetch<{ html: string }>('/api/public/contracts/terms')
     termsHtml.value = terms.html
-  } catch (err: any) { error.value = err?.data?.statusMessage || 'El enlace ha expirado o no es válido.' } finally { loading.value = false }
+  } catch (err: any) { error.value = err?.data?.message || err?.data?.statusMessage || 'El enlace ha expirado o no es válido.' } finally { loading.value = false }
 }
 
 const accept = async () => {
@@ -51,7 +51,7 @@ const accept = async () => {
   try {
     const response = await $fetch<{ data: Pick<Contract, 'status' | 'signedAt' | 'signedIp'> }>(`/api/public/contracts/${id.value}/accept`, { method: 'POST', query: { token: token.value } })
     if (contract.value) Object.assign(contract.value, response.data)
-  } catch (err: any) { actionError.value = err?.data?.statusMessage || 'No se pudo aceptar el contrato.' } finally { accepting.value = false }
+  } catch (err: any) { actionError.value = err?.data?.message || err?.data?.statusMessage || 'No se pudo aceptar el contrato.' } finally { accepting.value = false }
 }
 
 const updateTermsRead = () => {

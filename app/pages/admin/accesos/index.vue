@@ -315,7 +315,7 @@ const loadUsers = async () => { loading.value = true; resetMessages();
       
       users.value = response.data 
   } catch (err: any) { 
-    error.value = err?.data?.statusMessage || 'No se pudieron cargar los usuarios.' 
+    error.value = err?.data?.message || err?.data?.statusMessage || 'No se pudieron cargar los usuarios.'
   } finally { 
     loading.value = false 
   } 
@@ -329,7 +329,7 @@ const loadRoles = async () => {
     }); 
     roles.value = response.data 
   } catch (err: any) { 
-    error.value = err?.data?.statusMessage || 'No se pudieron cargar los roles.' 
+    error.value = err?.data?.message || err?.data?.statusMessage || 'No se pudieron cargar los roles.'
   } 
 }
 
@@ -339,7 +339,7 @@ const loadSessions = async () => {
     }); 
     sessions.value = response.data 
   } catch (err: any) { 
-    error.value = err?.data?.statusMessage || 'No se pudieron cargar las sesiones.' 
+    error.value = err?.data?.message || err?.data?.statusMessage || 'No se pudieron cargar las sesiones.'
   } 
 }
 
@@ -391,7 +391,7 @@ const generatePassword = () => {
   const shuffleValues = new Uint32Array(password.length)
   crypto.getRandomValues(shuffleValues)
   for (let index = password.length - 1; index > 0; index -= 1) {
-    const target = shuffleValues[index] % (index + 1)
+    const target = shuffleValues[index]! % (index + 1)
     const current = password[index]
     password[index] = password[target]
     password[target] = current
@@ -422,7 +422,7 @@ const saveUser = async () => {
     success.value = editing.value ? 'Usuario actualizado.' : 'Usuario creado.'; 
     await loadUsers() 
   } catch (err: any) { 
-    error.value = err?.data?.statusMessage || 'No se pudo guardar el usuario.' 
+    error.value = err?.data?.message || err?.data?.statusMessage || 'No se pudo guardar el usuario.'
   } finally { 
     loading.value = false 
   } 
@@ -443,7 +443,7 @@ const toggleUser = async (managedUser: ManagedUser) => {
     success.value = managedUser.active ? 'Usuario desactivado y sesiones revocadas.' : 'Usuario activado.'; 
     await loadUsers() 
   } catch (err: any) { 
-    error.value = err?.data?.statusMessage || 'No se pudo cambiar el estado.' 
+    error.value = err?.data?.message || err?.data?.statusMessage || 'No se pudo cambiar el estado.'
   } 
 }
 
@@ -459,7 +459,7 @@ const updateRole = async (role: Role) => {
     }); 
     success.value = `Permisos de ${role.name} actualizados.` 
   } catch (err: any) { 
-    error.value = err?.data?.statusMessage || 'No se pudieron guardar los permisos.' 
+    error.value = err?.data?.message || err?.data?.statusMessage || 'No se pudieron guardar los permisos.'
   } 
 }
 
@@ -474,7 +474,7 @@ const revokeSession = async (session: Session) => {
     sessions.value = sessions.value.filter((item) => item.id !== session.id); 
     success.value = 'Sesión revocada.' 
   } catch (err: any) { 
-    error.value = err?.data?.statusMessage || 'No se pudo revocar la sesión.' 
+    error.value = err?.data?.message || err?.data?.statusMessage || 'No se pudo revocar la sesión.'
   } 
 }
 

@@ -22,7 +22,7 @@ onMounted(async () => {
     const response = await $fetch<{ data: AvailableContract[] }>('/api/expedients/available-contracts', { credentials: 'include' })
     contracts.value = response.data
   } catch (err: any) {
-    error.value = err?.data?.statusMessage || 'No se pudieron cargar las matrículas disponibles.'
+    error.value = err?.data?.message || err?.data?.statusMessage || 'No se pudieron cargar las matrículas disponibles.'
   } finally {
     loading.value = false
   }

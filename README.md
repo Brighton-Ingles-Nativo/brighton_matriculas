@@ -144,7 +144,6 @@ ajustar las variables antes de levantar los contenedores.
 |-------------------|------------------------------------------|-----------------------------|
 | `DATABASE_URL`    | Cadena de conexión PostgreSQL            | —                           |
 | `MAIL_ENABLED`    | Habilitar envío de correos (`true/false`)| `false`                     |
-| `MAIL_FROM`       | Dirección remitente                      | —                           |
 | `MAIL_FROM_NAME`  | Nombre remitente                         | `Brighton Inglés Nativo`    |
 
 ## Estructura del proyecto

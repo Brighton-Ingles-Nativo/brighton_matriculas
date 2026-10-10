@@ -4,11 +4,11 @@ import { prisma } from '../../utils/prisma'
 
 export default defineEventHandler(async (event) => {
   const user = await getUserBySession(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
+  if (!user) throw createError({ statusCode: 401, message: 'Sesión no válida' })
   const id = getRouterParam(event, 'id')
-  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, statusMessage: 'ID de recibo inválido' })
+  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, message: 'ID de recibo inválido' })
   const receipt = await prisma.receipt.findUnique({ where: { id }, include: { contract: { include: { customer: true } }, user: { select: { name: true, username: true } } } })
-  if (!receipt) throw createError({ statusCode: 404, statusMessage: 'Recibo no encontrado' })
+  if (!receipt) throw createError({ statusCode: 404, message: 'Recibo no encontrado' })
   await assertContractAccess(user, receipt.contractId)
   return { success: true, data: { ...receipt, amount: receipt.amount?.toString() ?? null, contract: { ...receipt.contract, holderName: receipt.contract.customer.name, holderDni: receipt.contract.customer.dni, holderAddress: receipt.contract.customer.address, holderPhone: receipt.contract.customer.phone, programValue: receipt.contract.programValue.toString(), initialPayment: receipt.contract.initialPayment?.toString() ?? null, balance: receipt.contract.balance?.toString() ?? null } } }
 })

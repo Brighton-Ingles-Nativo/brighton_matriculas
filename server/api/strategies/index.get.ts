@@ -3,7 +3,7 @@ import { prisma } from '../../utils/prisma'
 
 export default defineEventHandler(async (event) => {
   const user = await getUserBySession(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
+  if (!user) throw createError({ statusCode: 401, message: 'Sesión no válida' })
 
   const strategies = await prisma.strategy.findMany({
     where: { active: true },

@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   const token = getQuery(event).token
   if (!id || !/^[0-9a-f-]{36}$/i.test(id) || !tokenIsValid(token)) {
-    throw createError({ statusCode: 400, statusMessage: 'Enlace público inválido' })
+    throw createError({ statusCode: 400, message: 'Enlace público inválido' })
   }
 
   const contract = await prisma.contract.findFirst({
@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  if (!contract) throw createError({ statusCode: 404, statusMessage: 'El enlace ha expirado o no es válido' })
+  if (!contract) throw createError({ statusCode: 404, message: 'El enlace ha expirado o no es válido' })
 
   const { accessToken: _accessToken, ...safeContract } = contract
   const students = contract.students.map(({ student }) => student)

@@ -5,17 +5,17 @@ import { publishToUser } from '../../utils/realtime'
 export default defineEventHandler(async (event) => {
   assertCsrf(event)
   const user = await getUserBySession(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
+  if (!user) throw createError({ statusCode: 401, message: 'Sesión no válida' })
 
   const id = getRouterParam(event, 'id')
-  if (!id) throw createError({ statusCode: 400, statusMessage: 'Notificación inválida' })
+  if (!id) throw createError({ statusCode: 400, message: 'Notificación inválida' })
 
   const readAt = new Date()
   const notification = await prisma.notification.updateMany({
     where: { id, recipientId: user.id },
     data: { readAt }
   })
-  if (!notification.count) throw createError({ statusCode: 404, statusMessage: 'Notificación no encontrada' })
+  if (!notification.count) throw createError({ statusCode: 404, message: 'Notificación no encontrada' })
 
   publishToUser(user.id, {
     id,

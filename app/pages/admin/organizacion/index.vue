@@ -139,7 +139,7 @@ const resetMessages = () => {
   success.value = '' 
 }
 
-const message = (err: any, fallback: string) => err?.data?.statusMessage || fallback
+const message = (err: any, fallback: string) => err?.data?.message || err?.data?.statusMessage || fallback
 
 const loadAll = async () => { 
   loading.value = true; 

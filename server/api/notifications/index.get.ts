@@ -4,7 +4,7 @@ import { prisma } from '../../utils/prisma'
 
 export default defineEventHandler(async (event) => {
   const user = await getUserBySession(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
+  if (!user) throw createError({ statusCode: 401, message: 'Sesión no válida' })
 
   const query = getQuery(event)
   const limit = Math.min(Math.max(Number(query.limit) || 20, 1), 100)

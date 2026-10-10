@@ -76,8 +76,8 @@ const hasPushSubscription = computed(() => browserSubscribed.value || pushEnable
 const isPushConfigured = computed(() => pushConfig.value?.enabled === true)
 
 const message = (error: unknown, fallback: string) => {
-  const response = error as { data?: { statusMessage?: string }; statusMessage?: string }
-  return response.data?.statusMessage || response.statusMessage || fallback
+  const response = error as { data?: { message?: string; statusMessage?: string }; message?: string; statusMessage?: string }
+  return response.data?.message || response.data?.statusMessage || response.message || response.statusMessage || fallback
 }
 
 const resetStrategyForm = () => {

@@ -452,72 +452,58 @@ export class DniService {
  * inicio de este módulo y se usa como fallback entre SUNAT y DNIPERU.
  */
 
+function escapeXml(value: string) {
+  return value.replace(/[<>&'\"]/g, (character) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[character] || character);
+}
+
 export class RucService {
   async get(ruc: string): Promise<ParsedCompany> {
-    const endpoint = "https://e-consultaruc.sunat.gob.pe/cl-ti-itmrconsruc/jcrS00Alias";
-    const client = new HttpClient();
+    const endpoint = 'https://ww1.sunat.gob.pe/cl-ti-iaconsultaruc-ws/ServicioRucAdmColService.htm';
+    const namespace = 'http://service.consultarucws.registro.servicio2.sunat.gob.pe/';
+    const envelope = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ser="${namespace}">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <ser:buscarRuc><arg0>${escapeXml(ruc)}</arg0></ser:buscarRuc>
+  </soapenv:Body>
+</soapenv:Envelope>`;
+
     try {
-      const initialResponse = await client.getResponse(endpoint);
-      this.assertSuccessfulResponse(initialResponse, 'SUNAT_RUC_GET_FAILED');
-
-      const randomResponse = await client.postResponse(endpoint, {
-        accion: 'consPorRazonSoc',
-        razSoc: 'BVA FOODS',
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { Accept: 'text/xml, application/soap+xml', 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: '""' },
+        body: envelope,
       });
-      this.assertSuccessfulResponse(randomResponse, 'SUNAT_RUC_RANDOM_FAILED');
-      const htmlRandom = randomResponse.body;
-      this.assertNotBlocked(htmlRandom);
+      const xml = await response.text();
+      if (!response.ok) throw new Error(`SUNAT_RUC_SOAP_FAILED status=${response.status}`);
 
-      const randomMatch = htmlRandom.match(/<input type="hidden" name="numRnd" value="(.*)">/);
-      const random = randomMatch?.[1] || "";
-
-      const resultResponse = await client.postResponse(endpoint, {
-        accion: 'consPorRuc',
-        nroRuc: ruc,
-        numRnd: random,
-        actReturn: '1',
-        modo: '1',
-      });
-      this.assertSuccessfulResponse(resultResponse, 'SUNAT_RUC_LOOKUP_FAILED');
-      const html = resultResponse.body;
-      this.assertNotBlocked(html);
-
-      const company = parseCompany(html);
-      if (!company) {
+      const $ = cheerio.load(xml, { xmlMode: true });
+      const result = $('return').first();
+      const razonSocial = result.find('nombre').first().text().trim();
+      if (!razonSocial) {
         const error = new Error('RUC no encontrado');
         (error as Error & { statusCode?: number; code?: string }).statusCode = 404;
         (error as Error & { statusCode?: number; code?: string }).code = 'RUC_NOT_FOUND';
         throw error;
       }
-      return company;
+
+      return {
+        ruc: result.find('numRuc').first().text().trim() || ruc,
+        razonSocial,
+        nombreComercial: '',
+        tipo: '',
+        estado: result.find('estadoDesc').first().text().trim() || result.find('estado').first().text().trim(),
+        condicion: result.find('flag22Desc').first().text().trim() || result.find('indBueCon').first().text().trim(),
+        direccion: '',
+        fechaInscripcion: null,
+        departamento: '',
+        provincia: '',
+        distrito: '',
+      };
     } catch (e) {
       console.error('[RucService Error]', e instanceof Error ? e.message : e);
       throw e;
     }
-  }
-
-  private assertNotBlocked(html: string) {
-    if (!html || !html.includes('Request Rejected')) {
-      return;
-    }
-
-    const supportIdMatch = html.match(/support ID is:\s*<([^>]+)>/i);
-    const supportId = supportIdMatch ? supportIdMatch[1] : 'N/A';
-    const error = new Error(`SUNAT_WAF_BLOCKED support_id=${supportId}`);
-    (error as Error & { code?: string; statusCode?: number }).code = 'SUNAT_WAF_BLOCKED';
-    (error as Error & { code?: string; statusCode?: number }).statusCode = 502;
-    throw error;
-  }
-
-  private assertSuccessfulResponse(response: HttpResponse, code: string) {
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return;
-    }
-
-    const error = new Error(`${code} status=${response.statusCode}`);
-    (error as Error & { code?: string; statusCode?: number }).code = code;
-    (error as Error & { code?: string; statusCode?: number }).statusCode = response.statusCode;
-    throw error;
   }
 }
 

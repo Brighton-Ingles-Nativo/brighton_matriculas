@@ -28,7 +28,7 @@ const lookup = async () => {
     const response = await $fetch<{ data: { nombres: string; apellidoPaterno: string; apellidoMaterno: string; fechaNacimiento?: string } }>(`/api/dni/${dni}`, { credentials: 'include' })
     emit('lookup', response.data)
   } catch (err: any) {
-    error.value = err?.data?.statusMessage || 'No se encontraron datos para este DNI.'
+    error.value = err?.data?.message || err?.data?.statusMessage || 'No se encontraron datos para este DNI.'
   } finally {
     loading.value = false
   }

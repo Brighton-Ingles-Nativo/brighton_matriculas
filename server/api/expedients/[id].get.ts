@@ -5,9 +5,9 @@ import { prisma } from '../../utils/prisma'
 export default defineEventHandler(async (event) => {
   const user = await requireExpedientUser(event)
   const id = getRouterParam(event, 'id')
-  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, statusMessage: 'Expediente inválido' })
+  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, message: 'Expediente inválido' })
   const expedient = await prisma.expedient.findUnique({ where: { id }, include: { contract: { select: { userId: true } }, documents: { orderBy: { uploadedAt: 'asc' } }, movements: { orderBy: { createdAt: 'desc' }, include: { user: { select: { id: true, name: true, username: true } } } } } })
-  if (!expedient) throw createError({ statusCode: 404, statusMessage: 'Expediente no encontrado' })
+  if (!expedient) throw createError({ statusCode: 404, message: 'Expediente no encontrado' })
   await assertContractAccess(user, expedient.contractId)
   return {
     success: true,

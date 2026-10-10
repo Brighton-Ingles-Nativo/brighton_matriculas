@@ -6,8 +6,8 @@ const operationalRoles = ['admin', 'asesor', 'supervisor', 'asistente_comercial'
 
 export default defineEventHandler(async (event) => {
   const user = await getUserBySession(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: 'Sesión no válida' })
-  if (!operationalRoles.includes(user.role?.name || '')) throw createError({ statusCode: 403, statusMessage: 'No tienes permiso para consultar el dashboard' })
+  if (!user) throw createError({ statusCode: 401, message: 'Sesión no válida' })
+  if (!operationalRoles.includes(user.role?.name || '')) throw createError({ statusCode: 403, message: 'No tienes permiso para consultar el dashboard' })
 
   const query = getQuery(event)
   const requestedPeriod = Number(query.period || 30)
