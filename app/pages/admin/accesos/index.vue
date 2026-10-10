@@ -29,43 +29,69 @@
             </UiButton>
           </div>
         </section>
-        <UiCard v-if="userFormOpen">
-          <UiCardHeader>
-            <UiCardTitle>{{ editing ? 'Editar usuario' : 'Nuevo usuario' }}</UiCardTitle>
-          </UiCardHeader>
-          <form class="grid gap-4 p-6 sm:grid-cols-2" @submit.prevent="saveUser">
-            <div>
-              <UiLabel>Nombre completo</UiLabel>
-              <UiInput v-model="form.name" required />
-            </div>
-            <div>
-              <UiLabel>Usuario</UiLabel>
-              <UiInput v-model="form.username" required />
-            </div>
-            <div>
-              <UiLabel>Correo</UiLabel>
-              <UiInput v-model="form.email" type="email" required />
-            </div>
-            <div>
-              <UiLabel for="userRole">Rol</UiLabel><UiSelect v-model="form.role"><UiSelectTrigger id="userRole" class="w-full"><UiSelectValue placeholder="Seleccionar rol" /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="role in roles" :key="role.id" :value="role.name">{{ roleLabel(role.name) }}</UiSelectItem></UiSelectContent></UiSelect>
-            </div>
-            <div v-if="form.role !== 'supervisor'" class="sm:col-span-2">
-              <UiLabel for="userSupervisor">Supervisor directo</UiLabel><UiSelect v-model="form.supervisorId"><UiSelectTrigger id="userSupervisor" class="w-full"><UiSelectValue placeholder="Sin supervisor asignado" /></UiSelectTrigger><UiSelectContent><UiSelectItem value="__none__">Sin supervisor asignado</UiSelectItem><UiSelectItem v-for="supervisor in availableSupervisors" :key="supervisor.id" :value="supervisor.id">{{ supervisor.name }} (@{{ supervisor.username }})</UiSelectItem></UiSelectContent></UiSelect>
-              <p class="mt-1 text-xs text-muted-foreground">Permite registrar los subordinados directos de cada supervisor.</p>
-            </div>
-            <div>
-              <UiLabel>{{ editing ? 'Nueva contraseña (opcional)' : 'Contraseña' }}</UiLabel>
-              <UiInput v-model="form.password" type="password" :required="!editing" minlength="6" />
-            </div><label class="flex items-center gap-2 pt-6 text-sm"><input v-model="form.active" type="checkbox" />
-              Usuario activo</label>
-            <div class="flex justify-end gap-2 sm:col-span-2">
-              <UiButton type="button" variant="outline" @click="userFormOpen = false">Cancelar</UiButton>
-              <UiButton type="submit" class="gap-2" :disabled="loading">
-                <Save class="size-4" /> Guardar usuario
-              </UiButton>
-            </div>
-          </form>
-        </UiCard>
+        <UiDialog :open="userFormOpen" @update:open="userFormOpen = $event">
+          <UiDialogScrollContent class="max-h-[calc(100vh-3rem)] overflow-y-auto sm:max-w-2xl">
+            <UiDialogHeader>
+              <UiDialogTitle>{{ editing ? 'Editar usuario' : 'Nuevo usuario' }}</UiDialogTitle>
+              <UiDialogDescription>
+                {{ editing ? 'Actualiza los datos, permisos de acceso y estado de este usuario.' : 'Registra un nuevo usuario para el sistema.' }}
+              </UiDialogDescription>
+            </UiDialogHeader>
+            <form class="grid gap-4 sm:grid-cols-2" @submit.prevent="saveUser">
+              <div>
+                <UiLabel for="userName">Nombre completo</UiLabel>
+                <UiInput id="userName" v-model="form.name" required />
+              </div>
+              <div>
+                <UiLabel for="userUsername">Usuario</UiLabel>
+                <UiInput id="userUsername" v-model="form.username" required />
+              </div>
+              <div>
+                <UiLabel for="userEmail">Correo</UiLabel>
+                <UiInput id="userEmail" v-model="form.email" type="email" required />
+              </div>
+              <div>
+                <UiLabel for="userRole">Rol</UiLabel>
+                <UiSelect v-model="form.role">
+                  <UiSelectTrigger id="userRole" class="w-full"><UiSelectValue placeholder="Seleccionar rol" /></UiSelectTrigger>
+                  <UiSelectContent><UiSelectItem v-for="role in roles" :key="role.id" :value="role.name">{{ roleLabel(role.name) }}</UiSelectItem></UiSelectContent>
+                </UiSelect>
+              </div>
+              <div v-if="form.role !== 'supervisor'" class="sm:col-span-2">
+                <UiLabel for="userSupervisor">Supervisor directo</UiLabel>
+                <UiSelect v-model="form.supervisorId">
+                  <UiSelectTrigger id="userSupervisor" class="w-full"><UiSelectValue placeholder="Sin supervisor asignado" /></UiSelectTrigger>
+                  <UiSelectContent>
+                    <UiSelectItem value="__none__">Sin supervisor asignado</UiSelectItem>
+                    <UiSelectItem v-for="supervisor in availableSupervisors" :key="supervisor.id" :value="supervisor.id">{{ supervisor.name }} (@{{ supervisor.username }})</UiSelectItem>
+                  </UiSelectContent>
+                </UiSelect>
+                <p class="mt-1 text-xs text-muted-foreground">Permite registrar los subordinados directos de cada supervisor.</p>
+              </div>
+              <div class="space-y-2">
+                <div class="flex items-center justify-between gap-2">
+                  <UiLabel for="userPassword">{{ editing ? 'Nueva contraseña (opcional)' : 'Contraseña' }}</UiLabel>
+                  <UiButton type="button" variant="ghost" size="sm" class="h-7 gap-1 px-2 text-xs" @click="generatePassword">
+                    <RefreshCw class="size-3.5" /> Generar
+                  </UiButton>
+                </div>
+                <div class="flex gap-2">
+                  <UiInput id="userPassword" v-model="form.password" :type="showPassword ? 'text' : 'password'" :required="!editing" minlength="6" />
+                  <UiButton type="button" variant="outline" size="icon" :aria-label="showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'" @click="showPassword = !showPassword">
+                    <EyeOff v-if="showPassword" class="size-4" />
+                    <Eye v-else class="size-4" />
+                  </UiButton>
+                </div>
+                <p class="text-xs text-muted-foreground">Genera una contraseña segura de 14 caracteres.</p>
+              </div>
+              <label class="flex items-center gap-2 pt-6 text-sm"><input v-model="form.active" type="checkbox" /> Usuario activo</label>
+              <UiDialogFooter class="sm:col-span-2">
+                <UiButton type="button" variant="outline" @click="userFormOpen = false">Cancelar</UiButton>
+                <UiButton type="submit" class="gap-2" :disabled="loading"><Save class="size-4" /> Guardar usuario</UiButton>
+              </UiDialogFooter>
+            </form>
+          </UiDialogScrollContent>
+        </UiDialog>
         <UiCard>
           <UiCardContent class="p-0">
             <div v-if="loading" class="p-6 text-sm text-muted-foreground">Cargando usuarios…</div>
@@ -194,7 +220,7 @@
 
 <script setup lang="ts">
 import { useDebounceFn } from '@vueuse/core'
-import { Pencil, Plus, RefreshCw, Save, Trash2 } from '@lucide/vue'
+import { Eye, EyeOff, Pencil, Plus, RefreshCw, Save, Trash2 } from '@lucide/vue'
 
 definePageMeta({
   middleware: ['auth', 'admin'],
@@ -269,6 +295,7 @@ const form = reactive({
   supervisorId: '__none__', 
   active: true 
 })
+const showPassword = ref(false)
 
 const availableSupervisors = computed(() => users.value.filter((managedUser) => managedUser.role.name === 'supervisor' && managedUser.id !== editing.value?.id && managedUser.active))
 
@@ -336,7 +363,7 @@ const openCreate = () => {
     supervisorId: '__none__',
     active: true 
   });
-
+  showPassword.value = false
   userFormOpen.value = true 
 }
 
@@ -351,7 +378,26 @@ const openEdit = (managedUser: ManagedUser) => {
     supervisorId: managedUser.supervisorId || '__none__',
     active: managedUser.active 
   }); 
+  showPassword.value = false
   userFormOpen.value = true 
+}
+
+const generatePassword = () => {
+  const required = ['A', 'a', '7', '!']
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*_-'
+  const values = new Uint32Array(10)
+  crypto.getRandomValues(values)
+  const password = [...required, ...Array.from(values, (value) => alphabet[value % alphabet.length])]
+  const shuffleValues = new Uint32Array(password.length)
+  crypto.getRandomValues(shuffleValues)
+  for (let index = password.length - 1; index > 0; index -= 1) {
+    const target = shuffleValues[index] % (index + 1)
+    const current = password[index]
+    password[index] = password[target]
+    password[target] = current
+  }
+  form.password = password.join('')
+  showPassword.value = true
 }
 
 const saveUser = async () => { 

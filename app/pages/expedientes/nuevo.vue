@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ArrowLeft, FolderOpen, LoaderCircle } from '@lucide/vue'
 
-definePageMeta({ middleware: 'auth', ssr: false })
+definePageMeta({ middleware: ['auth', 'expedients'], ssr: false })
 
 interface AvailableContract {
   id: string

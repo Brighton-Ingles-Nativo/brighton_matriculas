@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, CheckCircle2, Copy, ExternalLink, FileDown, Mail } from '@lucide/vue'
+import { ArrowLeft, Check, CheckCircle2, Copy, ExternalLink, FileDown, Mail, RefreshCw } from '@lucide/vue'
 
 interface Receipt {
   id: string
@@ -85,6 +85,8 @@ const sendError = ref('')
 const copyError = ref('')
 const publicUrl = ref('')
 const copiedTarget = ref<'message' | 'link' | null>(null)
+const linkExpired = ref(false)
+const { csrfHeaders } = useAuth()
 
 const statusLabel = computed(() => {
   if (!props.contract) return '—'
@@ -150,6 +152,7 @@ const prepareSendPreview = async () => {
   sendError.value = ''
   copyError.value = ''
   publicUrl.value = ''
+  linkExpired.value = false
   sendPreviewOpen.value = true
   sendLoading.value = true
   try {
@@ -157,6 +160,26 @@ const prepareSendPreview = async () => {
     publicUrl.value = response.url
   } catch (error: any) {
     sendError.value = error?.data?.statusMessage || 'No se pudo preparar el enlace público del contrato.'
+    linkExpired.value = error?.data?.statusCode === 409 || error?.statusCode === 409 || error?.status === 409
+  } finally {
+    sendLoading.value = false
+  }
+}
+
+const regeneratePublicLink = async () => {
+  if (!props.contract) return
+  sendLoading.value = true
+  sendError.value = ''
+  try {
+    const response = await $fetch<{ success: boolean; url: string }>(`/api/contracts/${props.contract.id}/public-link`, {
+      method: 'POST',
+      headers: await csrfHeaders(),
+      credentials: 'include'
+    })
+    publicUrl.value = response.url
+    linkExpired.value = false
+  } catch (error: any) {
+    sendError.value = error?.data?.statusMessage || 'No se pudo regenerar el enlace público.'
   } finally {
     sendLoading.value = false
   }
@@ -164,7 +187,27 @@ const prepareSendPreview = async () => {
 
 const copyToClipboard = async (value: string, target: 'message' | 'link') => {
   try {
-    await navigator.clipboard.writeText(value)
+    let copied = false
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(value)
+        copied = true
+      } catch {
+        // Algunos navegadores exponen la API, pero rechazan el permiso de escritura.
+      }
+    }
+    if (!copied) {
+      const textarea = document.createElement('textarea')
+      textarea.value = value
+      textarea.setAttribute('readonly', '')
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      copied = document.execCommand('copy')
+      textarea.remove()
+      if (!copied) throw new Error('copy-failed')
+    }
     copyError.value = ''
     copiedTarget.value = target
     window.setTimeout(() => {
@@ -198,6 +241,7 @@ watch(() => props.contract?.id, () => {
   sendPreviewOpen.value = false
   publicUrl.value = ''
   sendError.value = ''
+  linkExpired.value = false
   loadTerms()
 })
 </script>
@@ -206,12 +250,12 @@ watch(() => props.contract?.id, () => {
   <UiDialog :open="open" @update:open="emit('update:open', $event)">
     <UiDialogScrollContent :class="['flex min-w-0 flex-col max-h-[calc(100vh-4rem)] overflow-hidden p-0', sendPreviewOpen ? 'max-w-2xl' : 'max-w-6xl']">
       <div class="flex shrink-0 items-center justify-between border-b bg-background px-6 py-4 pr-25">
-        <UiButton type="button" variant="ghost" size="sm" class="-ml-3 gap-2" @click="sendPreviewOpen = false"><ArrowLeft class="size-4" /> Regresar</UiButton>
+        <UiButton v-if="sendPreviewOpen" type="button" variant="ghost" size="sm" class="-ml-3 gap-2" @click="sendPreviewOpen = false"><ArrowLeft class="size-4" /> Regresar</UiButton>
         <div>
           <UiDialogTitle>{{ sendPreviewOpen ? 'Preparar envío del contrato' : contract ? `Contrato ${contract.contractNumber}` : 'Detalle del contrato' }}</UiDialogTitle>
           <UiDialogDescription>{{ sendPreviewOpen ? 'Revisa y copia el contenido para enviarlo manualmente al cliente.' : 'Detalle completo del registro, contrato y movimientos de pago.' }}</UiDialogDescription>
         </div>
-        <div v-if="contract && !sendPreviewOpen" class="flex flex-wrap justify-end gap-2"><UiButton variant="outline" size="sm" class="gap-2" :disabled="sendLoading" @click="prepareSendPreview"><Mail class="size-4" /> {{ sendLoading ? 'Preparando…' : 'Enviar contrato' }}</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('publicView')"><ExternalLink class="size-4" /> Vista pública</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('pdf')"><FileDown class="size-4" /> Abrir PDF</UiButton></div>
+        <div v-if="contract && !sendPreviewOpen" class="flex flex-wrap justify-end gap-2"><UiButton v-if="contract.status !== 'FIRMADO' && !contract.signedAt" variant="outline" size="sm" class="gap-2" :disabled="sendLoading" @click="prepareSendPreview"><Mail class="size-4" /> {{ sendLoading ? 'Preparando…' : 'Enviar contrato' }}</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('publicView')"><ExternalLink class="size-4" /> Vista pública</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('pdf')"><FileDown class="size-4" /> Abrir PDF</UiButton></div>
       </div>
 
       <div v-if="sendPreviewOpen" class="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto p-6">
@@ -226,7 +270,14 @@ watch(() => props.contract?.id, () => {
           <UiSkeleton class="h-40 w-full" />
           <p class="text-sm text-muted-foreground">Preparando el enlace público del contrato…</p>
         </div>
-        <UiAlert v-else-if="sendError" variant="destructive"><UiAlertDescription>{{ sendError }}</UiAlertDescription></UiAlert>
+        <UiAlert v-else-if="sendError" variant="destructive">
+          <UiAlertDescription class="flex flex-wrap items-center justify-between gap-3">
+            <span>{{ sendError }}</span>
+            <UiButton v-if="linkExpired" type="button" variant="outline" size="sm" class="shrink-0 gap-2" :disabled="sendLoading" @click="regeneratePublicLink">
+              <RefreshCw class="size-4" /> {{ sendLoading ? 'Regenerando…' : 'Regenerar enlace' }}
+            </UiButton>
+          </UiAlertDescription>
+        </UiAlert>
         <div v-else-if="contract" class="min-w-0 space-y-4">
           <div class="min-w-0 space-y-2">
             <UiLabel for="contract-email-recipient">Destinatario</UiLabel>

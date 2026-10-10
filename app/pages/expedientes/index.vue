@@ -2,7 +2,7 @@
 import { ChevronLeft, ChevronRight, Download, Eye, FolderOpen, Plus } from '@lucide/vue'
 import { useDebounceFn } from '@vueuse/core'
 
-definePageMeta({ middleware: 'auth', ssr: false })
+definePageMeta({ middleware: ['auth', 'expedients'], ssr: false })
 
 interface ExpedientRow {
   id: string

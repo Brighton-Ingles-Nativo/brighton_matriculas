@@ -297,53 +297,39 @@ onMounted(() => {
           <UiAlertDescription>{{ strategySuccess }}</UiAlertDescription>
         </UiAlert>
 
-        <UiCard v-if="strategyFormOpen">
-          <UiCardHeader>
-            <UiCardTitle>{{ editingStrategy ? 'Editar estrategia' : 'Nueva estrategia' }}</UiCardTitle>
-            <UiCardDescription>
-              El código es opcional y sirve para identificar la estrategia en reportes e integraciones.
-            </UiCardDescription>
-          </UiCardHeader>
-          <form class="grid gap-5 p-6 pt-0 sm:grid-cols-2" @submit.prevent="saveStrategy">
-            <div class="space-y-2">
-              <UiLabel for="strategy-name">Nombre</UiLabel>
-              <UiInput id="strategy-name" v-model="strategyForm.name" minlength="2" maxlength="150" required autofocus />
-            </div>
-            <div class="space-y-2">
-              <UiLabel for="strategy-code">Código opcional</UiLabel>
-              <UiInput id="strategy-code" v-model="strategyForm.code" maxlength="50" placeholder="REFERIDOS" />
-              <p class="text-xs leading-5 text-muted-foreground">Letras, números, guiones y guiones bajos.</p>
-            </div>
-            <div class="space-y-2 sm:col-span-2">
-              <UiLabel for="strategy-description">Descripción</UiLabel>
-              <UiTextarea id="strategy-description" v-model="strategyForm.description" :maxlength="2000" rows="3" placeholder="Indica cuándo debe usarse esta estrategia." />
-            </div>
-            <div class="space-y-2">
-              <UiLabel for="strategy-order">Orden de visualización</UiLabel>
-              <UiInput
-                id="strategy-order"
-                :model-value="strategyForm.displayOrder"
-                type="number"
-                min="0"
-                max="100000"
-                @update:model-value="strategyForm.displayOrder = Number($event)"
-              />
-              <p class="text-xs leading-5 text-muted-foreground">Los números menores se muestran primero.</p>
-            </div>
-            <label class="flex items-center gap-3 self-end pb-1 text-sm font-medium">
-              <UiCheckbox v-model="strategyForm.active" />
-              Estrategia activa
-            </label>
-            <div class="flex justify-end gap-2 sm:col-span-2">
-              <UiButton type="button" variant="outline" @click="strategyFormOpen = false">Cancelar</UiButton>
-              <UiButton type="submit" class="gap-2" :disabled="savingStrategy">
-                <LoaderCircle v-if="savingStrategy" class="size-4 animate-spin" aria-hidden="true" />
-                <Save v-else class="size-4" aria-hidden="true" />
-                {{ savingStrategy ? 'Guardando…' : 'Guardar estrategia' }}
-              </UiButton>
-            </div>
-          </form>
-        </UiCard>
+        <UiDialog :open="strategyFormOpen" @update:open="strategyFormOpen = $event">
+          <UiDialogScrollContent class="max-h-[calc(100vh-3rem)] overflow-y-auto sm:max-w-2xl">
+            <UiDialogHeader>
+              <UiDialogTitle>{{ editingStrategy ? 'Editar estrategia' : 'Nueva estrategia' }}</UiDialogTitle>
+              <UiDialogDescription>El código es opcional y sirve para identificar la estrategia en reportes e integraciones.</UiDialogDescription>
+            </UiDialogHeader>
+            <form class="grid gap-5 sm:grid-cols-2" @submit.prevent="saveStrategy">
+              <div class="space-y-2">
+                <UiLabel for="strategy-name">Nombre</UiLabel>
+                <UiInput id="strategy-name" v-model="strategyForm.name" minlength="2" maxlength="150" required autofocus />
+              </div>
+              <div class="space-y-2">
+                <UiLabel for="strategy-code">Código opcional</UiLabel>
+                <UiInput id="strategy-code" v-model="strategyForm.code" maxlength="50" placeholder="REFERIDOS" />
+                <p class="text-xs leading-5 text-muted-foreground">Letras, números, guiones y guiones bajos.</p>
+              </div>
+              <div class="space-y-2 sm:col-span-2">
+                <UiLabel for="strategy-description">Descripción</UiLabel>
+                <UiTextarea id="strategy-description" v-model="strategyForm.description" :maxlength="2000" rows="3" placeholder="Indica cuándo debe usarse esta estrategia." />
+              </div>
+              <div class="space-y-2">
+                <UiLabel for="strategy-order">Orden de visualización</UiLabel>
+                <UiInput id="strategy-order" :model-value="strategyForm.displayOrder" type="number" min="0" max="100000" @update:model-value="strategyForm.displayOrder = Number($event)" />
+                <p class="text-xs leading-5 text-muted-foreground">Los números menores se muestran primero.</p>
+              </div>
+              <label class="flex items-center gap-3 self-end pb-1 text-sm font-medium"><UiCheckbox v-model="strategyForm.active" /> Estrategia activa</label>
+              <UiDialogFooter class="sm:col-span-2">
+                <UiButton type="button" variant="outline" @click="strategyFormOpen = false">Cancelar</UiButton>
+                <UiButton type="submit" class="gap-2" :disabled="savingStrategy"><LoaderCircle v-if="savingStrategy" class="size-4 animate-spin" aria-hidden="true" /><Save v-else class="size-4" aria-hidden="true" />{{ savingStrategy ? 'Guardando…' : 'Guardar estrategia' }}</UiButton>
+              </UiDialogFooter>
+            </form>
+          </UiDialogScrollContent>
+        </UiDialog>
 
         <UiCard>
           <UiCardContent class="p-0">
