@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, CheckCircle2, Copy, ExternalLink, FileDown, Mail, RefreshCw } from '@lucide/vue'
+import { ArrowLeft, Check, CheckCircle2, Copy, Download, ExternalLink, Mail, Printer, RefreshCw } from '@lucide/vue'
 
 interface Receipt {
   id: string
@@ -70,7 +70,8 @@ const emit = defineEmits<{
   'update:open': [value: boolean]
   accept: []
   publicView: []
-  pdf: []
+  downloadPdf: []
+  printContract: []
 }>()
 
 const termsHtml = ref('')
@@ -283,7 +284,7 @@ watch(() => props.contract?.id, () => {
           <UiDialogTitle>{{ sendPreviewOpen ? 'Preparar envío del contrato' : contract ? `Contrato ${contract.contractNumber}` : 'Detalle del contrato' }}</UiDialogTitle>
           <UiDialogDescription>{{ sendPreviewOpen ? 'Revisa el contenido y envíalo directamente al correo del cliente.' : 'Detalle completo del registro, contrato y movimientos de pago.' }}</UiDialogDescription>
         </div>
-        <div v-if="contract && !sendPreviewOpen" class="flex flex-wrap justify-end gap-2"><UiButton v-if="contract.status !== 'FIRMADO' && !contract.signedAt" variant="outline" size="sm" class="gap-2" :disabled="sendLoading" @click="prepareSendPreview"><Mail class="size-4" /> {{ sendLoading ? 'Preparando…' : 'Enviar contrato' }}</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('publicView')"><ExternalLink class="size-4" /> Vista pública</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('pdf')"><FileDown class="size-4" /> Abrir PDF</UiButton></div>
+        <div v-if="contract && !sendPreviewOpen" class="flex flex-wrap justify-end gap-2"><UiButton v-if="contract.status !== 'FIRMADO' && !contract.signedAt" variant="outline" size="sm" class="gap-2" :disabled="sendLoading" @click="prepareSendPreview"><Mail class="size-4" /> {{ sendLoading ? 'Preparando…' : 'Enviar contrato' }}</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('publicView')"><ExternalLink class="size-4" /> Vista pública</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('downloadPdf')"><Download class="size-4" /> Descargar PDF</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('printContract')"><Printer class="size-4" /> Imprimir contrato</UiButton></div>
       </div>
 
       <div v-if="sendPreviewOpen" class="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto p-6">

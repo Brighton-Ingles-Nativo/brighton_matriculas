@@ -3,6 +3,7 @@ import http from 'node:http';
 import https from 'node:https';
 import { URL, URLSearchParams } from 'node:url';
 import { dnipeuService } from './dniperu-service';
+import { buscarUbigeoInei } from '../../app/shared/ubigeo-inei';
 
 const DEFAULT_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -31,6 +32,12 @@ export interface DniLookupResult {
   nombres: string;
   codVerifica: string;
   fechaNacimiento?: string;
+  ubigeoRuc?: string;
+  ubigeo?: string;
+  ubigeoFuente?: 'SUNAT' | 'DNIPERU';
+  departamento?: string;
+  provincia?: string;
+  distrito?: string;
 }
 
 export interface ParsedCompany {
@@ -45,6 +52,7 @@ export interface ParsedCompany {
   departamento: string;
   provincia: string;
   distrito: string;
+  ubigeoRuc: string;
 }
 
 export interface LegacyCompanyResult {
@@ -357,6 +365,7 @@ export function parseCompany(html: string): ParsedCompany | null {
     departamento: "",
     provincia: "",
     distrito: "",
+    ubigeoRuc: "",
   };
 
   // Corregir Estado
@@ -413,13 +422,31 @@ export class DniService {
         const company = await new RucService().get(ruc);
         if (company?.razonSocial) {
           const parsed = parseSunatFullName(company.razonSocial);
+          const sunatUbigeo = buscarUbigeoInei(company.ubigeoRuc);
+          const [birthDateResult, dnipeuUbigeoResult] = await Promise.allSettled([
+            dnipeuService.getBirthDate(dni),
+            sunatUbigeo ? Promise.resolve(undefined) : dnipeuService.getUbigeo(dni),
+          ]);
+          const dnipeuUbigeoCode = dnipeuUbigeoResult.status === 'fulfilled'
+            ? dnipeuUbigeoResult.value
+            : undefined;
+          const dnipeuUbigeo = !sunatUbigeo && dnipeuUbigeoCode
+            ? buscarUbigeoInei(dnipeuUbigeoCode)
+            : null;
+          const resolvedUbigeo = sunatUbigeo || dnipeuUbigeo;
           return {
             dni,
             apellidoPaterno: parsed.apellidoPaterno,
             apellidoMaterno: parsed.apellidoMaterno,
             nombres: parsed.nombres,
             codVerifica: String(verifyDigit),
-            fechaNacimiento: await dnipeuService.getBirthDate(dni),
+            fechaNacimiento: birthDateResult.status === 'fulfilled' ? birthDateResult.value : undefined,
+            ubigeoRuc: company.ubigeoRuc || undefined,
+            ubigeo: sunatUbigeo ? company.ubigeoRuc : dnipeuUbigeoCode,
+            ubigeoFuente: sunatUbigeo ? 'SUNAT' : dnipeuUbigeo ? 'DNIPERU' : undefined,
+            departamento: resolvedUbigeo?.departamento,
+            provincia: resolvedUbigeo?.provincia,
+            distrito: resolvedUbigeo?.distrito,
           };
         }
       } catch (e: any) {
@@ -437,7 +464,16 @@ export class DniService {
     try {
       console.log(`[DniService] Querying dnipeu.com for DNI ${dni}`);
       const result = await dnipeuService.get(dni);
-      if (result) return result;
+      if (result) {
+        const ubigeo = result.ubigeo ? buscarUbigeoInei(result.ubigeo) : null;
+        return {
+          ...result,
+          ubigeoFuente: ubigeo ? 'DNIPERU' : undefined,
+          departamento: ubigeo?.departamento,
+          provincia: ubigeo?.provincia,
+          distrito: ubigeo?.distrito,
+        };
+      }
     } catch (e: any) {
       console.warn(`[DniService] dnipeu falló: ${e?.message || e}`);
     }
@@ -499,6 +535,7 @@ export class RucService {
         departamento: '',
         provincia: '',
         distrito: '',
+        ubigeoRuc: result.find('ubigeoRuc').first().text().trim(),
       };
     } catch (e) {
       console.error('[RucService Error]', e instanceof Error ? e.message : e);

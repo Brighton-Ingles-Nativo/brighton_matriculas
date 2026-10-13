@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ArrowLeft, Save } from '@lucide/vue'
 import { ubigeoPeru } from '~/shared/ubigeo'
+import { listarDepartamentosInei, listarDistritosInei, listarProvinciasInei } from '~/shared/ubigeo-inei'
 
 definePageMeta({ middleware: 'auth', ssr: false })
 
@@ -20,7 +21,11 @@ const canRequestCancellation = computed(() => [ 'supervisor', 'admin'].includes(
 const canReviewCancellation = computed(() => ['supervisor', 'admin'].includes(user.value?.role?.name || ''))
 
 const departments = Object.keys(ubigeoPeru).sort((a, b) => a.localeCompare(b, 'es'))
+const holderDepartments = listarDepartamentosInei()
 const teams = ref<{ id: string; name: string; site: { id: string; name: string } }[]>([])
+const advisorTeams = ref<{ id: string; name: string }[]>([])
+const teamAutoAssigned = ref(false)
+const teamAssignmentMessage = ref('')
 const strategies = ref<{ id: string; code: string | null; name: string; description: string | null }[]>([])
 type Beneficiary = { name: string; birthDate: string; dni: string; email: string; phone: string }
 const emptyBeneficiary = (): Beneficiary => ({ name: '', birthDate: '', dni: '', email: '', phone: '' })
@@ -59,19 +64,26 @@ const form = reactive<{ students: Beneficiary[]; [key: string]: any }>({
   testimonials: false, 
   dataUsage: false 
 })
-const holderProvinces = computed(() => Object.keys(ubigeoPeru[form.holderDepartment] || {}).sort((a, b) => a.localeCompare(b, 'es')))
-const holderDistricts = computed(() => ubigeoPeru[form.holderDepartment]?.[form.holderProvince] || [])
+const holderProvinces = computed(() => listarProvinciasInei(form.holderDepartment))
+const holderDistricts = computed(() => listarDistritosInei(form.holderDepartment, form.holderProvince))
 
 const contractNumber = ref(''); 
 const isCash = computed(() => form.paymentMode === 'contado'); 
 const isFinanced = computed(() => form.paymentMode === 'financiado'); 
 const showPlan = computed(() => form.program && form.program !== 'Kids')
 
-const applyDniLookup = (target: 'holder' | number, data: { nombres: string; apellidoPaterno: string; apellidoMaterno: string; fechaNacimiento?: string }) => {
+const applyDniLookup = async (target: 'holder' | number, data: { nombres: string; apellidoPaterno: string; apellidoMaterno: string; fechaNacimiento?: string; ubigeoRuc?: string; departamento?: string; provincia?: string; distrito?: string }) => {
   const name = `${data.nombres} ${data.apellidoPaterno} ${data.apellidoMaterno}`.replace(/\s+/g, ' ').trim()
   if (target === 'holder') {
     form.holderName = name
     if (data.fechaNacimiento) form.holderBirthDate = data.fechaNacimiento
+    if (data.departamento && data.provincia && data.distrito) {
+      form.holderDepartment = data.departamento
+      await nextTick()
+      form.holderProvince = data.provincia
+      await nextTick()
+      form.holderDistrict = data.distrito
+    }
   } else {
     const student = form.students[target]
     if (!student) return
@@ -113,6 +125,9 @@ const loadContract = async () => {
       credentials: 'include' 
     }); 
     const contract = response.data; 
+    advisorTeams.value = Array.isArray(contract.advisor?.teamMemberships)
+      ? contract.advisor.teamMemberships.map((membership: { team: { id: string; name: string } }) => membership.team)
+      : []
     cancellationRequest.value = contract.cancellationRequest || null
     isLocked.value = Boolean(contract.signedAt) || contract.status !== 'REVISION'
     contractNumber.value = 
@@ -222,7 +237,22 @@ const submit = async () => {
   } 
 }
 
-onMounted(async () => { await Promise.all([loadTeams(), loadStrategies(), loadContract()]) })
+onMounted(async () => {
+  await Promise.all([loadTeams(), loadStrategies(), loadContract()])
+  const currentAdvisorTeams = teams.value.filter((team) => advisorTeams.value.some((advisorTeam) => advisorTeam.id === team.id))
+  const onlyAdvisorTeam = currentAdvisorTeams.length === 1 ? currentAdvisorTeams[0] : undefined
+  if (onlyAdvisorTeam) {
+    form.contractDistrict = onlyAdvisorTeam.name
+    teamAutoAssigned.value = true
+  } else if (currentAdvisorTeams.length > 1) {
+    const savedTeamIsCurrent = currentAdvisorTeams.some((team) => team.name === form.contractDistrict)
+    if (!savedTeamIsCurrent) {
+      teamAssignmentMessage.value = 'El asesor pertenece a varios equipos activos y la matrícula no identifica uno de ellos; verifica el equipo antes de guardar.'
+    }
+  } else {
+    teamAssignmentMessage.value = 'El asesor no tiene un único equipo activo asignado; se conserva el valor registrado y puedes elegir un equipo si corresponde.'
+  }
+})
 </script>
 
 <template>
@@ -275,10 +305,6 @@ onMounted(async () => { await Promise.all([loadTeams(), loadStrategies(), loadCo
             <UiCardDescription>Información principal y ubicación de residencia.</UiCardDescription>
           </UiCardHeader>
           <UiCardContent class="grid gap-5 p-6 sm:grid-cols-2 lg:grid-cols-4">
-            <div class="space-y-2 lg:col-span-2">
-              <UiLabel>Nombre completo</UiLabel>
-              <UiInput v-model="form.holderName" required />
-            </div>
             <div class="space-y-2">
               <UiLabel>DNI / CE</UiLabel>
               <DniLookupField v-model="form.holderDni" required @lookup="applyDniLookup('holder', $event)" />
@@ -286,6 +312,10 @@ onMounted(async () => { await Promise.all([loadTeams(), loadStrategies(), loadCo
             <div class="space-y-2">
               <UiLabel>Fecha nacimiento</UiLabel>
               <UiDatePicker v-model="form.holderBirthDate" required />
+            </div>
+            <div class="space-y-2 lg:col-span-2">
+              <UiLabel>Nombre completo</UiLabel>
+              <UiInput v-model="form.holderName" required />
             </div>
             <div class="space-y-2">
               <UiLabel>Email</UiLabel>
@@ -300,7 +330,7 @@ onMounted(async () => { await Promise.all([loadTeams(), loadStrategies(), loadCo
               <UiInput v-model="form.holderAddress" required />
             </div>
             <div class="space-y-2">
-              <UiLabel>Departamento</UiLabel><UiSelect v-model="form.holderDepartment"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="item in departments" :key="item" :value="item">{{ item }}</UiSelectItem></UiSelectContent></UiSelect>
+              <UiLabel>Departamento</UiLabel><UiSelect v-model="form.holderDepartment"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="item in holderDepartments" :key="item" :value="item">{{ item }}</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="space-y-2">
               <UiLabel>Provincia</UiLabel><UiSelect v-model="form.holderProvince"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="item in holderProvinces" :key="item" :value="item">{{ item }}</UiSelectItem></UiSelectContent></UiSelect>
@@ -342,6 +372,8 @@ onMounted(async () => { await Promise.all([loadTeams(), loadStrategies(), loadCo
             </div>
             <div class="space-y-2">
               <UiLabel>Equipo comercial</UiLabel><UiSelect v-model="form.contractDistrict"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem v-for="item in teams" :key="item.id" :value="item.name">{{ item.name }} · {{ item.site.name }}</UiSelectItem></UiSelectContent></UiSelect>
+              <p v-if="teamAutoAssigned" class="text-xs text-muted-foreground">Asignado automáticamente según el equipo activo del asesor.</p>
+              <p v-else-if="teamAssignmentMessage" class="text-xs text-amber-700">{{ teamAssignmentMessage }}</p>
             </div>
             <div class="space-y-2">
               <UiLabel>Modalidad</UiLabel>
@@ -362,21 +394,44 @@ onMounted(async () => { await Promise.all([loadTeams(), loadStrategies(), loadCo
             <div class="space-y-2">
               <UiLabel>Modalidad de pago</UiLabel><UiSelect v-model="form.paymentMode"><UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger><UiSelectContent><UiSelectItem value="contado">Contado</UiSelectItem><UiSelectItem value="financiado">Financiado</UiSelectItem></UiSelectContent></UiSelect>
             </div>
-            <div v-for="(student, index) in form.students" :key="index"
-              class="grid gap-3 rounded-lg border p-4 sm:col-span-2 sm:grid-cols-2">
+          </UiCardContent>
+        </UiCard>
+        
+        <div class="space-y-4">
+          <UiCard v-for="(student, index) in form.students" :key="index" >
+            <UiCardHeader>
               <div class="flex items-center justify-between sm:col-span-2">
                 <p class="font-medium">Beneficiario {{ index + 1 }}</p>
                 <UiButton v-if="form.students.length > 1" type="button" variant="outline" size="sm" @click="removeBeneficiary(index)">Eliminar</UiButton>
               </div>
-              <UiInput v-model="student.name" placeholder="Nombre completo" />
-              <DniLookupField v-model="student.dni" @lookup="applyDniLookup(index, $event)" />
-              <UiDatePicker v-model="student.birthDate" />
-              <UiInput v-model="student.email" type="email" placeholder="Email" />
-              <UiInput v-model="student.phone" placeholder="Celular" />
-            </div>
-            <UiButton type="button" variant="outline" class="sm:col-span-2" @click="addBeneficiary">Agregar beneficiario</UiButton>
-          </UiCardContent>
-        </UiCard>
+            </UiCardHeader>
+            <UiCardContent class="grid gap-5 p-6 sm:grid-cols-2 lg:grid-cols-4">
+              <div class="space-y-2">
+                <UiLabel>DNI / CE</UiLabel>
+                <DniLookupField v-model="student.dni" @lookup="applyDniLookup(index, $event)" />
+              </div>
+              <div class="space-y-2">
+                <UiLabel>Fecha nacimiento</UiLabel>
+                <UiDatePicker v-model="student.birthDate" />
+              </div>
+              <div class="space-y-2 lg:col-span-2">
+                <UiLabel>Nombre completo</UiLabel>
+                <UiInput v-model="student.name" placeholder="Nombre completo" />
+              </div>
+              <div class="space-y-2">
+                <UiLabel>Email</UiLabel>
+                <UiInput v-model="student.email" type="email" placeholder="Email" />
+              </div>
+              <div class="space-y-2">
+                <UiLabel>Celular</UiLabel>
+                <UiInput v-model="student.phone" placeholder="Celular" />
+              </div>
+            </UiCardContent>
+
+          </UiCard>
+          <UiButton type="button" variant="outline" class="w-full" @click="addBeneficiary">Agregar beneficiario</UiButton>
+        </div>
+
         <UiCard>
           <UiCardHeader>
             <UiCardTitle>Detalles económicos y autorizaciones</UiCardTitle>

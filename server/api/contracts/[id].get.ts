@@ -13,7 +13,18 @@ export default defineEventHandler(async (event) => {
   const contract = await prisma.contract.findUnique({
     where: { id },
     include: {
-      user: { select: { id: true, name: true, username: true, email: true } },
+      user: {
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          email: true,
+          teamMemberships: {
+            where: { team: { active: true, site: { active: true } } },
+            select: { team: { select: { id: true, name: true } } }
+          }
+        }
+      },
       customer: true,
       students: { include: { student: true }, orderBy: { id: 'asc' } },
       otherData: true,

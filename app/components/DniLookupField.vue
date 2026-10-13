@@ -1,6 +1,19 @@
 <script setup lang="ts">
 import { LoaderCircle, Search } from '@lucide/vue'
 
+type DniLookupData = {
+  nombres: string
+  apellidoPaterno: string
+  apellidoMaterno: string
+  fechaNacimiento?: string
+  ubigeoRuc?: string
+  ubigeo?: string
+  ubigeoFuente?: 'SUNAT' | 'DNIPERU'
+  departamento?: string
+  provincia?: string
+  distrito?: string
+}
+
 const props = withDefaults(defineProps<{
   modelValue: string
   required?: boolean
@@ -8,7 +21,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
-  lookup: [data: { nombres: string; apellidoPaterno: string; apellidoMaterno: string; fechaNacimiento?: string }]
+  lookup: [data: DniLookupData]
 }>()
 
 const loading = ref(false)
@@ -25,7 +38,7 @@ const lookup = async () => {
 
   loading.value = true
   try {
-    const response = await $fetch<{ data: { nombres: string; apellidoPaterno: string; apellidoMaterno: string; fechaNacimiento?: string } }>(`/api/dni/${dni}`, { credentials: 'include' })
+    const response = await $fetch<{ data: DniLookupData }>(`/api/dni/${dni}`, { credentials: 'include' })
     emit('lookup', response.data)
   } catch (err: any) {
     error.value = err?.data?.message || err?.data?.statusMessage || 'No se encontraron datos para este DNI.'

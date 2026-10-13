@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { ArrowLeft, Save } from '@lucide/vue'
 import { ubigeoPeru } from '~/shared/ubigeo'
+import { listarDepartamentosInei, listarDistritosInei, listarProvinciasInei } from '~/shared/ubigeo-inei'
 
 definePageMeta({ middleware: 'auth', ssr: false })
 
 const strategies = ref<{ id: string; code: string | null; name: string; description: string | null }[]>([])
 const departments = Object.keys(ubigeoPeru).sort((a, b) => a.localeCompare(b, 'es'))
+const holderDepartments = listarDepartamentosInei()
 const teams = ref<{ id: string; name: string; site: { id: string; name: string } }[]>([])
+const teamAutoAssigned = ref(false)
+const teamAssignmentMessage = ref('')
 const installments = Array.from({ length: 13 }, (_, index) => index + 2)
 type Beneficiary = { name: string; birthDate: string; dni: string; email: string; phone: string }
 const emptyBeneficiary = (): Beneficiary => ({ name: '', birthDate: '', dni: '', email: '', phone: '' })
@@ -26,13 +30,29 @@ const today = new Intl.DateTimeFormat('es-PE', { dateStyle: 'long' }).format(new
 const isCash = computed(() => form.paymentMode === 'contado')
 const isFinanced = computed(() => form.paymentMode === 'financiado')
 const showPlan = computed(() => form.program !== '' && form.program !== 'Kids')
-const holderProvinces = computed(() => Object.keys(ubigeoPeru[form.holderDepartment] || {}).sort((a, b) => a.localeCompare(b, 'es')))
-const holderDistricts = computed(() => ubigeoPeru[form.holderDepartment]?.[form.holderProvince] || [])
+const holderProvinces = computed(() => listarProvinciasInei(form.holderDepartment))
+const holderDistricts = computed(() => listarDistritosInei(form.holderDepartment, form.holderProvince))
 
 const loadTeams = async () => {
   try {
-    const response = await $fetch<{ data: typeof teams.value }>('/api/teams', { credentials: 'include' })
+    const response = await $fetch<{
+      data: typeof teams.value
+      assignedTeamId: string | null
+      assignedTeamCount: number
+    }>('/api/teams', { credentials: 'include' })
     teams.value = response.data
+    if (response.assignedTeamCount === 1 && response.assignedTeamId) {
+      const assignedTeam = response.data.find((team) => team.id === response.assignedTeamId)
+      if (assignedTeam) {
+        form.contractDistrict = assignedTeam.name
+        teamAutoAssigned.value = true
+        return
+      }
+    }
+
+    teamAssignmentMessage.value = response.assignedTeamCount > 1
+      ? 'Tu usuario pertenece a más de un equipo activo; selecciona el que corresponde a esta matrícula.'
+      : 'Tu usuario no tiene un equipo activo asignado; selecciona el equipo correspondiente.'
   } catch {
     formError.value = 'No se pudieron cargar los equipos comerciales.'
   }
@@ -47,11 +67,18 @@ const loadStrategies = async () => {
   }
 }
 
-const applyDniLookup = (target: 'holder' | number, data: { nombres: string; apellidoPaterno: string; apellidoMaterno: string; fechaNacimiento?: string }) => {
+const applyDniLookup = async (target: 'holder' | number, data: { nombres: string; apellidoPaterno: string; apellidoMaterno: string; fechaNacimiento?: string; ubigeoRuc?: string; departamento?: string; provincia?: string; distrito?: string }) => {
   const name = `${data.nombres} ${data.apellidoPaterno} ${data.apellidoMaterno}`.replace(/\s+/g, ' ').trim()
   if (target === 'holder') {
     form.holderName = name
     if (data.fechaNacimiento) form.holderBirthDate = data.fechaNacimiento
+    if (data.departamento && data.provincia && data.distrito) {
+      form.holderDepartment = data.departamento
+      await nextTick()
+      form.holderProvince = data.provincia
+      await nextTick()
+      form.holderDistrict = data.distrito
+    }
   } else {
     const student = students.value[target]
     if (!student) return
@@ -250,6 +277,8 @@ const handleSubmit = async () => {
                   <UiSelectItem v-for="item in teams" :key="item.id" :value="item.name">{{ item.name }} · {{ item.site.name }}</UiSelectItem>
                 </UiSelectContent>
               </UiSelect>
+              <p v-if="teamAutoAssigned" class="text-xs text-muted-foreground">Asignado automáticamente según el equipo activo de tu usuario.</p>
+              <p v-else-if="teamAssignmentMessage" class="text-xs text-amber-700">{{ teamAssignmentMessage }}</p>
             </div>
           </UiCardContent>
         </UiCard>
@@ -297,7 +326,7 @@ const handleSubmit = async () => {
                   <UiSelectValue placeholder="Seleccione..." />
                 </UiSelectTrigger>
                 <UiSelectContent>
-                  <UiSelectItem v-for="item in departments" :key="item" :value="item">{{ item }}</UiSelectItem>
+                  <UiSelectItem v-for="item in holderDepartments" :key="item" :value="item">{{ item }}</UiSelectItem>
                 </UiSelectContent>
               </UiSelect>
               <p v-if="fieldErrors.holderDepartment" class="text-xs text-destructive">{{ fieldErrors.holderDepartment }}</p>
@@ -377,18 +406,18 @@ const handleSubmit = async () => {
                 <UiButton v-if="students.length > 1" type="button" variant="outline" size="sm" @click="removeBeneficiary(index)">Eliminar</UiButton>
               </div>
             </UiCardHeader>
-            <UiCardContent class="grid gap-5 p-6 sm:grid-cols-2">
-              <div class="space-y-2 sm:col-span-2">
-                <UiLabel :for="`beneficiary${index}Name`">Nombre completo</UiLabel>
-                <UiInput :id="`beneficiary${index}Name`" v-model="student.name" />
+            <UiCardContent class="grid gap-5 p-6 sm:grid-cols-2 lg:grid-cols-4">
+              <div class="space-y-2">
+                <UiLabel :for="`beneficiary${index}Dni`">DNI / CE</UiLabel>
+                <DniLookupField :id="`beneficiary${index}Dni`" v-model="student.dni" @lookup="applyDniLookup(index, $event)" />
               </div>
               <div class="space-y-2">
                 <UiLabel :for="`beneficiary${index}BirthDate`">Fecha nacimiento</UiLabel>
                 <UiDatePicker :id="`beneficiary${index}BirthDate`" v-model="student.birthDate" />
               </div>
-              <div class="space-y-2">
-                <UiLabel :for="`beneficiary${index}Dni`">DNI / CE</UiLabel>
-                <DniLookupField :id="`beneficiary${index}Dni`" v-model="student.dni" @lookup="applyDniLookup(index, $event)" />
+              <div class="space-y-2 lg:col-span-2">
+                <UiLabel :for="`beneficiary${index}Name`">Nombre completo</UiLabel>
+                <UiInput :id="`beneficiary${index}Name`" v-model="student.name" />
               </div>
               <div class="space-y-2">
                 <UiLabel :for="`beneficiary${index}Email`">Email</UiLabel>
