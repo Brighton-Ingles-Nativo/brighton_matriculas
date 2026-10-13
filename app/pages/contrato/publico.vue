@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckCircle2, FileDown, LoaderCircle } from '@lucide/vue'
+import { CheckCircle2, LoaderCircle } from '@lucide/vue'
 
 definePageMeta({ layout: 'public' })
 
@@ -33,8 +33,6 @@ const display = (value: unknown) => value === null || value === undefined || val
 const canSign = computed(() => contract.value?.status === 'REVISION' && !contract.value.signedAt)
 const showTerms = computed(() => canSign.value || Boolean(contract.value?.signedAt))
 const status = computed(() => contract.value?.status === 'ANULADO' ? 'Contrato anulado' : contract.value?.status === 'FIRMADO' || contract.value?.signedAt ? 'Contrato firmado' : 'Listo para firma')
-const openPdf = () => window.open(`/api/contracts/${id.value}/pdf?token=${encodeURIComponent(token.value)}`, '_blank', 'noopener,noreferrer')
-
 const load = async () => {
   if (!id.value || !token.value) { error.value = 'El enlace del contrato está incompleto.'; loading.value = false; return }
   try {
@@ -76,9 +74,6 @@ onMounted(load)
           <p class="text-lg font-semibold">BRIGHTON INGLÉS NATIVO S.A.C.</p>
           <p class="text-sm opacity-80">Vista pública de matrícula</p>
         </div>
-        <!-- <UiButton v-if="contract" variant="secondary" size="sm" class="gap-2" @click="openPdf">
-          <FileDown class="size-4" /> Abrir documento PDF
-        </UiButton> -->
       </div>
     </header>
     <main class="mx-auto max-w-5xl space-y-5 px-4 py-8">
