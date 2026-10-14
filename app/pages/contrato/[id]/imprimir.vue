@@ -39,7 +39,7 @@ interface ContractPrint {
   notes: string | null
   testimonials: boolean
   dataUsage: boolean | null
-  status: 'REVISION' | 'FIRMADO' | 'ANULADO'
+  status: 'REVISION' | 'APROBADO' | 'ANULADO'
   signedAccept: boolean
   signedAt: string | null
   signedIp: string | null
@@ -177,7 +177,7 @@ onMounted(async () => {
         <div class="legacy-terms" v-html="termsHtml" />
       </section>
 
-      <section v-if="contract.signedAccept || contract.signedAt || contract.status === 'FIRMADO'" class="signature">
+      <section v-if="contract.signedAccept || contract.signedAt" class="signature">
         <div class="signature-notice">
           <strong>Contrato aceptado digitalmente</strong>
           <p>Validado el {{ formatDateTime(contract.signedAt) }}.</p>

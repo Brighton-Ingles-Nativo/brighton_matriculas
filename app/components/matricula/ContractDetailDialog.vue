@@ -50,10 +50,12 @@ interface Contract {
   dataAuthorization: boolean
   testimonials: boolean
   dataUsage: boolean | null
-  status: 'REVISION' | 'FIRMADO' | 'ANULADO'
+  status: 'REVISION' | 'APROBADO' | 'ANULADO'
   signedAccept: boolean
   signedAt: string | null
   signedIp: string | null
+  tokenExpiresAt: string | null
+  publicLinkActive: boolean
   advisor: { name: string; username: string }
   receipts: Receipt[]
   students?: Array<{ id?: string; name: string; birthDate: string | null; dni: string | null; email: string | null; phone: string | null }>
@@ -71,6 +73,7 @@ const emit = defineEmits<{
   'update:open': [value: boolean]
   accept: []
   publicView: []
+  publicLinkRegenerated: [tokenExpiresAt: string]
   downloadPdf: []
   printContract: []
 }>()
@@ -91,22 +94,25 @@ const copyError = ref('')
 const publicUrl = ref('')
 const copiedTarget = ref<'message' | 'link' | null>(null)
 const linkExpired = ref(false)
+const now = ref(Date.now())
+let publicLinkClock: ReturnType<typeof setInterval> | undefined
 const { csrfHeaders } = useAuth()
 
 const statusLabel = computed(() => {
   if (!props.contract) return '—'
-  if (props.contract.status === 'ANULADO') return 'Anulado'
-  if (props.contract.status === 'FIRMADO') return 'Estado heredado'
-  return 'En revisión'
+  return ({ REVISION: 'En revisión', APROBADO: 'Aprobado', ANULADO: 'Anulado' })[props.contract.status]
 })
 
 const statusVariant = computed<'default' | 'outline' | 'destructive'>(() => {
   if (!props.contract) return 'outline'
-  if (props.contract.status === 'ANULADO') return 'destructive'
-  return 'outline'
+  return ({ REVISION: 'outline', APROBADO: 'default', ANULADO: 'destructive' })[props.contract.status]
 })
 
-const isSigned = computed(() => Boolean(props.contract && (props.contract.signedAccept || props.contract.signedAt || props.contract.status === 'FIRMADO')))
+const isSigned = computed(() => Boolean(props.contract && (props.contract.signedAccept || props.contract.signedAt)))
+const hasValidPublicLink = computed(() => Boolean(props.contract?.publicLinkActive && props.contract.tokenExpiresAt && Date.parse(props.contract.tokenExpiresAt) > now.value))
+const isPublicLinkExpired = computed(() => Boolean(props.contract?.tokenExpiresAt && Date.parse(props.contract.tokenExpiresAt) <= now.value))
+const publicLinkLabel = computed(() => hasValidPublicLink.value ? 'Enlace vigente' : isPublicLinkExpired.value ? 'Enlace vencido' : 'Sin enlace')
+const publicLinkTitle = computed(() => hasValidPublicLink.value ? 'Abrir enlace público vigente' : isPublicLinkExpired.value ? 'El enlace expiró; regénéralo para volver a abrirlo' : 'Genera un enlace público para poder abrirlo')
 const termsAvailable = computed(() => Boolean(props.contract && props.contract.status !== 'ANULADO'))
 const canAccept = computed(() => Boolean(props.contract && props.contract.status !== 'ANULADO' && !isSigned.value && termsHtml.value && !termsError.value))
 
@@ -180,13 +186,14 @@ const regeneratePublicLink = async () => {
   sendError.value = ''
   emailSendError.value = ''
   try {
-    const response = await $fetch<{ success: boolean; url: string }>(`/api/contracts/${props.contract.id}/public-link`, {
+    const response = await $fetch<{ success: boolean; url: string; tokenExpiresAt: string }>(`/api/contracts/${props.contract.id}/public-link`, {
       method: 'POST',
       headers: await csrfHeaders(),
       credentials: 'include'
     })
     publicUrl.value = response.url
     linkExpired.value = false
+    emit('publicLinkRegenerated', response.tokenExpiresAt)
   } catch (error: any) {
     sendError.value = error?.data?.message || error?.data?.statusMessage || 'No se pudo regenerar el enlace público.'
   } finally {
@@ -275,6 +282,14 @@ watch(() => props.contract?.id, () => {
   linkExpired.value = false
   loadTerms()
 })
+
+onMounted(() => {
+  publicLinkClock = setInterval(() => { now.value = Date.now() }, 30_000)
+})
+
+onUnmounted(() => {
+  if (publicLinkClock) clearInterval(publicLinkClock)
+})
 </script>
 
 <template>
@@ -286,8 +301,19 @@ watch(() => props.contract?.id, () => {
           <UiDialogTitle>{{ sendPreviewOpen ? 'Preparar envío del contrato' : contract ? `Contrato ${contract.contractNumber}` : 'Detalle del contrato' }}</UiDialogTitle>
           <UiDialogDescription>{{ sendPreviewOpen ? 'Revisa el contenido y envíalo directamente al correo del cliente.' : 'Detalle completo del registro, contrato y movimientos de pago.' }}</UiDialogDescription>
         </div>
-        <div v-if="contract && !sendPreviewOpen" class="flex flex-wrap justify-end gap-2"><UiButton v-if="!isSigned && contract.status !== 'ANULADO'" variant="outline" size="sm" class="gap-2" :disabled="sendLoading" @click="prepareSendPreview"><Mail class="size-4" /> {{ sendLoading ? 'Preparando…' : 'Enviar contrato' }}</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('publicView')"><ExternalLink class="size-4" /> Vista pública</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('downloadPdf')"><Download class="size-4" /> Descargar PDF</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('printContract')"><Printer class="size-4" /> Imprimir contrato</UiButton></div>
+        <div v-if="contract && !sendPreviewOpen" class="flex flex-wrap justify-end gap-2">
+          <UiButton v-if="!isSigned && contract.status !== 'ANULADO'" variant="outline" size="sm" class="gap-2" :disabled="sendLoading" @click="prepareSendPreview"><Mail class="size-4" /> {{ sendLoading ? 'Preparando…' : 'Enviar contrato' }}</UiButton>
+          <!-- <span :class="['self-center text-xs font-medium', hasValidPublicLink ? 'text-emerald-700' : 'text-amber-700']">{{ publicLinkLabel }}</span> -->
+          <UiButton v-if="!hasValidPublicLink" type="button" variant="outline" size="sm" class="gap-2" :disabled="sendLoading" @click="regeneratePublicLink"><RefreshCw class="size-4" /> {{ sendLoading ? 'Regenerando…' : 'Regenerar enlace' }}</UiButton>
+          <UiButton v-else type="button" variant="outline" size="sm" class="gap-2" :title="publicLinkTitle" :disabled="!hasValidPublicLink" @click="emit('publicView')"><ExternalLink class="size-4" /> Vista pública</UiButton>
+          <UiButton variant="outline" size="sm" class="gap-2" @click="emit('downloadPdf')"><Download class="size-4" /> Descargar PDF</UiButton>
+          <UiButton variant="outline" size="sm" class="gap-2" @click="emit('printContract')"><Printer class="size-4" /> Imprimir contrato</UiButton>
+        </div>
       </div>
+
+      <UiAlert v-if="contract && !sendPreviewOpen && sendError" variant="destructive" class="mx-6 mt-4">
+        <UiAlertDescription>{{ sendError }}</UiAlertDescription>
+      </UiAlert>
 
       <div v-if="sendPreviewOpen" class="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto p-6">
 

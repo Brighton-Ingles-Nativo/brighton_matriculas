@@ -30,7 +30,7 @@
             <UiInput v-model="holderName" placeholder="Nombre del titular" aria-label="Nombre del titular" />
             <UiInput v-model="holderDni" placeholder="DNI del titular" aria-label="DNI del titular" />
             <UiInput v-if="canFilterAdvisor" v-model="advisorName" placeholder="Nombre del asesor" aria-label="Nombre del asesor" />
-            <UiSelect v-model="status"><UiSelectTrigger class="w-full" aria-label="Estado del contrato"><UiSelectValue placeholder="Todos los estados" /></UiSelectTrigger><UiSelectContent><UiSelectItem value="revision">En revisión</UiSelectItem><UiSelectItem value="legacy">Estado heredado</UiSelectItem><UiSelectItem value="anulado">Anulado</UiSelectItem></UiSelectContent></UiSelect>
+            <UiSelect v-model="status"><UiSelectTrigger class="w-full" aria-label="Estado del contrato"><UiSelectValue placeholder="Todos los estados" /></UiSelectTrigger><UiSelectContent><UiSelectItem value="revision">En revisión</UiSelectItem><UiSelectItem value="aprobado">Aprobado</UiSelectItem><UiSelectItem value="anulado">Anulado</UiSelectItem></UiSelectContent></UiSelect>
             <UiSelect v-model="signature"><UiSelectTrigger class="w-full" aria-label="Firma del cliente"><UiSelectValue placeholder="Todas las firmas" /></UiSelectTrigger><UiSelectContent><UiSelectItem value="firmado">Firmado</UiSelectItem><UiSelectItem value="no_firmado">No firmado</UiSelectItem></UiSelectContent></UiSelect>
           </div>
         </UiCardHeader>
@@ -142,7 +142,7 @@
     <MatriculaReceiptCreateDialog v-model:open="receiptDialogOpen" :contract="receiptContract" @created="onReceiptCreated" />
     <MatriculaContractDetailDialog v-model:open="detailOpen" :contract="selectedContract" :loading="detailLoading"
       :error="detailError" :action-loading="detailActionLoading"
-      @accept="acceptContract" @public-view="openPublicView" @download-pdf="downloadContractPdf" @print-contract="printContract" />
+      @accept="acceptContract" @public-view="openPublicView" @public-link-regenerated="onPublicLinkRegenerated" @download-pdf="downloadContractPdf" @print-contract="printContract" />
   </div>
 </template>
 
@@ -158,7 +158,7 @@ interface ContractRow {
   program: string; 
   plan: string | null; 
   programValue: string; 
-  status: 'REVISION' | 'FIRMADO' | 'ANULADO';
+  status: 'REVISION' | 'APROBADO' | 'ANULADO';
   signedAccept: boolean;
   signedAt: string | null;
   registeredAt: string; 
@@ -224,6 +224,8 @@ interface ContractDetail extends ContractRow {
   testimonials: boolean; 
   dataUsage: boolean | null; 
   signedIp: string | null;
+  tokenExpiresAt: string | null;
+  publicLinkActive: boolean;
   receipts: ReceiptDetail[] 
 }
 
@@ -266,7 +268,7 @@ const canEdit = computed(() => ['admin', 'asesor', 'supervisor', 'verificador'].
 const canFilterAdvisor = computed(() => user.value?.role?.name !== 'asesor')
 const canManageReceipts = computed(() => ['admin', 'asesor'].includes(user.value?.role?.name || ''))
 const canCreateEnrollment = computed(() => ['admin', 'asesor', 'supervisor'].includes(user.value?.role?.name || ''))
-const isSigned = (row?: ContractRow) => Boolean(row && (row.signedAccept || row.signedAt || row.status === 'FIRMADO'))
+const isSigned = (row?: ContractRow) => Boolean(row && (row.signedAccept || row.signedAt))
 const isContractLocked = (row?: ContractRow) => !row || isSigned(row) || row.status === 'ANULADO'
 
 const exportUrl = computed(() => {
@@ -388,14 +390,36 @@ const acceptContract = async () => {
 
 const openPublicView = async () => { 
   if (!selectedContract.value) return; 
+  detailError.value = ''
+  if (!selectedContract.value.publicLinkActive || !selectedContract.value.tokenExpiresAt || Date.parse(selectedContract.value.tokenExpiresAt) <= Date.now()) {
+    selectedContract.value.publicLinkActive = false
+    detailError.value = 'El enlace público expiró. Regénéralo para volver a abrirlo.'
+    return
+  }
+  const publicWindow = window.open('about:blank', '_blank')
+  if (!publicWindow) {
+    detailError.value = 'El navegador bloqueó la ventana emergente. Permite ventanas emergentes para abrir la vista pública.'
+    return
+  }
   try { 
     const response = await $fetch<{ url: string }>(`/api/contracts/${selectedContract.value.id}/public-link`, { 
       credentials: 'include' 
     }); 
-    window.open(response.url, '_blank', 'noopener,noreferrer') 
+    publicWindow.opener = null
+    publicWindow.location.replace(response.url)
   } catch (error: any) { 
+    publicWindow.close()
+    if (error?.data?.statusCode === 409 || error?.statusCode === 409 || error?.status === 409) {
+      selectedContract.value.publicLinkActive = false
+    }
     detailError.value = error?.data?.message || error?.data?.statusMessage || 'No pudimos abrir la vista pública.'
   } 
+}
+
+const onPublicLinkRegenerated = (tokenExpiresAt: string) => {
+  if (!selectedContract.value) return
+  selectedContract.value.tokenExpiresAt = tokenExpiresAt
+  selectedContract.value.publicLinkActive = true
 }
 
 const downloadContractPdf = async () => {
@@ -456,8 +480,8 @@ const onReceiptCreated = async (receiptId: string) => {
   await navigateTo(`/recibo/${receiptId}`)
 }
 
-const statusLabel = (row: ContractRow) => row.status === 'ANULADO' ? 'Anulado' : row.status === 'FIRMADO' ? 'Estado heredado' : 'En revisión';
-const statusVariant = (row: ContractRow): 'default' | 'outline' | 'destructive' => row.status === 'ANULADO' ? 'destructive' : 'outline';
+const statusLabel = (row: ContractRow) => ({ REVISION: 'En revisión', APROBADO: 'Aprobado', ANULADO: 'Anulado' })[row.status];
+const statusVariant = (row: ContractRow): 'default' | 'outline' | 'destructive' => ({ REVISION: 'outline', APROBADO: 'default', ANULADO: 'destructive' })[row.status];
 
 const planClass = (plan: string | null) => ({ 
   Light: 'bg-amber-100 text-amber-800 border-amber-200', 

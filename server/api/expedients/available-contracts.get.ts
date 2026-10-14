@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
   const contracts = await prisma.contract.findMany({
     where: {
       AND: [
-        { OR: [{ signedAccept: true }, { signedAt: { not: null } }, { status: 'FIRMADO' }] },
+        { OR: [{ signedAccept: true }, { signedAt: { not: null } }] },
         contractAccessWhere(user)
       ],
       expedient: null,

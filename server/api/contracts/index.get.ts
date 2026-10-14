@@ -25,15 +25,15 @@ export default defineEventHandler(async (event) => {
 
   const statusFilter = status === 'revision'
     ? { status: 'REVISION' as const }
-    : status === 'legacy' || status === 'firmado'
-      ? { status: 'FIRMADO' as const }
+    : status === 'aprobado'
+      ? { status: 'APROBADO' as const }
       : status === 'anulado'
         ? { status: 'ANULADO' as const }
         : null
   const signatureFilter: Prisma.ContractWhereInput | null = signature === 'firmado'
-    ? { OR: [{ signedAccept: true }, { signedAt: { not: null } }, { status: 'FIRMADO' }] }
+    ? { OR: [{ signedAccept: true }, { signedAt: { not: null } }] }
     : signature === 'no_firmado'
-      ? { signedAccept: false, signedAt: null, status: { not: 'FIRMADO' } }
+      ? { signedAccept: false, signedAt: null }
       : null
 
   const clauses: Prisma.ContractWhereInput[] = [contractAccessWhere(user)]

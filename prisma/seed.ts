@@ -148,9 +148,9 @@ function decimal(value: unknown): Prisma.Decimal | null {
 
 function boolean(value: unknown): boolean { return value === true || value === 't' || value === 'true' || value === 1 || value === '1' }
 
-function contractStatus(status: unknown, accepted: unknown): 'REVISION' | 'FIRMADO' | 'ANULADO' {
+function contractStatus(status: unknown, accepted: unknown): 'REVISION' | 'APROBADO' | 'ANULADO' {
   if (text(status) === '-5') return 'ANULADO'
-  if (boolean(accepted)) return 'FIRMADO'
+  if (boolean(accepted)) return 'APROBADO'
   return 'REVISION'
 }
 
@@ -333,6 +333,7 @@ async function main(): Promise<void> {
       installmentValue: decimal(source.valor_cuota),
       otherPayment: text(source.otro_pago),
       status: contractStatus(source.estado, source.acepto),
+      signedAccept: boolean(source.acepto),
       createdAt: date(source.created_at) ?? new Date(),
       updatedAt: date(source.updated_at) ?? new Date(),
       signedAt: date(source.acepto_fecha),

@@ -9,7 +9,7 @@ interface Contract {
   contractDepartment: string | null; contractProvince: string | null; contractDistrict: string | null
   program: string; plan: string | null; modality: string | null; programValue: string; initialPayment: string | null; balance: string | null; installmentCount: number | null; installmentValue: string | null
   strategy: string; currentSituation: string; housingType: string; paymentStartDate: string | null; notes: string | null; dataAuthorization: boolean; testimonials: boolean; dataUsage: boolean | null
-  status: 'REVISION' | 'FIRMADO' | 'ANULADO'; signedAccept: boolean; signedAt: string | null; signedIp: string | null; registeredAt: string; receipts: Receipt[]
+  status: 'REVISION' | 'APROBADO' | 'ANULADO'; signedAccept: boolean; signedAt: string | null; signedIp: string | null; registeredAt: string; receipts: Receipt[]
   students: Array<{ name: string; birthDate: string | null; dni: string | null; email: string | null; phone: string | null }>
 }
 
@@ -30,10 +30,10 @@ const formatDate = (value: string | null | undefined) => value ? new Intl.DateTi
 const formatDateTime = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'
 const money = (value: string | null | undefined) => value ? new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(value)) : '—'
 const display = (value: unknown) => value === null || value === undefined || value === '' ? '—' : String(value)
-const isSigned = computed(() => Boolean(contract.value && (contract.value.signedAccept || contract.value.signedAt || contract.value.status === 'FIRMADO')))
+const isSigned = computed(() => Boolean(contract.value && (contract.value.signedAccept || contract.value.signedAt)))
 const canSign = computed(() => Boolean(contract.value && contract.value.status !== 'ANULADO' && !isSigned.value))
 const showTerms = computed(() => Boolean(contract.value && contract.value.status !== 'ANULADO'))
-const status = computed(() => contract.value?.status === 'ANULADO' ? 'Anulado' : contract.value?.status === 'FIRMADO' ? 'Estado heredado' : 'En revisión')
+const status = computed(() => ({ REVISION: 'En revisión', APROBADO: 'Aprobado', ANULADO: 'Anulado' })[contract.value?.status || 'REVISION'])
 const load = async () => {
   if (!id.value || !token.value) { error.value = 'El enlace del contrato está incompleto.'; loading.value = false; return }
   try {

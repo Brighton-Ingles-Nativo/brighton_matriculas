@@ -25,8 +25,8 @@ const nf = new Intl.NumberFormat('es-PE')
 const money = (value: number) => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN', maximumFractionDigits: 0 }).format(value || 0)
 const formatValue = (metric: Metric, value = metric.value) => metric.format === 'currency' ? money(value) : metric.format === 'percent' ? `${nf.format(value)}%` : metric.format === 'days' ? `${nf.format(value)} d` : nf.format(value)
 const firstName = computed(() => user.value?.name?.split(' ')[0] || 'bienvenido')
-const statusLabels: Record<string, string> = { REVISION: 'En revisión', FIRMADO: 'Firmado', ANULADO: 'Anulado', CREADO: 'Por revisar', REBOTADO: 'Rebotado', AGENDADO: 'Cita programada', OBSERVADO: 'Con observaciones', VERIFICADO: 'Verificado', ANULACION_PENDIENTE: 'Firma pendiente' }
-const statusTone: Record<string, string> = { REVISION: 'pending', FIRMADO: 'signed', ANULADO: 'neutral', CREADO: 'review', REBOTADO: 'danger', AGENDADO: 'review', OBSERVADO: 'pending', VERIFICADO: 'signed', ANULACION_PENDIENTE: 'pending' }
+const statusLabels: Record<string, string> = { REVISION: 'En revisión', APROBADO: 'Aprobado', ANULADO: 'Anulado', CREADO: 'Por revisar', REBOTADO: 'Rebotado', AGENDADO: 'Cita programada', OBSERVADO: 'Con observaciones', VERIFICADO: 'Verificado', ANULACION_PENDIENTE: 'Firma pendiente' }
+const statusTone: Record<string, string> = { REVISION: 'pending', APROBADO: 'signed', ANULADO: 'neutral', CREADO: 'review', REBOTADO: 'danger', AGENDADO: 'review', OBSERVADO: 'pending', VERIFICADO: 'signed', ANULACION_PENDIENTE: 'pending' }
 const fmtStatus = (key: string) => statusLabels[key] || key.replaceAll('_', ' ')
 const metricIcons = [Users, FileText, Clock3, Coins]
 const chartSeries = computed(() => ['asistente_comercial', 'verificador'].includes(data.value?.role || '') ? [{ key: 'commercial', label: 'Recibidos', color: 'var(--secondary)' }, { key: 'verification', label: 'Derivados', color: 'var(--primary)' }] : [{ key: 'registered', label: 'Matrículas', color: 'var(--secondary)' }, { key: 'signed', label: 'Contratos firmados', color: 'var(--primary)' }])

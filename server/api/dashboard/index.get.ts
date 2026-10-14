@@ -29,12 +29,13 @@ export default defineEventHandler(async (event) => {
   const expedientWhere: Prisma.ExpedientWhereInput = { contract: contractWhere }
   const advisorWhere: Prisma.UserWhereInput = { role: { name: 'asesor' }, ...(visibleUserIds ? { id: { in: visibleUserIds } } : {}) }
 
-  const [contractSummary, previousContractSummary, signatureSummary, previousSignatureSummary, contractStatuses, previousContractStatuses, stockContractStatuses, expedientStatuses, stockExpedientStatuses, locationStatuses, pendingRequests, unreadNotifications, contractsWithoutExpedient, scheduledAppointments, advisors, trendContracts, trendExpedients, scheduleEvents] = await Promise.all([
+  const [contractSummary, previousContractSummary, signatureSummary, previousSignatureSummary, contractStatuses, signedContractCount, previousContractStatuses, stockContractStatuses, expedientStatuses, stockExpedientStatuses, locationStatuses, pendingRequests, unreadNotifications, contractsWithoutExpedient, scheduledAppointments, advisors, trendContracts, trendExpedients, scheduleEvents] = await Promise.all([
     prisma.contract.aggregate({ where: contractWhere, _count: { _all: true }, _sum: { programValue: true, initialPayment: true, balance: true } }),
     prisma.contract.aggregate({ where: { ...contractScope, registeredAt: { gte: previousSince, lt: since } }, _count: { _all: true }, _sum: { programValue: true } }),
     prisma.contract.aggregate({ where: { ...contractScope, signedAt: { gte: since, lte: now } }, _count: { _all: true }, _sum: { programValue: true } }),
     prisma.contract.aggregate({ where: { ...contractScope, signedAt: { gte: previousSince, lt: since } }, _count: { _all: true }, _sum: { programValue: true } }),
     prisma.contract.groupBy({ where: contractWhere, by: ['status'], _count: { _all: true } }),
+    prisma.contract.count({ where: { ...contractWhere, OR: [{ signedAccept: true }, { signedAt: { not: null } }] } }),
     prisma.contract.groupBy({ where: { ...contractScope, registeredAt: { gte: previousSince, lt: since } }, by: ['status'], _count: { _all: true } }),
     prisma.contract.groupBy({ where: contractScope, by: ['status'], _count: { _all: true } }),
     prisma.expedient.groupBy({ where: expedientWhere, by: ['status'], _count: { _all: true } }),
@@ -42,7 +43,7 @@ export default defineEventHandler(async (event) => {
     prisma.expedient.groupBy({ where: { contract: contractScope }, by: ['currentLocation', 'status'], _count: { _all: true } }),
     prisma.cancellationRequest.count({ where: { status: 'PENDIENTE', contract: contractScope } }),
     prisma.notification.count({ where: { recipientId: user.id, readAt: null } }),
-    prisma.contract.count({ where: { ...contractScope, status: 'FIRMADO', expedient: null } }),
+    prisma.contract.count({ where: { ...contractScope, OR: [{ signedAccept: true }, { signedAt: { not: null } }], expedient: null } }),
     prisma.expedient.count({ where: { ...expedientWhere, status: 'AGENDADO' } }),
     prisma.user.findMany({ where: advisorWhere, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
     prisma.contract.findMany({ where: { ...contractScope, OR: [{ registeredAt: { gte: since } }, { signedAt: { gte: since } }] }, select: { registeredAt: true, signedAt: true } }),
@@ -54,10 +55,13 @@ export default defineEventHandler(async (event) => {
   const advisorStatusGroups = canSeePerformance
     ? await prisma.contract.groupBy({ where: contractWhere, by: ['userId', 'status'], _count: { _all: true }, _sum: { programValue: true } })
     : []
+  const advisorSignatureGroups = canSeePerformance
+    ? await prisma.contract.groupBy({ where: { ...contractWhere, OR: [{ signedAccept: true }, { signedAt: { not: null } }] }, by: ['userId'], _count: { _all: true }, _sum: { programValue: true } })
+    : []
   const advisorPerformance = canSeePerformance ? advisors.map((advisor) => {
     const rows = advisorStatusGroups.filter((item) => item.userId === advisor.id)
     const total = rows.reduce((sum, item) => sum + item._count._all, 0)
-    const signedRow = rows.find((item) => item.status === 'FIRMADO')
+    const signedRow = advisorSignatureGroups.find((item) => item.userId === advisor.id)
     const signed = signedRow?._count._all || 0
     const cancelled = rows.find((item) => item.status === 'ANULADO')?._count._all || 0
     return { id: advisor.id, name: advisor.name, total, signed, cancelled, contracted: Number(signedRow?._sum.programValue || 0), signingRate: total ? Math.round(signed / total * 100) : 0 }
@@ -65,7 +69,7 @@ export default defineEventHandler(async (event) => {
 
   const statusCount = (items: Array<{ status: string; _count: { _all: number } }>, status: string) => items.find((item) => item.status === status)?._count._all || 0
   const total = contractSummary._count._all
-  const signed = statusCount(contractStatuses, 'FIRMADO')
+  const signed = signedContractCount
   const revision = statusCount(contractStatuses, 'REVISION')
   const cancelled = statusCount(contractStatuses, 'ANULADO')
   const previousPendingSignatures = statusCount(previousContractStatuses, 'REVISION')
@@ -160,7 +164,7 @@ export default defineEventHandler(async (event) => {
           ...contractScope,
           OR: [
             { status: 'REVISION' },
-            { status: 'FIRMADO', expedient: { is: null } },
+            { OR: [{ signedAccept: true }, { signedAt: { not: null } }], expedient: { is: null } },
             { expedient: { is: { status: { in: ['REBOTADO', 'OBSERVADO'] } } } },
             { cancellationRequest: { is: { status: 'PENDIENTE' } } }
           ]
@@ -182,7 +186,7 @@ export default defineEventHandler(async (event) => {
     expedientStatusBreakdown: stockExpedientStatuses.map((item) => ({ key: item.status, label: item.status, value: item._count._all })),
     locationBreakdown: locationStatuses.map((item) => ({ location: item.currentLocation, status: item.status, value: item._count._all })),
     priorities: ['admin', 'supervisor', 'asesor'].includes(role) ? [
-      { key: 'without_expedient', label: 'Contratos sin expediente', value: contractsWithoutExpedient, href: '/matricula?status=firmado&expedientStatus=sin_expediente' },
+      { key: 'without_expedient', label: 'Contratos sin expediente', value: contractsWithoutExpedient, href: '/matricula?signature=firmado&expedientStatus=sin_expediente' },
       { key: 'pending_requests', label: 'Solicitudes de anulación pendientes', value: pendingRequests, href: '/matricula' },
       { key: 'unread_notifications', label: 'Notificaciones sin leer', value: unreadNotifications, href: '/notificaciones' }
     ].filter((item) => item.value > 0) : [],
@@ -225,7 +229,7 @@ export default defineEventHandler(async (event) => {
         appointmentAt: null,
         appointmentType: null,
         observation: item.cancellationRequest?.status === 'PENDIENTE' ? item.cancellationRequest.reason : item.expedient?.observation || null,
-        queueReason: item.cancellationRequest?.status === 'PENDIENTE' ? 'Solicitud de anulación por resolver' : item.status === 'FIRMADO' && !item.expedient ? 'Expediente pendiente de creación' : item.expedient?.observation || null,
+        queueReason: item.cancellationRequest?.status === 'PENDIENTE' ? 'Solicitud de anulación por resolver' : (item.signedAccept || item.signedAt) && !item.expedient ? 'Expediente pendiente de creación' : item.expedient?.observation || null,
         documentCount: 0,
         missingDocuments: []
       }

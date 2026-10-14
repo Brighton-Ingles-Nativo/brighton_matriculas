@@ -141,7 +141,7 @@ enum TeamModality {
 
 enum ContractStatus {
   REVISION
-  FIRMADO
+  APROBADO
   ANULADO
 }
 

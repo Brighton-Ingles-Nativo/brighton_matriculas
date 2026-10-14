@@ -53,12 +53,11 @@ function dateValue(value: Date | null | undefined): string | null { return value
 
 function contractStatusLabel(contract: EnrollmentContract): string {
   if (contract.status === 'ANULADO') return 'ANULADO'
-  if (contract.status === 'FIRMADO') return 'ESTADO HEREDADO'
-  return 'EN REVISIÓN'
+  return contract.status === 'APROBADO' ? 'APROBADO' : 'EN REVISIÓN'
 }
 
 function signatureLabel(contract: EnrollmentContract): string {
-  return contract.signedAccept || contract.signedAt || contract.status === 'FIRMADO' ? 'FIRMADO' : 'NO FIRMADO'
+  return contract.signedAccept || contract.signedAt ? 'FIRMADO' : 'NO FIRMADO'
 }
 
 function expedientStatusLabel(contract: EnrollmentContract): string {
@@ -109,17 +108,15 @@ export async function buildEnrollmentExport(
   const missingExpedient = filters.expedientStatus === 'sin_expediente'
   const statusFilter = filters.status === 'revision'
     ? { status: 'REVISION' as const }
-    : filters.status === 'legacy'
-      ? { status: 'FIRMADO' as const }
-    : filters.status === 'firmado'
-      ? { AND: [{ OR: [{ signedAccept: true }, { signedAt: { not: null } }, { status: 'FIRMADO' as const }] }] }
+    : filters.status === 'aprobado'
+      ? { status: 'APROBADO' as const }
       : filters.status === 'anulado'
         ? { status: 'ANULADO' as const }
         : {}
   const signatureFilter: Prisma.ContractWhereInput | null = filters.signature === 'firmado'
-    ? { OR: [{ signedAccept: true }, { signedAt: { not: null } }, { status: 'FIRMADO' }] }
+    ? { OR: [{ signedAccept: true }, { signedAt: { not: null } }] }
     : filters.signature === 'no_firmado'
-      ? { signedAccept: false, signedAt: null, status: { not: 'FIRMADO' } }
+      ? { signedAccept: false, signedAt: null }
       : null
   const expedientFilter: Prisma.ExpedientWhereInput = filters.expedientStatus === 'PENDIENTE'
     ? { status: 'CREADO', currentLocation: 'SUPERVISOR' }
