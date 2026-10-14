@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { getUserBySession } from '../../utils/auth'
 import { contractAccessWhere } from '../../utils/contract-access'
 import { prisma } from '../../utils/prisma'
@@ -19,28 +20,34 @@ export default defineEventHandler(async (event) => {
   const holderDni = typeof query.holderDni === 'string' ? query.holderDni.trim() : ''
   const advisorName = typeof query.advisorName === 'string' ? query.advisorName.trim() : ''
   const status = typeof query.status === 'string' ? query.status.trim() : ''
+  const signature = typeof query.signature === 'string' ? query.signature.trim() : ''
   const missingExpedient = query.expedientStatus === 'sin_expediente'
 
   const statusFilter = status === 'revision'
     ? { status: 'REVISION' as const }
-    : status === 'firmado'
-      ? { status: 'FIRMADO' as const }
+    : status === 'aprobado'
+      ? { status: 'APROBADO' as const }
       : status === 'anulado'
         ? { status: 'ANULADO' as const }
-        : {}
+        : null
+  const signatureFilter: Prisma.ContractWhereInput | null = signature === 'firmado'
+    ? { OR: [{ signedAccept: true }, { signedAt: { not: null } }] }
+    : signature === 'no_firmado'
+      ? { signedAccept: false, signedAt: null }
+      : null
 
-  const where = {
-    ...contractAccessWhere(user),
-    ...(holderName || holderDni ? {
+  const clauses: Prisma.ContractWhereInput[] = [contractAccessWhere(user)]
+  if (holderName || holderDni) clauses.push({
       customer: {
         ...(holderName ? { name: { contains: holderName, mode: 'insensitive' as const } } : {}),
         ...(holderDni ? { dni: { contains: holderDni, mode: 'insensitive' as const } } : {})
       }
-    } : {}),
-    ...(advisorName ? { user: { name: { contains: advisorName, mode: 'insensitive' as const } } } : {}),
-    ...(missingExpedient ? { expedient: { is: null } } : {}),
-    ...statusFilter
-  }
+  })
+  if (advisorName) clauses.push({ user: { name: { contains: advisorName, mode: 'insensitive' } } })
+  if (missingExpedient) clauses.push({ expedient: { is: null } })
+  if (statusFilter) clauses.push(statusFilter)
+  if (signatureFilter) clauses.push(signatureFilter)
+  const where: Prisma.ContractWhereInput = { AND: clauses }
 
   const [total, contracts] = await Promise.all([
     prisma.contract.count({ where }),
@@ -68,6 +75,7 @@ export default defineEventHandler(async (event) => {
       plan: contract.plan,
       programValue: contract.programValue.toString(),
       status: contract.status,
+      signedAccept: contract.signedAccept,
       signedAt: contract.signedAt,
       registeredAt: contract.registeredAt,
       advisor: contract.user,

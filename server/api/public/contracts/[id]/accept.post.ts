@@ -1,4 +1,5 @@
 import { getClientIPAddress } from '../../../../utils/auth'
+import { isContractSigned } from '../../../../utils/contract-signature'
 import { notify } from '../../../../utils/notifications'
 import { prisma } from '../../../../utils/prisma'
 
@@ -11,13 +12,13 @@ export default defineEventHandler(async (event) => {
 
   const contract = await prisma.contract.findFirst({
     where: { id, accessToken: token, tokenExpiresAt: { gt: new Date() } },
-    select: { id: true, status: true, signedAt: true, userId: true, user: { select: { supervisorId: true } } }
+    select: { id: true, status: true, signedAccept: true, signedAt: true, userId: true, user: { select: { supervisorId: true } } }
   })
   if (!contract) throw createError({ statusCode: 404, message: 'El enlace ha expirado o no es válido' })
-  if (contract.status !== 'REVISION') throw createError({ statusCode: 409, message: 'El contrato debe estar en revisión antes de firmarlo' })
-  if (contract.signedAt) return { success: true, message: 'El contrato ya fue firmado' }
+  if (contract.status === 'ANULADO') throw createError({ statusCode: 409, message: 'No se puede firmar una matrícula anulada.' })
+  if (isContractSigned(contract)) return { success: true, message: 'El contrato ya fue firmado' }
 
-  const signed = await prisma.contract.update({ where: { id }, data: { status: 'FIRMADO', signedAt: new Date(), signedIp: getClientIPAddress(event) } })
+  const signed = await prisma.contract.update({ where: { id }, data: { signedAccept: true, signedAt: new Date(), signedIp: getClientIPAddress(event) } })
   await notify({
     recipients: [contract.userId, contract.user.supervisorId ?? ''],
     type: 'CONTRATO_FIRMADO',
@@ -29,5 +30,5 @@ export default defineEventHandler(async (event) => {
     priority: 'high',
     dedupeKey: `contract:${contract.id}:signed`
   })
-  return { success: true, message: 'Contrato aceptado digitalmente', data: { status: signed.status, signedAt: signed.signedAt, signedIp: signed.signedIp } }
+  return { success: true, message: 'Contrato aceptado digitalmente', data: { status: signed.status, signedAccept: signed.signedAccept, signedAt: signed.signedAt, signedIp: signed.signedIp } }
 })

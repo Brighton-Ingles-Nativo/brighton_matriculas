@@ -130,6 +130,7 @@ onMounted(() => { void syncPushState() })
             <UiDropdownMenuLabel class="px-2 py-2">
               <p class="truncate font-semibold text-foreground">{{ user.name }}</p>
               <p class="truncate text-[11px] font-normal">{{ user.email }}</p>
+              <p class="truncate text-[11px] font-italic">{{ user.role?.name }}</p>
             </UiDropdownMenuLabel>
             <UiDropdownMenuSeparator />
             <UiDropdownMenuItem as-child class="px-2 py-2">

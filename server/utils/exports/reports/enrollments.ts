@@ -13,7 +13,9 @@ const baseColumns: ExportColumn[] = [
   { header: 'Modalidad', key: 'modality' },
   { header: 'Monto del contrato', key: 'programValue' },
   { header: 'Tipo de financiamiento', key: 'financingType' },
-  { header: 'Estado de matrícula', key: 'status' }
+  { header: 'Estado del contrato', key: 'contractStatus' },
+  { header: 'Firma del cliente', key: 'signatureStatus' },
+  { header: 'Estado del expediente', key: 'expedientStatus' }
 ]
 const advisorColumn: ExportColumn = { header: 'Nombre de asesor', key: 'advisorName' }
 const siteColumn: ExportColumn = { header: 'Nombre de la sede', key: 'siteName' }
@@ -49,16 +51,25 @@ type EnrollmentContract = Prisma.ContractGetPayload<{
 
 function dateValue(value: Date | null | undefined): string | null { return value ? value.toISOString() : null }
 
-function statusLabel(contract: EnrollmentContract): string {
+function contractStatusLabel(contract: EnrollmentContract): string {
   if (contract.status === 'ANULADO') return 'ANULADO'
-  if (!contract.expedient) return contract.status === 'FIRMADO' ? 'FIRMADO' : 'EN REVISIÓN CLIENTE'
-  if (contract.expedient.status === 'REBOTADO') return 'REBOTADA'
-  if (contract.expedient.status === 'AGENDADO') return 'CITA PROGRAMADA'
-  if (contract.expedient.status === 'OBSERVADO') return 'VERIFICADA CON OBSERVACIONES'
-  if (contract.expedient.status === 'VERIFICADO') return 'VERIFICADA'
-  if (contract.expedient.currentLocation === 'ASISTENTE_COMERCIAL') return 'EN COMERCIAL'
-  if (contract.expedient.currentLocation === 'VERIFICACION') return 'EN VERIFICACIÓN'
-  return contract.status === 'FIRMADO' ? 'FIRMADO' : 'EN REVISIÓN CLIENTE'
+  return contract.status === 'APROBADO' ? 'APROBADO' : 'EN REVISIÓN'
+}
+
+function signatureLabel(contract: EnrollmentContract): string {
+  return contract.signedAccept || contract.signedAt ? 'FIRMADO' : 'NO FIRMADO'
+}
+
+function expedientStatusLabel(contract: EnrollmentContract): string {
+  if (!contract.expedient) return 'SIN EXPEDIENTE'
+  const { status, currentLocation } = contract.expedient
+  if (status === 'REBOTADO') return 'REBOTADO'
+  if (status === 'AGENDADO') return 'CITA PROGRAMADA'
+  if (status === 'OBSERVADO') return 'VERIFICADA CON OBSERVACIONES'
+  if (status === 'VERIFICADO') return 'VERIFICADA'
+  if (currentLocation === 'ASISTENTE_COMERCIAL') return 'EN COMERCIAL'
+  if (currentLocation === 'VERIFICACION') return 'EN VERIFICACIÓN'
+  return 'CREADO'
 }
 
 function rowFor(contract: EnrollmentContract): Record<string, unknown> {
@@ -72,7 +83,9 @@ function rowFor(contract: EnrollmentContract): Record<string, unknown> {
     modality: contract.modality,
     programValue: contract.programValue.toString(),
     financingType: contract.cashPayment ? 'Contado' : contract.financedPayment ? 'Financiado' : contract.otherPayment,
-    status: statusLabel(contract),
+    contractStatus: contractStatusLabel(contract),
+    signatureStatus: signatureLabel(contract),
+    expedientStatus: expedientStatusLabel(contract),
     advisorName: contract.user.name,
     siteName,
     firstContactAt: dateValue(expedient?.firstContactAt),
@@ -89,17 +102,22 @@ function rowFor(contract: EnrollmentContract): Record<string, unknown> {
 
 export async function buildEnrollmentExport(
   user: { id: string; role: { name: string } },
-  filters: { holderName?: string; holderDni?: string; advisorName?: string; status?: string; search?: string; expedientStatus?: string; location?: string }
+  filters: { holderName?: string; holderDni?: string; advisorName?: string; status?: string; signature?: string; search?: string; expedientStatus?: string; location?: string }
 ): Promise<ExportDocument> {
   const role = user.role.name as ExportRole
   const missingExpedient = filters.expedientStatus === 'sin_expediente'
   const statusFilter = filters.status === 'revision'
     ? { status: 'REVISION' as const }
-    : filters.status === 'firmado'
-      ? { status: 'FIRMADO' as const }
+    : filters.status === 'aprobado'
+      ? { status: 'APROBADO' as const }
       : filters.status === 'anulado'
         ? { status: 'ANULADO' as const }
         : {}
+  const signatureFilter: Prisma.ContractWhereInput | null = filters.signature === 'firmado'
+    ? { OR: [{ signedAccept: true }, { signedAt: { not: null } }] }
+    : filters.signature === 'no_firmado'
+      ? { signedAccept: false, signedAt: null }
+      : null
   const expedientFilter: Prisma.ExpedientWhereInput = filters.expedientStatus === 'PENDIENTE'
     ? { status: 'CREADO', currentLocation: 'SUPERVISOR' }
     : filters.expedientStatus === 'EN_COMERCIAL'
@@ -118,25 +136,24 @@ export async function buildEnrollmentExport(
   if (filters.location && ['ASESOR', 'SUPERVISOR', 'ASISTENTE_COMERCIAL', 'VERIFICACION'].includes(filters.location)) {
     expedientFilter.currentLocation = filters.location as Prisma.ExpedientWhereInput['currentLocation']
   }
-  const where: Prisma.ContractWhereInput = {
-    ...contractAccessWhere(user),
-    ...(filters.search ? {
-      OR: [
+  const clauses: Prisma.ContractWhereInput[] = [contractAccessWhere(user)]
+  if (filters.search) clauses.push({ OR: [
         { customer: { name: { contains: filters.search, mode: 'insensitive' as const } } },
         { customer: { dni: { contains: filters.search, mode: 'insensitive' as const } } },
         { user: { name: { contains: filters.search, mode: 'insensitive' as const } } }
-      ]
-    } : {}),
-    ...(filters.holderName || filters.holderDni ? {
+  ] })
+  if (filters.holderName || filters.holderDni) clauses.push({
       customer: {
         ...(filters.holderName ? { name: { contains: filters.holderName, mode: 'insensitive' as const } } : {}),
         ...(filters.holderDni ? { dni: { contains: filters.holderDni, mode: 'insensitive' as const } } : {})
       }
-    } : {}),
-    ...(filters.advisorName ? { user: { name: { contains: filters.advisorName, mode: 'insensitive' as const } } } : {}),
-    ...(missingExpedient ? { expedient: { is: null } } : Object.keys(expedientFilter).length ? { expedient: expedientFilter } : {}),
-    ...statusFilter
-  }
+  })
+  if (filters.advisorName) clauses.push({ user: { name: { contains: filters.advisorName, mode: 'insensitive' } } })
+  if (missingExpedient) clauses.push({ expedient: { is: null } })
+  else if (Object.keys(expedientFilter).length) clauses.push({ expedient: expedientFilter })
+  if (statusFilter && Object.keys(statusFilter).length) clauses.push(statusFilter)
+  if (signatureFilter) clauses.push(signatureFilter)
+  const where: Prisma.ContractWhereInput = { AND: clauses }
   const contracts = await prisma.contract.findMany({
     where,
     orderBy: { registeredAt: 'desc' },

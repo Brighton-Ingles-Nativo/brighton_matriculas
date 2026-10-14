@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckCircle2, FileDown, LoaderCircle } from '@lucide/vue'
+import { CheckCircle2, LoaderCircle } from '@lucide/vue'
 
 definePageMeta({ layout: 'public' })
 
@@ -9,7 +9,7 @@ interface Contract {
   contractDepartment: string | null; contractProvince: string | null; contractDistrict: string | null
   program: string; plan: string | null; modality: string | null; programValue: string; initialPayment: string | null; balance: string | null; installmentCount: number | null; installmentValue: string | null
   strategy: string; currentSituation: string; housingType: string; paymentStartDate: string | null; notes: string | null; dataAuthorization: boolean; testimonials: boolean; dataUsage: boolean | null
-  status: 'REVISION' | 'FIRMADO' | 'ANULADO'; signedAt: string | null; signedIp: string | null; registeredAt: string; receipts: Receipt[]
+  status: 'REVISION' | 'APROBADO' | 'ANULADO'; signedAccept: boolean; signedAt: string | null; signedIp: string | null; registeredAt: string; receipts: Receipt[]
   students: Array<{ name: string; birthDate: string | null; dni: string | null; email: string | null; phone: string | null }>
 }
 
@@ -30,11 +30,10 @@ const formatDate = (value: string | null | undefined) => value ? new Intl.DateTi
 const formatDateTime = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'
 const money = (value: string | null | undefined) => value ? new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(value)) : '—'
 const display = (value: unknown) => value === null || value === undefined || value === '' ? '—' : String(value)
-const canSign = computed(() => contract.value?.status === 'REVISION' && !contract.value.signedAt)
-const showTerms = computed(() => canSign.value || Boolean(contract.value?.signedAt))
-const status = computed(() => contract.value?.status === 'ANULADO' ? 'Contrato anulado' : contract.value?.status === 'FIRMADO' || contract.value?.signedAt ? 'Contrato firmado' : 'Listo para firma')
-const openPdf = () => window.open(`/api/contracts/${id.value}/pdf?token=${encodeURIComponent(token.value)}`, '_blank', 'noopener,noreferrer')
-
+const isSigned = computed(() => Boolean(contract.value && (contract.value.signedAccept || contract.value.signedAt)))
+const canSign = computed(() => Boolean(contract.value && contract.value.status !== 'ANULADO' && !isSigned.value))
+const showTerms = computed(() => Boolean(contract.value && contract.value.status !== 'ANULADO'))
+const status = computed(() => ({ REVISION: 'En revisión', APROBADO: 'Aprobado', ANULADO: 'Anulado' })[contract.value?.status || 'REVISION'])
 const load = async () => {
   if (!id.value || !token.value) { error.value = 'El enlace del contrato está incompleto.'; loading.value = false; return }
   try {
@@ -49,7 +48,7 @@ const accept = async () => {
   if (!canSign.value || !acceptedChecked.value || !termsRead.value) return
   accepting.value = true; actionError.value = ''
   try {
-    const response = await $fetch<{ data: Pick<Contract, 'status' | 'signedAt' | 'signedIp'> }>(`/api/public/contracts/${id.value}/accept`, { method: 'POST', query: { token: token.value } })
+    const response = await $fetch<{ data: Pick<Contract, 'status' | 'signedAccept' | 'signedAt' | 'signedIp'> }>(`/api/public/contracts/${id.value}/accept`, { method: 'POST', query: { token: token.value } })
     if (contract.value) Object.assign(contract.value, response.data)
   } catch (err: any) { actionError.value = err?.data?.message || err?.data?.statusMessage || 'No se pudo aceptar el contrato.' } finally { accepting.value = false }
 }
@@ -76,9 +75,6 @@ onMounted(load)
           <p class="text-lg font-semibold">BRIGHTON INGLÉS NATIVO S.A.C.</p>
           <p class="text-sm opacity-80">Vista pública de matrícula</p>
         </div>
-        <!-- <UiButton v-if="contract" variant="secondary" size="sm" class="gap-2" @click="openPdf">
-          <FileDown class="size-4" /> Abrir documento PDF
-        </UiButton> -->
       </div>
     </header>
     <main class="mx-auto max-w-5xl space-y-5 px-4 py-8">
@@ -98,7 +94,7 @@ onMounted(load)
               <p class="mt-1 text-sm text-muted-foreground">Registrada el {{ formatDateTime(contract.registeredAt) }}
               </p>
             </div>
-            <UiBadge>{{ status }}</UiBadge>
+            <div class="flex gap-2"><UiBadge variant="outline">Estado: {{ status }}</UiBadge><UiBadge>{{ isSigned ? 'Firmado' : 'No firmado' }}</UiBadge></div>
           </div>
         </section>
         <section class="rounded-lg border bg-card p-6 shadow-sm">
@@ -233,7 +229,7 @@ onMounted(load)
             <p v-if="!termsRead" class="text-xs text-muted-foreground">Lee los términos hasta el final para habilitar la
               firma.</p>
           </div>
-          <div v-else class="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          <div v-else-if="isSigned" class="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
             Contrato aceptado digitalmente el {{ formatDateTime(contract.signedAt) }}.</div>
         </section>
       </template>

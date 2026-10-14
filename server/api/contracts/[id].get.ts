@@ -13,7 +13,18 @@ export default defineEventHandler(async (event) => {
   const contract = await prisma.contract.findUnique({
     where: { id },
     include: {
-      user: { select: { id: true, name: true, username: true, email: true } },
+      user: {
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          email: true,
+          teamMemberships: {
+            where: { team: { active: true, site: { active: true } } },
+            select: { team: { select: { id: true, name: true } } }
+          }
+        }
+      },
       customer: true,
       students: { include: { student: true }, orderBy: { id: 'asc' } },
       otherData: true,
@@ -46,6 +57,7 @@ export default defineEventHandler(async (event) => {
   await assertContractAccess(user, contract.id)
 
   const { accessToken: _accessToken, ...safeContract } = contract
+  const publicLinkActive = Boolean(contract.accessToken && contract.tokenExpiresAt && contract.tokenExpiresAt > new Date())
   const students = contract.students.map(({ student }) => ({
     id: student.id,
     name: student.name,
@@ -60,6 +72,7 @@ export default defineEventHandler(async (event) => {
     success: true,
     data: {
       ...safeContract,
+      publicLinkActive,
       advisor: contract.user,
       holderName: contract.customer.name,
       holderBirthDate: contract.customer.birthDate,

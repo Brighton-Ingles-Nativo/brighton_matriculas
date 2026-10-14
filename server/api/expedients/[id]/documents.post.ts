@@ -2,20 +2,21 @@ import { assertCsrf } from '../../../utils/auth'
 import { notify } from '../../../utils/notifications'
 import { prisma } from '../../../utils/prisma'
 import { getAccessibleContract, requireExpedientUser, removeStoredFile, storeUpload, validateDocumentType } from '../../../utils/expedients'
+import { isContractSigned } from '../../../utils/contract-signature'
 
 export default defineEventHandler(async (event) => {
   assertCsrf(event)
   const user = await requireExpedientUser(event)
   const expedientId = getRouterParam(event, 'id')
   if (!expedientId || !/^[0-9a-f-]{36}$/i.test(expedientId)) throw createError({ statusCode: 400, message: 'Expediente inválido' })
-  const expedient = await prisma.expedient.findUnique({ where: { id: expedientId }, include: { contract: { select: { id: true, userId: true, signedAt: true } } } })
+  const expedient = await prisma.expedient.findUnique({ where: { id: expedientId }, include: { contract: { select: { id: true, userId: true, status: true, signedAccept: true, signedAt: true } } } })
   if (!expedient) throw createError({ statusCode: 404, message: 'Expediente no encontrado' })
   await getAccessibleContract(expedient.contract.id, user)
   const isAdmin = user.role?.name === 'admin'
   if (!isAdmin && (user.role?.name !== 'asesor' || expedient.currentLocation !== 'ASESOR')) {
     throw createError({ statusCode: 403, message: 'Los documentos solo pueden modificarse cuando el expediente está con el asesor, salvo el administrador.' })
   }
-  if (!expedient.contract.signedAt) throw createError({ statusCode: 409, message: 'El contrato aún no está firmado.' })
+  if (!isContractSigned(expedient.contract)) throw createError({ statusCode: 409, message: 'El contrato aún no está firmado.' })
 
   const parts = await readMultipartFormData(event)
   const type = String(parts?.find((part) => part.name === 'type')?.data?.toString() || '').trim()

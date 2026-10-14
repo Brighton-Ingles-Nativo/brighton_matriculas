@@ -8,10 +8,12 @@
           <p class="mt-1 text-muted-foreground">Consulta y seguimiento de las matrículas registradas.</p>
         </div>
         <div class="flex flex-wrap gap-2">
-          <UiButton v-if="canExport" variant="outline" class="gap-2" as-child><a :href="exportUrl">
+          <UiButton v-if="canExport" variant="outline" class="gap-2" as-child>
+            <a :href="exportUrl">
               <Download class="size-4" /> Exportar Excel
-            </a></UiButton>
-          <UiButton class="gap-2" as-child>
+            </a>
+          </UiButton>
+          <UiButton v-if="canCreateEnrollment" class="gap-2" as-child>
             <NuxtLink to="/matricula/nuevo">
               <Plus class="size-4" /> Nueva matrícula
             </NuxtLink>
@@ -28,7 +30,8 @@
             <UiInput v-model="holderName" placeholder="Nombre del titular" aria-label="Nombre del titular" />
             <UiInput v-model="holderDni" placeholder="DNI del titular" aria-label="DNI del titular" />
             <UiInput v-if="canFilterAdvisor" v-model="advisorName" placeholder="Nombre del asesor" aria-label="Nombre del asesor" />
-            <UiSelect v-model="status"><UiSelectTrigger class="w-full" aria-label="Estado"><UiSelectValue placeholder="Todos los estados" /></UiSelectTrigger><UiSelectContent><UiSelectItem value="revision">En revisión</UiSelectItem><UiSelectItem value="firmado">Firmado</UiSelectItem><UiSelectItem value="anulado">Anulado</UiSelectItem></UiSelectContent></UiSelect>
+            <UiSelect v-model="status"><UiSelectTrigger class="w-full" aria-label="Estado del contrato"><UiSelectValue placeholder="Todos los estados" /></UiSelectTrigger><UiSelectContent><UiSelectItem value="revision">En revisión</UiSelectItem><UiSelectItem value="aprobado">Aprobado</UiSelectItem><UiSelectItem value="anulado">Anulado</UiSelectItem></UiSelectContent></UiSelect>
+            <UiSelect v-model="signature"><UiSelectTrigger class="w-full" aria-label="Firma del cliente"><UiSelectValue placeholder="Todas las firmas" /></UiSelectTrigger><UiSelectContent><UiSelectItem value="firmado">Firmado</UiSelectItem><UiSelectItem value="no_firmado">No firmado</UiSelectItem></UiSelectContent></UiSelect>
           </div>
         </UiCardHeader>
         <UiCardContent class="p-0">
@@ -56,6 +59,7 @@
                 <UiTableHead>Plan</UiTableHead>
                 <UiTableHead class="text-right">Valor</UiTableHead>
                 <UiTableHead>Estado</UiTableHead>
+                <UiTableHead>Firma</UiTableHead>
                 <UiTableHead class="hidden sm:table-cell">Registro</UiTableHead>
                 <UiTableHead class="text-right">Acciones</UiTableHead>
               </UiTableRow>
@@ -80,24 +84,27 @@
                 <UiTableCell>
                   <UiBadge :variant="statusVariant(row)">{{ statusLabel(row) }}</UiBadge>
                 </UiTableCell>
+                <UiTableCell>
+                  <UiBadge :variant="isSigned(row) ? 'default' : 'outline'">{{ isSigned(row) ? 'Firmado' : 'No firmado' }}</UiBadge>
+                </UiTableCell>
                 <UiTableCell class="hidden whitespace-nowrap text-muted-foreground sm:table-cell">{{
                   formatDate(row.registeredAt) }}</UiTableCell>
                 <UiTableCell>
                   <div class="flex justify-end gap-1">
-                    <UiButton size="icon" title="Ver detalle" aria-label="Ver detalle" @click="openDetail(row)">
+                    <UiButton size="icon-lg" variant="default" title="Ver detalle" aria-label="Ver detalle" @click="openDetail(row)">
                       <Eye class="size-4" />
                     </UiButton>
-                    <UiButton size="icon" :title="!canEdit ? 'Editar matrícula: sin permisos' : isContractLocked(row) ? 'Matrícula firmada: edición bloqueada' : 'Editar matrícula'"
-                      aria-label="Editar matrícula" :disabled="!canEdit || isContractLocked(row)">
+                    <UiButton size="icon-lg" variant="alert" :title="!canEdit ? 'Editar matrícula: sin permisos' : isContractLocked(row) ? 'Matrícula firmada: edición bloqueada' : 'Editar matrícula'"
+                      aria-label="Editar matrícula" :disabled="!canEdit || isContractLocked(row)" @click="navigateTo(`/matricula/${row.id}`)">
                       <Pencil class="size-4" />
                     </UiButton>
-                    <UiButton size="icon" title="Generar recibo: disponible próximamente" aria-label="Generar recibo"
-                      disabled>
+                    <UiButton size="icon-lg" variant="success" :title="!canManageReceipts ? 'Generar recibo: sin permisos' : !isSigned(row) ? 'Generar recibo: disponible cuando la matrícula esté firmada' : 'Generar recibo'" aria-label="Generar recibo"
+                      :disabled="!canManageReceipts || !isSigned(row) || row.status === 'ANULADO'" @click="openReceiptDialog(row)">
                       <FilePlus2 class="size-4" />
                     </UiButton>
-                    <UiButton size="icon"
-                      :title="row.receiptCount ? 'Ver recibo: disponible próximamente' : 'Ver recibo: no existe un recibo registrado'"
-                      aria-label="Ver recibo" disabled>
+                    <UiButton size="icon-lg" variant="outline"
+                      :title="!canManageReceipts ? 'Ver recibo: sin permisos' : row.receiptCount ? 'Ver recibo' : 'Ver recibo: todavía no hay uno registrado'"
+                      aria-label="Ver recibo" :disabled="!canManageReceipts || !row.receiptCount" @click="openLatestReceipt(row)">
                       <FileCheck2 class="size-4" />
                     </UiButton>
                   </div>
@@ -132,9 +139,10 @@
         </UiCardFooter>
       </UiCard>
     </main>
+    <MatriculaReceiptCreateDialog v-model:open="receiptDialogOpen" :contract="receiptContract" @created="onReceiptCreated" />
     <MatriculaContractDetailDialog v-model:open="detailOpen" :contract="selectedContract" :loading="detailLoading"
       :error="detailError" :action-loading="detailActionLoading"
-      @accept="acceptContract" @public-view="openPublicView" @pdf="openContractPdf" />
+      @accept="acceptContract" @public-view="openPublicView" @public-link-regenerated="onPublicLinkRegenerated" @download-pdf="downloadContractPdf" @print-contract="printContract" />
   </div>
 </template>
 
@@ -150,7 +158,8 @@ interface ContractRow {
   program: string; 
   plan: string | null; 
   programValue: string; 
-  status: 'REVISION' | 'FIRMADO' | 'ANULADO';
+  status: 'REVISION' | 'APROBADO' | 'ANULADO';
+  signedAccept: boolean;
   signedAt: string | null;
   registeredAt: string; 
   advisor: { 
@@ -215,6 +224,8 @@ interface ContractDetail extends ContractRow {
   testimonials: boolean; 
   dataUsage: boolean | null; 
   signedIp: string | null;
+  tokenExpiresAt: string | null;
+  publicLinkActive: boolean;
   receipts: ReceiptDetail[] 
 }
 
@@ -231,6 +242,7 @@ const holderName = ref(typeof route.query.holderName === 'string' ? route.query.
 const holderDni = ref(typeof route.query.holderDni === 'string' ? route.query.holderDni : '');
 const advisorName = ref('');
 const status = ref(typeof route.query.status === 'string' ? route.query.status : '');
+const signature = ref(typeof route.query.signature === 'string' ? route.query.signature : '');
 const expedientStatus = route.query.expedientStatus === 'sin_expediente' ? 'sin_expediente' : '';
 const page = ref(1); 
 const loading = ref(true); 
@@ -248,11 +260,16 @@ const detailLoading = ref(false);
 const detailError = ref(''); 
 const detailActionLoading = ref(false); 
 const selectedContract = ref<ContractDetail | null>(null)
+const receiptDialogOpen = ref(false)
+const receiptContract = ref<ContractRow | null>(null)
 
 const canExport = computed(() => ['admin', 'asesor', 'supervisor', 'asistente_comercial', 'verificador'].includes(user.value?.role?.name || ''));
-const canEdit = computed(() => true); 
+const canEdit = computed(() => ['admin', 'asesor', 'supervisor', 'verificador'].includes(user.value?.role?.name || ''));
 const canFilterAdvisor = computed(() => user.value?.role?.name !== 'asesor')
-const isContractLocked = (row?: ContractRow) => !row || row.status !== 'REVISION' || Boolean(row.signedAt)
+const canManageReceipts = computed(() => ['admin', 'asesor'].includes(user.value?.role?.name || ''))
+const canCreateEnrollment = computed(() => ['admin', 'asesor', 'supervisor'].includes(user.value?.role?.name || ''))
+const isSigned = (row?: ContractRow) => Boolean(row && (row.signedAccept || row.signedAt))
+const isContractLocked = (row?: ContractRow) => !row || isSigned(row) || row.status === 'ANULADO'
 
 const exportUrl = computed(() => {
   const params = new URLSearchParams()
@@ -260,6 +277,7 @@ const exportUrl = computed(() => {
   if (holderDni.value) params.set('holderDni', holderDni.value)
   if (canFilterAdvisor.value && advisorName.value) params.set('advisorName', advisorName.value)
   if (status.value) params.set('status', status.value)
+  if (signature.value) params.set('signature', signature.value)
   if (expedientStatus) params.set('expedientStatus', expedientStatus)
   params.set('format', 'xlsx')
   const query = params.toString()
@@ -277,6 +295,7 @@ const loadContracts = async () => {
         holderDni: holderDni.value || undefined,
         advisorName: canFilterAdvisor.value ? advisorName.value || undefined : undefined,
         status: status.value || undefined,
+        signature: signature.value || undefined,
         expedientStatus: expedientStatus || undefined
       } 
       }); 
@@ -355,7 +374,7 @@ const acceptContract = async () => {
   detailActionLoading.value = true; 
   detailError.value = ''; 
   try { 
-    const response = await $fetch<{ data: Pick<ContractDetail, 'status' | 'signedAt' | 'signedIp'> }>(`/api/contracts/${selectedContract.value.id}/accept`, {
+    const response = await $fetch<{ data: Pick<ContractDetail, 'status' | 'signedAccept' | 'signedAt' | 'signedIp'> }>(`/api/contracts/${selectedContract.value.id}/accept`, {
       method: 'POST', 
       headers: await csrfHeaders(), 
       credentials: 'include' }); 
@@ -371,71 +390,98 @@ const acceptContract = async () => {
 
 const openPublicView = async () => { 
   if (!selectedContract.value) return; 
+  detailError.value = ''
+  if (!selectedContract.value.publicLinkActive || !selectedContract.value.tokenExpiresAt || Date.parse(selectedContract.value.tokenExpiresAt) <= Date.now()) {
+    selectedContract.value.publicLinkActive = false
+    detailError.value = 'El enlace público expiró. Regénéralo para volver a abrirlo.'
+    return
+  }
+  const publicWindow = window.open('about:blank', '_blank')
+  if (!publicWindow) {
+    detailError.value = 'El navegador bloqueó la ventana emergente. Permite ventanas emergentes para abrir la vista pública.'
+    return
+  }
   try { 
     const response = await $fetch<{ url: string }>(`/api/contracts/${selectedContract.value.id}/public-link`, { 
       credentials: 'include' 
     }); 
-    window.open(response.url, '_blank', 'noopener,noreferrer') 
+    publicWindow.opener = null
+    publicWindow.location.replace(response.url)
   } catch (error: any) { 
+    publicWindow.close()
+    if (error?.data?.statusCode === 409 || error?.statusCode === 409 || error?.status === 409) {
+      selectedContract.value.publicLinkActive = false
+    }
     detailError.value = error?.data?.message || error?.data?.statusMessage || 'No pudimos abrir la vista pública.'
   } 
 }
 
-const openContractPdf = () => { 
-  if (selectedContract.value) 
-  window.open(`/api/contracts/${selectedContract.value.id}/pdf`, '_blank', 'noopener,noreferrer') 
+const onPublicLinkRegenerated = (tokenExpiresAt: string) => {
+  if (!selectedContract.value) return
+  selectedContract.value.tokenExpiresAt = tokenExpiresAt
+  selectedContract.value.publicLinkActive = true
 }
 
-const handleEditAction = (event: MouseEvent) => { 
-  const button = (event.target as HTMLElement).closest('button[aria-label="Editar matrícula"]') as HTMLButtonElement | null; 
-  if (!button || button.disabled) 
-  return; 
-
-  const row = button.closest('tr'); 
-  const rows = Array.from(button.closest('tbody')?.querySelectorAll('tr') || []); 
-  const contract = contracts.value[rows.indexOf(row as HTMLTableRowElement)]; 
-  if (contract) navigateTo(`/matricula/${contract.id}`) 
+const downloadContractPdf = async () => {
+  const contract = selectedContract.value
+  if (!contract) return
+  detailError.value = ''
+  try {
+    const response = await fetch(`/api/contracts/${contract.id}/pdf`, { credentials: 'include' })
+    if (!response.ok) throw new Error('No se pudo descargar el PDF del contrato.')
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `Contrato_${contract.contractNumber}.pdf`
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch (error: any) {
+    detailError.value = error?.message || 'No se pudo descargar el PDF del contrato.'
+  }
 }
 
-const handleReceiptAction = (event: MouseEvent) => { 
-  const button = (event.target as HTMLElement).closest('button[aria-label="Ver recibo"]') as HTMLButtonElement | null; 
-  if (!button || button.disabled) return; 
-  const row = button.closest('tr'); 
-  const rows = Array.from(button.closest('tbody')?.querySelectorAll('tr') || []); 
-  const contract = contracts.value[rows.indexOf(row as HTMLTableRowElement)]; 
-  if (contract?.latestReceiptId) navigateTo(`/recibo/${contract.latestReceiptId}`) 
+const printContract = () => {
+  const contract = selectedContract.value
+  if (!contract) return
+  detailError.value = ''
+  const frame = document.createElement('iframe')
+  frame.title = `Imprimir contrato ${contract.contractNumber}`
+  frame.setAttribute('aria-hidden', 'true')
+  frame.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;border:0;opacity:0;z-index:-1;pointer-events:none'
+  const onPrintComplete = (event: MessageEvent) => {
+    if (event.origin !== window.location.origin || !['contract-print-complete', 'contract-print-error'].includes(event.data?.type) || event.data?.contractId !== contract.id) return
+    if (event.data.type === 'contract-print-error') detailError.value = event.data.message || 'No se pudo abrir el diálogo de impresión.'
+    frame.remove()
+    window.removeEventListener('message', onPrintComplete)
+  }
+  window.addEventListener('message', onPrintComplete)
+  frame.src = `/contrato/${contract.id}/imprimir?accion=imprimir&incrustado=1`
+  document.body.append(frame)
+  window.setTimeout(() => {
+    frame.remove()
+    window.removeEventListener('message', onPrintComplete)
+  }, 120_000)
 }
 
-const handleGenerateReceipt = (event: MouseEvent) => { 
-  const button = (event.target as HTMLElement).closest('button[aria-label="Generar recibo"]') as HTMLButtonElement | null; 
-  if (!button || button.disabled) return; 
-
-  const row = button.closest('tr'); 
-  const rows = Array.from(button.closest('tbody')?.querySelectorAll('tr') || []); 
-  const contract = contracts.value[rows.indexOf(row as HTMLTableRowElement)]; 
-
-  if (contract) navigateTo(`/recibo/nuevo/${contract.id}`) 
+const openReceiptDialog = (contract: ContractRow) => {
+  receiptContract.value = contract
+  receiptDialogOpen.value = true
 }
 
-watch(contracts, async (rows) => { 
-  await nextTick(); 
-  
-  const receiptRole = ['admin', 'asesor'].includes(user.value?.role?.name || '');
+const openLatestReceipt = (contract: ContractRow) => {
+  if (contract.latestReceiptId) navigateTo(`/recibo/${contract.latestReceiptId}`)
+}
 
-  document.querySelectorAll<HTMLButtonElement>('button[aria-label="Editar matrícula"]')
-    .forEach((button, index) => {
-      button.disabled = !canEdit.value || isContractLocked(rows[index])
-    }); 
+const onReceiptCreated = async (receiptId: string) => {
+  await loadContracts()
+  await navigateTo(`/recibo/${receiptId}`)
+}
 
-  document.querySelectorAll<HTMLButtonElement>('button[aria-label="Ver recibo"]')
-    .forEach((button, index) => { 
-      button.disabled = !receiptRole || !rows[index]?.receiptCount 
-    }); 
-  
-})
-
-const statusLabel = (row: ContractRow) => row.status === 'ANULADO' ? 'Anulado' : row.status === 'FIRMADO' || row.signedAt ? 'Firmado' : 'En revisión';
-const statusVariant = (row: ContractRow): 'default' | 'outline' | 'destructive' => row.status === 'ANULADO' ? 'destructive' : row.status === 'FIRMADO' || row.signedAt ? 'default' : 'outline';
+const statusLabel = (row: ContractRow) => ({ REVISION: 'En revisión', APROBADO: 'Aprobado', ANULADO: 'Anulado' })[row.status];
+const statusVariant = (row: ContractRow): 'default' | 'outline' | 'destructive' => ({ REVISION: 'outline', APROBADO: 'default', ANULADO: 'destructive' })[row.status];
 
 const planClass = (plan: string | null) => ({ 
   Light: 'bg-amber-100 text-amber-800 border-amber-200', 
@@ -444,18 +490,9 @@ const planClass = (plan: string | null) => ({
 }[plan || ''] || 'bg-muted text-muted-foreground')
 
 onMounted(async () => { 
-  document.addEventListener('click', handleEditAction); 
-  document.addEventListener('click', handleReceiptAction); 
-  document.addEventListener('click', handleGenerateReceipt); 
   if (!user.value) await verifyToken(); 
   await loadContracts() 
 })
 
-watch([holderName, holderDni, advisorName, status], () => debouncedLoadContracts())
-
-onBeforeUnmount(() => { 
-  document.removeEventListener('click', handleEditAction); 
-  document.removeEventListener('click', handleReceiptAction); 
-  document.removeEventListener('click', handleGenerateReceipt) 
-})
+watch([holderName, holderDni, advisorName, status, signature], () => debouncedLoadContracts())
 </script>

@@ -15,9 +15,10 @@ const appointmentAt = ref('')
 const appointmentRescheduledAt = ref('')
 const appointmentType = ref('PRESENCIAL')
 const advisoryRating = ref('')
-const strategyConfirmed = ref('')
+const UNCONFIRMED = '__sin_confirmar__'
+const strategyConfirmed = ref(UNCONFIRMED)
 const strategyObservation = ref('')
-const advisorValidationConfirmed = ref('')
+const advisorValidationConfirmed = ref(UNCONFIRMED)
 const advisorValidationName = ref('')
 const classStartDate = ref('')
 const paymentDate = ref('')
@@ -46,7 +47,7 @@ const canVerification = computed(() => ['admin', 'verificador'].includes(user.va
 const canEditVerification = computed(() => canVerification.value && currentLocation.value === 'VERIFICACION')
 const isAtAdvisor = computed(() => ['CREADO', 'REBOTADO'].includes(status.value) && currentLocation.value === 'ASESOR')
 const isAtSupervisor = computed(() => ['CREADO', 'REBOTADO'].includes(status.value) && currentLocation.value === 'SUPERVISOR')
-const isAtCommercial = computed(() => status.value === 'CREADO' && currentLocation.value === 'ASISTENTE_COMERCIAL')
+const isAtCommercial = computed(() => ['CREADO', 'REBOTADO'].includes(status.value) && currentLocation.value === 'ASISTENTE_COMERCIAL')
 const isAtVerification = computed(() => ['CREADO', 'AGENDADO'].includes(status.value) && currentLocation.value === 'VERIFICACION')
 const canSendSupervisor = computed(() => canAdvisor.value && isAtAdvisor.value)
 const canApproveSupervisor = computed(() => canSupervisor.value && isAtSupervisor.value)
@@ -100,9 +101,9 @@ onMounted(async () => {
     appointmentRescheduledAt.value = toLocalDateTimeInput(response.data.appointmentRescheduledAt)
     appointmentType.value = response.data.appointmentType || 'PRESENCIAL'
     advisoryRating.value = response.data.advisoryRating === null || response.data.advisoryRating === undefined ? '' : String(response.data.advisoryRating)
-    strategyConfirmed.value = response.data.strategyConfirmed === null || response.data.strategyConfirmed === undefined ? '' : String(response.data.strategyConfirmed)
+    strategyConfirmed.value = response.data.strategyConfirmed === null || response.data.strategyConfirmed === undefined ? UNCONFIRMED : String(response.data.strategyConfirmed)
     strategyObservation.value = response.data.strategyObservation || ''
-    advisorValidationConfirmed.value = response.data.advisorValidationConfirmed === null || response.data.advisorValidationConfirmed === undefined ? '' : String(response.data.advisorValidationConfirmed)
+    advisorValidationConfirmed.value = response.data.advisorValidationConfirmed === null || response.data.advisorValidationConfirmed === undefined ? UNCONFIRMED : String(response.data.advisorValidationConfirmed)
     advisorValidationName.value = response.data.advisorValidationName || ''
     classStartDate.value = response.data.classStartDate?.slice(0, 10) || ''
     paymentDate.value = response.data.paymentDate?.slice(0, 10) || ''
@@ -127,9 +128,9 @@ const saveVerification = async (showSuccess = true): Promise<boolean> => {
         appointmentRescheduledAt: toIsoDateTime(appointmentRescheduledAt.value),
         appointmentType: appointmentType.value,
         advisoryRating: advisoryRating.value === '' ? null : Number(advisoryRating.value),
-        strategyConfirmed: strategyConfirmed.value === '' ? null : strategyConfirmed.value === 'true',
+        strategyConfirmed: strategyConfirmed.value === UNCONFIRMED ? null : strategyConfirmed.value === 'true',
         strategyObservation: strategyConfirmed.value === 'false' ? strategyObservation.value : null,
-        advisorValidationConfirmed: advisorValidationConfirmed.value === '' ? null : advisorValidationConfirmed.value === 'true',
+        advisorValidationConfirmed: advisorValidationConfirmed.value === UNCONFIRMED ? null : advisorValidationConfirmed.value === 'true',
         advisorValidationName: advisorValidationConfirmed.value === 'false' ? advisorValidationName.value : null,
         classStartDate: classStartDate.value || null,
         paymentDate: paymentDate.value || null
@@ -197,17 +198,17 @@ const workflow = async (action: string) => {
             <UiAlert v-if="verificationError" variant="destructive"><UiAlertDescription>{{ verificationError }}</UiAlertDescription></UiAlert>
             <UiAlert v-if="verificationSuccess"><UiAlertDescription>{{ verificationSuccess }}</UiAlertDescription></UiAlert>
             <fieldset :disabled="!canEditVerification || verificationSaving || workflowLoading" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 disabled:opacity-70">
-              <div class="space-y-2"><label class="text-sm font-medium" for="first-contact-at">Primer contacto</label><UiInput id="first-contact-at" v-model="firstContactAt" type="datetime-local" /></div>
-              <div class="space-y-2"><label class="text-sm font-medium" for="appointment-at">Fecha de cita</label><UiInput id="appointment-at" v-model="appointmentAt" type="datetime-local" /></div>
-              <div class="space-y-2"><label class="text-sm font-medium" for="appointment-rescheduled-at">Cita reprogramada para</label><UiInput id="appointment-rescheduled-at" v-model="appointmentRescheduledAt" type="datetime-local" /></div>
-              <div class="space-y-2"><label class="text-sm font-medium" for="appointment-type">Tipo de cita</label><select id="appointment-type" v-model="appointmentType" class="h-9 w-full rounded-lg border bg-background px-2 text-sm"><option value="PRESENCIAL">Presencial</option><option value="VIRTUAL">Virtual</option></select></div>
-              <div class="space-y-2"><label class="text-sm font-medium" for="advisory-rating">Calificación de asesoría (0 a 10)</label><UiInput id="advisory-rating" v-model="advisoryRating" type="number" min="0" max="10" step="1" /></div>
-              <div class="space-y-2"><label class="text-sm font-medium" for="strategy-confirmed">¿Confirma la estrategia?</label><select id="strategy-confirmed" v-model="strategyConfirmed" class="h-9 w-full rounded-lg border bg-background px-2 text-sm"><option value="">Sin confirmar</option><option value="true">Sí</option><option value="false">No</option></select></div>
-              <div v-if="strategyConfirmed === 'false'" class="space-y-2 sm:col-span-2 lg:col-span-3"><label class="text-sm font-medium" for="strategy-observation">Estrategia indicada por el cliente</label><UiTextarea id="strategy-observation" v-model="strategyObservation" maxlength="1000" /></div>
-              <div class="space-y-2"><label class="text-sm font-medium" for="advisor-confirmed">¿Confirma al asesor?</label><select id="advisor-confirmed" v-model="advisorValidationConfirmed" class="h-9 w-full rounded-lg border bg-background px-2 text-sm"><option value="">Sin confirmar</option><option value="true">Sí</option><option value="false">No</option></select></div>
-              <div v-if="advisorValidationConfirmed === 'false'" class="space-y-2 sm:col-span-2"><label class="text-sm font-medium" for="advisor-name">Asesor indicado por el cliente</label><UiInput id="advisor-name" v-model="advisorValidationName" maxlength="200" /></div>
-              <div class="space-y-2"><label class="text-sm font-medium" for="class-start-date">Inicio de clases</label><UiInput id="class-start-date" v-model="classStartDate" type="date" /></div>
-              <div class="space-y-2"><label class="text-sm font-medium" for="payment-date">Fecha de pago</label><UiInput id="payment-date" v-model="paymentDate" type="date" /></div>
+              <div class="space-y-2"><UiLabel for="first-contact-at">Primer contacto</UiLabel><UiInput id="first-contact-at" v-model="firstContactAt" type="datetime-local" /></div>
+              <div class="space-y-2"><UiLabel for="appointment-at">Fecha de cita</UiLabel><UiInput id="appointment-at" v-model="appointmentAt" type="datetime-local" /></div>
+              <div class="space-y-2"><UiLabel for="appointment-rescheduled-at">Cita reprogramada para</UiLabel><UiInput id="appointment-rescheduled-at" v-model="appointmentRescheduledAt" type="datetime-local" /></div>
+              <div class="space-y-2"><UiLabel for="appointment-type">Tipo de cita</UiLabel><UiSelect v-model="appointmentType"><UiSelectTrigger id="appointment-type" class="w-full"><UiSelectValue /></UiSelectTrigger><UiSelectContent><UiSelectItem value="PRESENCIAL">Presencial</UiSelectItem><UiSelectItem value="VIRTUAL">Virtual</UiSelectItem></UiSelectContent></UiSelect></div>
+              <div class="space-y-2"><UiLabel for="advisory-rating">Calificación de asesoría (0 a 10)</UiLabel><UiInput id="advisory-rating" v-model="advisoryRating" type="number" min="0" max="10" step="1" /></div>
+              <div class="space-y-2"><UiLabel for="strategy-confirmed">¿Confirma la estrategia?</UiLabel><UiSelect v-model="strategyConfirmed"><UiSelectTrigger id="strategy-confirmed" class="w-full"><UiSelectValue /></UiSelectTrigger><UiSelectContent><UiSelectItem :value="UNCONFIRMED">Sin confirmar</UiSelectItem><UiSelectItem value="true">Sí</UiSelectItem><UiSelectItem value="false">No</UiSelectItem></UiSelectContent></UiSelect></div>
+              <div v-if="strategyConfirmed === 'false'" class="space-y-2 sm:col-span-2 lg:col-span-3"><UiLabel for="strategy-observation">Estrategia indicada por el cliente</UiLabel><UiTextarea id="strategy-observation" v-model="strategyObservation" maxlength="1000" /></div>
+              <div class="space-y-2"><UiLabel for="advisor-confirmed">¿Confirma al asesor?</UiLabel><UiSelect v-model="advisorValidationConfirmed"><UiSelectTrigger id="advisor-confirmed" class="w-full"><UiSelectValue /></UiSelectTrigger><UiSelectContent><UiSelectItem :value="UNCONFIRMED">Sin confirmar</UiSelectItem><UiSelectItem value="true">Sí</UiSelectItem><UiSelectItem value="false">No</UiSelectItem></UiSelectContent></UiSelect></div>
+              <div v-if="advisorValidationConfirmed === 'false'" class="space-y-2 sm:col-span-2"><UiLabel for="advisor-name">Asesor indicado por el cliente</UiLabel><UiInput id="advisor-name" v-model="advisorValidationName" maxlength="200" /></div>
+              <div class="space-y-2"><UiLabel for="class-start-date">Inicio de clases</UiLabel><UiInput id="class-start-date" v-model="classStartDate" type="date" /></div>
+              <div class="space-y-2"><UiLabel for="payment-date">Fecha de pago</UiLabel><UiInput id="payment-date" v-model="paymentDate" type="date" /></div>
             </fieldset>
             <UiButton v-if="canEditVerification" :disabled="verificationSaving || workflowLoading" @click="saveVerification()"><LoaderCircle v-if="verificationSaving" class="mr-2 size-4 animate-spin" />Guardar datos de verificación</UiButton>
           </UiCardContent>
@@ -216,25 +217,22 @@ const workflow = async (action: string) => {
           <UiCardHeader><UiCardTitle>Flujo de revisión</UiCardTitle><UiCardDescription>Actualiza el estado y comunica las observaciones a los usuarios relacionados.</UiCardDescription></UiCardHeader>
           <UiCardContent class="space-y-4">
             <div class="space-y-2">
-              <label class="text-sm font-medium" for="workflow-observation">Observaciones</label>
+              <UiLabel for="workflow-observation">Observaciones <span class="text-muted-foreground">(obligatorias para rebotar o verificar con observaciones)</span></UiLabel>
               <UiTextarea id="workflow-observation" v-model="observation" placeholder="Describe los errores o indicaciones para corregir el expediente." />
             </div>
             <div v-if="canRejectVerification" class="space-y-2">
-              <label class="text-sm font-medium" for="verification-return-location">Devolver a</label>
-              <select id="verification-return-location" v-model="verificationReturnLocation" class="h-9 w-full rounded-lg border bg-background px-2 text-sm sm:max-w-sm">
-                <option value="ASISTENTE_COMERCIAL">Asistente comercial</option>
-                <option value="SUPERVISOR">Supervisor</option>
-              </select>
+              <UiLabel for="verification-return-location">Devolver a</UiLabel>
+              <UiSelect v-model="verificationReturnLocation"><UiSelectTrigger id="verification-return-location" class="w-full sm:max-w-sm"><UiSelectValue /></UiSelectTrigger><UiSelectContent><UiSelectItem value="ASISTENTE_COMERCIAL">Asistente comercial</UiSelectItem><UiSelectItem value="SUPERVISOR">Supervisor</UiSelectItem></UiSelectContent></UiSelect>
             </div>
             <div class="flex flex-wrap gap-2">
               <UiButton v-if="canSendSupervisor" :disabled="workflowLoading" @click="workflow('send_supervisor')"><Send class="mr-2 size-4" /> Enviar a supervisor</UiButton>
               <UiButton v-if="canApproveSupervisor" :disabled="workflowLoading" @click="workflow('approve_supervisor')"><Send class="mr-2 size-4" /> Enviar a Comercial</UiButton>
-              <UiButton v-if="canRejectSupervisor" variant="destructive" :disabled="workflowLoading" @click="workflow('reject_supervisor')"><XCircle class="mr-2 size-4" /> Rebotar al asesor</UiButton>
-              <UiButton v-if="canRejectCommercial" variant="destructive" :disabled="workflowLoading" @click="workflow('reject_commercial')"><XCircle class="mr-2 size-4" /> Rebotar comercial</UiButton>
+              <UiButton v-if="canRejectSupervisor" variant="destructive" :disabled="workflowLoading || !observation.trim()" @click="workflow('reject_supervisor')"><XCircle class="mr-2 size-4" /> Rebotar al asesor</UiButton>
+              <UiButton v-if="canRejectCommercial" variant="destructive" :disabled="workflowLoading || !observation.trim()" @click="workflow('reject_commercial')"><XCircle class="mr-2 size-4" /> Rebotar comercial</UiButton>
               <UiButton v-if="canSendVerification" :disabled="workflowLoading" @click="workflow('send_verification')"><Send class="mr-2 size-4" /> Enviar a verificación</UiButton>
-              <UiButton v-if="canRejectVerification" variant="destructive" :disabled="workflowLoading" @click="workflow('reject_verification')"><CircleAlert class="mr-2 size-4" /> Rebotar verificación</UiButton>
-              <UiButton v-if="canVerification && status === 'CREADO' && currentLocation === 'VERIFICACION'" variant="outline" :disabled="workflowLoading" @click="workflow('schedule_appointment')">Programar cita</UiButton>
-              <UiButton v-if="canVerify" variant="outline" :disabled="workflowLoading" @click="workflow('verify_with_observations')"><CheckCircle2 class="mr-2 size-4" /> Verificar con observaciones</UiButton>
+              <UiButton v-if="canRejectVerification" variant="destructive" :disabled="workflowLoading || !observation.trim()" @click="workflow('reject_verification')"><CircleAlert class="mr-2 size-4" /> Rebotar verificación</UiButton>
+              <UiButton v-if="canVerification && isAtVerification" variant="outline" :disabled="workflowLoading" @click="workflow('schedule_appointment')">Programar cita</UiButton>
+              <UiButton v-if="canVerify" variant="outline" :disabled="workflowLoading || !observation.trim()" @click="workflow('verify_with_observations')"><CheckCircle2 class="mr-2 size-4" /> Verificar con observaciones</UiButton>
               <UiButton v-if="canVerify" :disabled="workflowLoading" @click="workflow('verify')"><CheckCircle2 class="mr-2 size-4" /> Verificar</UiButton>
             </div>
           </UiCardContent>

@@ -16,6 +16,7 @@ import type { DniLookupResult } from './ruc-search';
 const DNIPERU_AJAX_URL = 'https://dniperu.com/wp-admin/admin-ajax.php';
 const DNIPERU_NAMES_PAGE_URL = 'https://dniperu.com/buscar-dni-nombres-apellidos/';
 const DNIPERU_BIRTH_DATE_PAGE_URL = 'https://dniperu.com/fecha-de-nacimiento-con-dni/';
+const DNIPERU_UBIGEO_PAGE_URL = 'https://dniperu.com/buscar-ubigeo-dni/';
 const DNIPERU_ORIGIN = 'https://dniperu.com';
 const DNIPERU_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const DNIPERU_TIMEOUT_MS = 8_000;
@@ -225,8 +226,8 @@ export class DniperuService {
   }
 
   private async lookupInParallel(dni: string): Promise<DniLookupResult | null> {
-    // El token de nombres es imprescindible; la fecha es un dato complementario.
-    // Si dnipeu falla al emitir el token de fecha, no debemos perder los nombres.
+    // El token de nombres es imprescindible; fecha y ubigeo son datos complementarios.
+    // Si cualquiera de esas consultas falla, no debemos perder los nombres.
     let namesToken: DniperuToken
     try {
       namesToken = await this.ensureToken('buscar_nombres', DNIPERU_NAMES_PAGE_URL)
@@ -235,7 +236,7 @@ export class DniperuService {
       return null
     }
 
-    const [namesResult, birthDateResult] = await Promise.allSettled([
+    const [namesResult, birthDateResult, ubigeoResult] = await Promise.allSettled([
       this.getNames(dni, namesToken),
       (async () => {
         try {
@@ -246,6 +247,7 @@ export class DniperuService {
           return undefined
         }
       })(),
+      this.getUbigeo(dni),
     ]);
 
     if (namesResult.status !== 'fulfilled' || !namesResult.value) {
@@ -256,6 +258,7 @@ export class DniperuService {
       ...namesResult.value,
       fechaNacimiento:
         birthDateResult.status === 'fulfilled' ? birthDateResult.value : undefined,
+      ubigeo: ubigeoResult.status === 'fulfilled' ? ubigeoResult.value : undefined,
     };
     this.resultCache.set(dni, { value: result, expiresAt: Date.now() + DNIPERU_CACHE_TTL_MS });
     return result;
@@ -356,6 +359,44 @@ export class DniperuService {
       return json.success && json.data?.fechaNacimiento ? json.data.fechaNacimiento : undefined;
     } catch (e: any) {
       console.error('[DniperuService BirthDate Error]', e?.message || e);
+      return undefined;
+    }
+  }
+
+  async getUbigeo(dni: string): Promise<string | undefined> {
+    if (!/^\d{8}$/.test(dni)) return undefined;
+
+    const context = 'buscar_ubigeo';
+    try {
+      const ubigeoToken = await this.ensureToken(context, DNIPERU_UBIGEO_PAGE_URL);
+      const fd = new FormData();
+      fd.append('action', context);
+      fd.append('dni', dni);
+      fd.append('company', '');
+      fd.append('cc_token', ubigeoToken.cc_token);
+      fd.append('cc_sig', ubigeoToken.cc_sig);
+
+      const res = await $fetch.raw(DNIPERU_AJAX_URL, {
+        method: 'POST',
+        headers: this.commonHeaders(DNIPERU_UBIGEO_PAGE_URL),
+        body: fd,
+        timeout: DNIPERU_TIMEOUT_MS,
+        ignoreResponseError: true,
+      });
+      this.setCookiesFromResponse(res as any);
+
+      if (res.status < 200 || res.status >= 300) {
+        throw new Error(`buscar_ubigeo HTTP ${res.status}`);
+      }
+
+      const json = (res._data ?? {}) as {
+        success?: boolean;
+        data?: { ubigeo?: string };
+      };
+      const ubigeo = json.success ? json.data?.ubigeo?.trim() : undefined;
+      return ubigeo && /^\d{6}$/.test(ubigeo) ? ubigeo : undefined;
+    } catch (error: any) {
+      console.warn(`[DniperuService] Ubigeo no disponible: ${error?.message || error}`);
       return undefined;
     }
   }

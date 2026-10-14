@@ -3,6 +3,7 @@ import { notify } from '../../utils/notifications'
 import { prisma } from '../../utils/prisma'
 import { getAccessibleContract, requireExpedientUser, removeStoredFile, storeUpload, type ExpedientDocumentType } from '../../utils/expedients'
 import { supervisorRecipientIds } from '../../utils/contract-access'
+import { isContractSigned } from '../../utils/contract-signature'
 
 const filePart = (parts: Awaited<ReturnType<typeof readMultipartFormData>>, name: string) => parts?.find((part) => part.name === name && part.data?.length)
 
@@ -17,7 +18,7 @@ export default defineEventHandler(async (event) => {
   if (!/^[0-9a-f-]{36}$/i.test(contractId)) throw createError({ statusCode: 400, message: 'Matrícula inválida' })
 
   const contract = await getAccessibleContract(contractId, user)
-  if (!contract.signedAt) throw createError({ statusCode: 409, message: 'El expediente se puede crear cuando el contrato esté firmado.' })
+  if (!isContractSigned(contract)) throw createError({ statusCode: 409, message: 'El expediente se puede crear cuando el contrato esté firmado.' })
 
   const dni = filePart(parts, 'dni')
   const voucher = filePart(parts, 'voucher')
