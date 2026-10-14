@@ -1,6 +1,8 @@
 import { assertCsrf, getUserBySession } from '../../utils/auth'
 import { prisma } from '../../utils/prisma'
 import { resolveActiveStrategy } from '../../utils/strategies'
+import { assertContractAccess } from '../../utils/contract-access'
+import { isContractSigned } from '../../utils/contract-signature'
 
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 const optionalText = (value: unknown) => text(value) || null
@@ -15,16 +17,16 @@ export default defineEventHandler(async (event) => {
   if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, message: 'ID de matrícula inválido' })
 
   const contract = await prisma.contract.findUnique({ where: { id }, select: {
-    id: true, userId: true, customerId: true, status: true, signedAt: true, strategyNameSnapshot: true,
+    id: true, userId: true, customerId: true, status: true, signedAccept: true, signedAt: true, strategyNameSnapshot: true,
     strategyDefinition: { select: { name: true } }
   } })
   if (!contract) throw createError({ statusCode: 404, message: 'Matrícula no encontrada' })
-  if (contract.signedAt || contract.status === 'FIRMADO' || contract.status === 'ANULADO') {
+  if (isContractSigned(contract) || contract.status === 'ANULADO') {
     throw createError({ statusCode: 409, message: 'No se puede editar una matrícula firmada.' })
   }
-  if (!['admin', 'asesor', 'verificador'].includes(user.role?.name || '')) throw createError({ statusCode: 403, message: 'No tienes permiso para editar matrículas' })
+  if (!['admin', 'asesor', 'supervisor', 'verificador'].includes(user.role?.name || '')) throw createError({ statusCode: 403, message: 'No tienes permiso para editar matrículas' })
+  await assertContractAccess(user, id)
   if (user.role?.name === 'asesor' && contract.userId !== user.id) throw createError({ statusCode: 403, message: 'No tienes acceso a esta matrícula' })
-  if (user.role?.name === 'asesor' && contract.status !== 'REVISION') throw createError({ statusCode: 409, message: 'Los asesores solo pueden editar matrículas en revisión' })
 
   const body = await readBody<Record<string, unknown>>(event)
   const strategyIdProvided = Object.prototype.hasOwnProperty.call(body, 'strategyId')

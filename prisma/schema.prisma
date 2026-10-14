@@ -311,6 +311,7 @@ model Contract {
   installmentValue    Decimal?             @map("valor_cuota") @db.Decimal(10, 2)
   otherPayment        String?              @map("otro_pago") @db.VarChar(100)
   status              ContractStatus       @default(REVISION) @map("estado")
+  signedAccept        Boolean              @default(false) @map("firmado_acepto")
   createdAt           DateTime             @default(now()) @map("created_at")
   updatedAt           DateTime             @updatedAt @map("updated_at")
   signedAt            DateTime?            @map("firmado_at")

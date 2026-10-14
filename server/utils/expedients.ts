@@ -5,6 +5,7 @@ import { prisma } from './prisma'
 import { getUserBySession } from './auth'
 import { assertContractAccess } from './contract-access'
 import { removeS3Object, storeS3Object } from './s3'
+import { isContractSigned } from './contract-signature'
 
 export const EXPEDIENT_ROLES = ['admin', 'asesor', 'supervisor', 'asistente_comercial', 'verificador'] as const
 export const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
@@ -30,10 +31,11 @@ export async function requireExpedientUser(event: H3Event) {
 export async function getAccessibleContract(contractId: string, user: Awaited<ReturnType<typeof requireExpedientUser>>) {
   const contract = await prisma.contract.findUnique({
     where: { id: contractId },
-    select: { id: true, userId: true, signedAt: true }
+    select: { id: true, userId: true, status: true, signedAccept: true, signedAt: true }
   })
   if (!contract) throw createError({ statusCode: 404, message: 'Matrícula no encontrada' })
   await assertContractAccess(user, contractId)
+  if (!isContractSigned(contract)) throw createError({ statusCode: 409, message: 'El expediente requiere un contrato firmado.' })
   return contract
 }
 

@@ -277,8 +277,8 @@ const handleSubmit = async () => {
                   <UiSelectItem v-for="item in teams" :key="item.id" :value="item.name">{{ item.name }} · {{ item.site.name }}</UiSelectItem>
                 </UiSelectContent>
               </UiSelect>
-              <p v-if="teamAutoAssigned" class="text-xs text-muted-foreground">Asignado automáticamente según el equipo activo de tu usuario.</p>
-              <p v-else-if="teamAssignmentMessage" class="text-xs text-amber-700">{{ teamAssignmentMessage }}</p>
+              <!-- <p v-if="teamAutoAssigned" class="text-xs text-muted-foreground">Asignado automáticamente según el equipo activo de tu usuario.</p>
+              <p v-else-if="teamAssignmentMessage" class="text-xs text-amber-700">{{ teamAssignmentMessage }}</p> -->
             </div>
           </UiCardContent>
         </UiCard>

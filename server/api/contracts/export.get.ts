@@ -18,6 +18,7 @@ export default defineEventHandler(async (event) => {
     holderDni: typeof query.holderDni === 'string' ? query.holderDni.trim() : undefined,
     advisorName: typeof query.advisorName === 'string' ? query.advisorName.trim() : undefined,
     status: typeof query.status === 'string' ? query.status.trim() : undefined,
+    signature: typeof query.signature === 'string' ? query.signature.trim() : undefined,
     search: typeof query.search === 'string' ? query.search.trim() : undefined,
     expedientStatus: typeof query.expedientStatus === 'string' ? query.expedientStatus.trim() : undefined,
     location: typeof query.location === 'string' ? query.location.trim() : undefined

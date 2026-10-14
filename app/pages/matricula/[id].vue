@@ -129,7 +129,7 @@ const loadContract = async () => {
       ? contract.advisor.teamMemberships.map((membership: { team: { id: string; name: string } }) => membership.team)
       : []
     cancellationRequest.value = contract.cancellationRequest || null
-    isLocked.value = Boolean(contract.signedAt) || contract.status !== 'REVISION'
+    isLocked.value = Boolean(contract.signedAccept || contract.signedAt || contract.status === 'FIRMADO' || contract.status === 'ANULADO')
     contractNumber.value = 
     contract.contractNumber; 
     const loadedStudents = Array.isArray(contract.students)

@@ -51,6 +51,7 @@ interface Contract {
   testimonials: boolean
   dataUsage: boolean | null
   status: 'REVISION' | 'FIRMADO' | 'ANULADO'
+  signedAccept: boolean
   signedAt: string | null
   signedIp: string | null
   advisor: { name: string; username: string }
@@ -95,18 +96,19 @@ const { csrfHeaders } = useAuth()
 const statusLabel = computed(() => {
   if (!props.contract) return '—'
   if (props.contract.status === 'ANULADO') return 'Anulado'
-  if (props.contract.status === 'FIRMADO' || props.contract.signedAt) return 'Firmado'
-  return 'Listo para firma'
+  if (props.contract.status === 'FIRMADO') return 'Estado heredado'
+  return 'En revisión'
 })
 
 const statusVariant = computed<'default' | 'outline' | 'destructive'>(() => {
   if (!props.contract) return 'outline'
   if (props.contract.status === 'ANULADO') return 'destructive'
-  return props.contract.status === 'FIRMADO' || props.contract.signedAt ? 'default' : 'outline'
+  return 'outline'
 })
 
-const termsAvailable = computed(() => Boolean(props.contract && (props.contract.status === 'REVISION' || props.contract.signedAt)))
-const canAccept = computed(() => Boolean(props.contract && props.contract.status === 'REVISION' && !props.contract.signedAt && termsHtml.value && !termsError.value))
+const isSigned = computed(() => Boolean(props.contract && (props.contract.signedAccept || props.contract.signedAt || props.contract.status === 'FIRMADO')))
+const termsAvailable = computed(() => Boolean(props.contract && props.contract.status !== 'ANULADO'))
+const canAccept = computed(() => Boolean(props.contract && props.contract.status !== 'ANULADO' && !isSigned.value && termsHtml.value && !termsError.value))
 
 const formatDate = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' }).format(new Date(value)) : '—'
 const formatDateTime = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'
@@ -284,7 +286,7 @@ watch(() => props.contract?.id, () => {
           <UiDialogTitle>{{ sendPreviewOpen ? 'Preparar envío del contrato' : contract ? `Contrato ${contract.contractNumber}` : 'Detalle del contrato' }}</UiDialogTitle>
           <UiDialogDescription>{{ sendPreviewOpen ? 'Revisa el contenido y envíalo directamente al correo del cliente.' : 'Detalle completo del registro, contrato y movimientos de pago.' }}</UiDialogDescription>
         </div>
-        <div v-if="contract && !sendPreviewOpen" class="flex flex-wrap justify-end gap-2"><UiButton v-if="contract.status !== 'FIRMADO' && !contract.signedAt" variant="outline" size="sm" class="gap-2" :disabled="sendLoading" @click="prepareSendPreview"><Mail class="size-4" /> {{ sendLoading ? 'Preparando…' : 'Enviar contrato' }}</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('publicView')"><ExternalLink class="size-4" /> Vista pública</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('downloadPdf')"><Download class="size-4" /> Descargar PDF</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('printContract')"><Printer class="size-4" /> Imprimir contrato</UiButton></div>
+        <div v-if="contract && !sendPreviewOpen" class="flex flex-wrap justify-end gap-2"><UiButton v-if="!isSigned && contract.status !== 'ANULADO'" variant="outline" size="sm" class="gap-2" :disabled="sendLoading" @click="prepareSendPreview"><Mail class="size-4" /> {{ sendLoading ? 'Preparando…' : 'Enviar contrato' }}</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('publicView')"><ExternalLink class="size-4" /> Vista pública</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('downloadPdf')"><Download class="size-4" /> Descargar PDF</UiButton><UiButton variant="outline" size="sm" class="gap-2" @click="emit('printContract')"><Printer class="size-4" /> Imprimir contrato</UiButton></div>
       </div>
 
       <div v-if="sendPreviewOpen" class="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto p-6">
@@ -345,7 +347,7 @@ watch(() => props.contract?.id, () => {
       <div v-else-if="contract" class="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto bg-muted/20 p-6">
         <section class="rounded-lg border bg-card p-5 shadow-sm">
           <div class="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-            <div class="flex items-center gap-4"><div class="grid size-12 place-items-center rounded-full bg-primary text-primary-foreground"><CheckCircle2 class="size-6" /></div><div><h2 class="text-lg font-semibold">Contrato {{ contract.contractNumber }}</h2><p class="text-sm text-muted-foreground">{{ contract.signedAt ? `Firmado digitalmente el ${formatDateTime(contract.signedAt)}.` : 'Seguimiento del contrato registrado.' }}</p></div></div>
+            <div class="flex items-center gap-4"><div class="grid size-12 place-items-center rounded-full bg-primary text-primary-foreground"><CheckCircle2 class="size-6" /></div><div><h2 class="text-lg font-semibold">Contrato {{ contract.contractNumber }}</h2><p class="text-sm text-muted-foreground">{{ isSigned ? `Firmado digitalmente el ${formatDateTime(contract.signedAt)}.` : 'Seguimiento del contrato registrado.' }}</p></div></div>
             <UiBadge :variant="statusVariant">{{ statusLabel }}</UiBadge>
           </div>
         </section>
@@ -364,9 +366,9 @@ watch(() => props.contract?.id, () => {
 
         <section class="rounded-lg border bg-card p-5 shadow-sm"><div class="flex items-center justify-between"><h3 class="section-title m-0">Recibos</h3><UiBadge variant="secondary">{{ contract.receipts.length }}</UiBadge></div><div v-if="contract.receipts.length" class="mt-4 overflow-x-auto"><table class="w-full min-w-[680px] text-left text-sm"><thead><tr class="border-b text-xs uppercase text-muted-foreground"><th class="p-3">Concepto</th><th class="p-3">Importe</th><th class="p-3">Método</th><th class="p-3">Operación</th><th class="p-3">Fecha</th></tr></thead><tbody><tr v-for="receipt in contract.receipts" :key="receipt.id" class="border-b last:border-0"><td class="p-3">{{ receipt.concepts || 'Pago registrado' }}</td><td class="p-3 font-medium">{{ formatCurrency(receipt.amount) }}</td><td class="p-3">{{ display(receipt.paymentMethod) }}</td><td class="p-3">{{ display(receipt.operationNumber) }}</td><td class="p-3">{{ formatDate(receipt.transactionDate || receipt.registeredAt) }}</td></tr></tbody></table></div><p v-else class="mt-4 text-sm text-muted-foreground">No hay recibos registrados.</p></section>
 
-        <section v-if="termsAvailable" class="rounded-lg border bg-card p-5 shadow-sm"><h3 class="section-title m-0">Términos y condiciones del servicio</h3><UiAlert v-if="termsError" variant="destructive"><UiAlertDescription>No se pudieron cargar los términos y condiciones.</UiAlertDescription></UiAlert><div v-else ref="termsContainer" class="terms-container mt-4" @scroll="updateTermsRead"><div v-if="termsLoading" class="space-y-3"><UiSkeleton class="h-6 w-3/4" /><UiSkeleton v-for="item in 8" :key="item" class="h-4 w-full" /></div><div v-else class="legacy-terms" v-html="termsHtml" /></div><div v-if="canAccept" class="mt-5 space-y-4"><label class="flex items-start gap-3 text-sm"><UiCheckbox v-model="acceptedChecked" :disabled="!termsRead" /><span>Declaro haber leído y acepto los Términos y Condiciones de Licencia de Uso de Curso Educativo y Compraventa de Libros de BRIGHTON INGLÉS NATIVO S.A.C.</span></label><UiButton :disabled="!termsRead || !acceptedChecked || actionLoading" class="gap-2" @click="emit('accept')"><CheckCircle2 class="size-4" /> Firmar y aceptar contrato</UiButton><p v-if="!termsRead" class="text-xs text-muted-foreground">Lee los términos hasta el final para habilitar la aceptación.</p></div><div v-else-if="contract.signedAt" class="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><p class="font-semibold">Contrato aceptado digitalmente</p><p>Validado el {{ formatDateTime(contract.signedAt) }}. IP: {{ display(contract.signedIp) }}</p></div></section><section v-else class="rounded-lg border border-sky-200 bg-sky-50 p-5 text-sm text-sky-900">El contrato anulado no está disponible para firma.</section>
+        <section v-if="termsAvailable" class="rounded-lg border bg-card p-5 shadow-sm"><h3 class="section-title m-0">Términos y condiciones del servicio</h3><UiAlert v-if="termsError" variant="destructive"><UiAlertDescription>No se pudieron cargar los términos y condiciones.</UiAlertDescription></UiAlert><div v-else ref="termsContainer" class="terms-container mt-4" @scroll="updateTermsRead"><div v-if="termsLoading" class="space-y-3"><UiSkeleton class="h-6 w-3/4" /><UiSkeleton v-for="item in 8" :key="item" class="h-4 w-full" /></div><div v-else class="legacy-terms" v-html="termsHtml" /></div><div v-if="canAccept" class="mt-5 space-y-4"><label class="flex items-start gap-3 text-sm"><UiCheckbox v-model="acceptedChecked" :disabled="!termsRead" /><span>Declaro haber leído y acepto los Términos y Condiciones de Licencia de Uso de Curso Educativo y Compraventa de Libros de BRIGHTON INGLÉS NATIVO S.A.C.</span></label><UiButton :disabled="!termsRead || !acceptedChecked || actionLoading" class="gap-2" @click="emit('accept')"><CheckCircle2 class="size-4" /> Firmar y aceptar contrato</UiButton><p v-if="!termsRead" class="text-xs text-muted-foreground">Lee los términos hasta el final para habilitar la aceptación.</p></div><div v-else-if="isSigned" class="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><p class="font-semibold">Contrato aceptado digitalmente</p><p>Validado el {{ formatDateTime(contract.signedAt) }}. IP: {{ display(contract.signedIp) }}</p></div></section><section v-else class="rounded-lg border border-sky-200 bg-sky-50 p-5 text-sm text-sky-900">El contrato anulado no está disponible para firma.</section>
 
-        <section class="rounded-lg border bg-card p-5 shadow-sm"><h3 class="section-title m-0">Ficha del registro</h3><dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2"><div><dt class="label">Asesor</dt><dd class="value">{{ contract.advisor.name }}</dd></div><div><dt class="label">Última actualización</dt><dd class="value">{{ formatDateTime(contract.updatedAt) }}</dd></div><div><dt class="label">Firma</dt><dd class="value">{{ contract.signedAt ? 'Sí' : 'No' }}</dd></div><div><dt class="label">Fecha de firma</dt><dd class="value">{{ formatDateTime(contract.signedAt) }}</dd></div></dl></section>
+        <section class="rounded-lg border bg-card p-5 shadow-sm"><h3 class="section-title m-0">Ficha del registro</h3><dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2"><div><dt class="label">Asesor</dt><dd class="value">{{ contract.advisor.name }}</dd></div><div><dt class="label">Última actualización</dt><dd class="value">{{ formatDateTime(contract.updatedAt) }}</dd></div><div><dt class="label">Firma</dt><dd class="value">{{ isSigned ? 'Sí' : 'No' }}</dd></div><div><dt class="label">Fecha de firma</dt><dd class="value">{{ formatDateTime(contract.signedAt) }}</dd></div></dl></section>
       </div>
     </UiDialogScrollContent>
   </UiDialog>
