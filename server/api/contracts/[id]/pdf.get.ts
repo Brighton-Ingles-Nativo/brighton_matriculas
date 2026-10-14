@@ -259,7 +259,8 @@ export default defineEventHandler(async (event) => {
   }) as PdfContract | null
   if (!contract) throw createError({ statusCode: 404, message: 'Contrato no encontrado' })
   await assertContractAccess(user, id)
-  const signatureImage = await readFile(resolve(process.cwd(), 'public/assets/images/firma_gerencia-brighton.jpg'))
+  const publicDir = process.env.NODE_ENV === 'production' ? '.output/public' : 'public'
+  const signatureImage = await readFile(resolve(process.cwd(), publicDir, 'assets/images/firma_gerencia-brighton.jpg'))
   setHeader(event, 'Content-Type', 'application/pdf')
   setHeader(event, 'Content-Disposition', `attachment; filename="Contrato-${contract.contractNumber.replace(/[^a-zA-Z0-9_-]/g, '')}.pdf"`)
   setHeader(event, 'Cache-Control', 'private, no-store')
