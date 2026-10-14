@@ -1,30 +1,56 @@
 BEGIN;
 
-ALTER TABLE "contratos"
-  ADD COLUMN IF NOT EXISTS "firmado_acepto" BOOLEAN NOT NULL DEFAULT false;
-
-UPDATE "contratos"
-SET "firmado_acepto" = true
-WHERE "firmado_at" IS NOT NULL
-   OR "estado"::text IN ('FIRMADO', 'APROBADO');
-
--- Producción puede haber recibido manualmente el cambio de enum antes de que
--- Prisma aplique esta migración. Convierte FIRMADO a APROBADO solo si aún falta.
 DO $$
+DECLARE
+  status_labels TEXT[];
+  signed_flag_added BOOLEAN := false;
 BEGIN
-  IF EXISTS (
+  SELECT array_agg(e.enumlabel::text ORDER BY e.enumsortorder)
+  INTO status_labels
+  FROM pg_type t
+  JOIN pg_namespace n ON n.oid = t.typnamespace
+  JOIN pg_enum e ON e.enumtypid = t.oid
+  WHERE n.nspname = 'public'
+    AND t.typname = 'ContractStatus';
+
+  IF NOT EXISTS (
     SELECT 1
-    FROM pg_type t
-    JOIN pg_enum e ON e.enumtypid = t.oid
-    WHERE t.typname = 'ContractStatus'
-      AND e.enumlabel = 'FIRMADO'
-  ) AND NOT EXISTS (
-    SELECT 1
-    FROM pg_type t
-    JOIN pg_enum e ON e.enumtypid = t.oid
-    WHERE t.typname = 'ContractStatus'
-      AND e.enumlabel = 'APROBADO'
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'contratos'
+      AND column_name = 'firmado_acepto'
   ) THEN
+    ALTER TABLE "contratos"
+      ADD COLUMN "firmado_acepto" BOOLEAN NOT NULL DEFAULT false;
+    signed_flag_added := true;
+  END IF;
+
+  -- Backfill only when creating the flag. Do not overwrite existing flag data.
+  IF signed_flag_added THEN
+    IF status_labels @> ARRAY['FIRMADO']::TEXT[] THEN
+      UPDATE "contratos"
+      SET "firmado_acepto" = true
+      WHERE "firmado_at" IS NOT NULL
+         OR "estado"::text = 'FIRMADO';
+    ELSE
+      UPDATE "contratos"
+      SET "firmado_acepto" = true
+      WHERE "firmado_at" IS NOT NULL;
+    END IF;
+  END IF;
+
+  -- The target enum is already correct: leave estado values and type untouched.
+  IF status_labels IS NULL OR NOT (
+    status_labels @> ARRAY['REVISION', 'APROBADO', 'ANULADO']::TEXT[]
+    AND status_labels <@ ARRAY['REVISION', 'APROBADO', 'ANULADO']::TEXT[]
+  ) THEN
+    IF status_labels IS NULL OR NOT (
+      status_labels @> ARRAY['REVISION', 'FIRMADO', 'ANULADO']::TEXT[]
+      AND status_labels <@ ARRAY['REVISION', 'FIRMADO', 'ANULADO']::TEXT[]
+    ) THEN
+      RAISE EXCEPTION 'Unexpected ContractStatus labels: %', status_labels;
+    END IF;
+
     ALTER TABLE "contratos" ALTER COLUMN "estado" DROP DEFAULT;
 
     CREATE TYPE "ContractStatus_nuevo" AS ENUM (
