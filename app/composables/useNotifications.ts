@@ -1,4 +1,3 @@
-import type { Socket } from 'socket.io-client'
 import { toast } from 'vue-sonner'
 
 export interface AppNotification {
@@ -28,8 +27,10 @@ interface PushConfigResponse {
   publicKey: string | null
 }
 
-let activeSocket: Socket | null = null
-let startPromise: Promise<void> | null = null
+let notificationSubscriptions: Array<() => void> = []
+let notificationStartPromise: Promise<void> | null = null
+let notificationLoadPromise: Promise<void> | null = null
+const realtimeNotifications = new Map<string, AppNotification>()
 
 const base64ToUint8Array = (value: string) => {
   const padding = '='.repeat((4 - value.length % 4) % 4)
@@ -40,22 +41,31 @@ const base64ToUint8Array = (value: string) => {
 
 export const useNotifications = () => {
   const { user, csrfHeaders } = useAuth()
+  const realtime = useRealtime()
   const items = useState<AppNotification[]>('notifications.items', () => [])
   const unreadCount = useState<number>('notifications.unreadCount', () => 0)
-  const connected = useState<boolean>('notifications.connected', () => false)
   const pushEnabled = useState<boolean>('notifications.pushEnabled', () => false)
   const loading = useState<boolean>('notifications.loading', () => false)
 
   const load = async () => {
     if (!user.value) return
-    loading.value = true
-    try {
-      const response = await $fetch<NotificationResponse>('/api/notifications', { credentials: 'include' })
-      items.value = response.data
-      unreadCount.value = response.unreadCount
-    } finally {
-      loading.value = false
-    }
+    if (notificationLoadPromise) return notificationLoadPromise
+
+    notificationLoadPromise = (async () => {
+      loading.value = true
+      try {
+        const response = await $fetch<NotificationResponse>('/api/notifications', { credentials: 'include' })
+        const responseIds = new Set(response.data.map((notification) => notification.id))
+        const eventsDuringSync = [...realtimeNotifications.values()]
+          .filter((notification) => !responseIds.has(notification.id))
+        items.value = [...eventsDuringSync, ...response.data].slice(0, 100)
+        unreadCount.value = response.unreadCount + eventsDuringSync.filter((notification) => !notification.readAt).length
+      } finally {
+        loading.value = false
+      }
+    })().finally(() => { notificationLoadPromise = null })
+
+    return notificationLoadPromise
   }
 
   const showToast = (notification: AppNotification) => {
@@ -70,42 +80,56 @@ export const useNotifications = () => {
 
   const handleCreated = (event: { payload?: AppNotification }) => {
     const notification = event.payload
-    if (!notification || items.value.some((item) => item.id === notification.id)) return
+    if (!notification) return
+    realtimeNotifications.set(notification.id, notification)
+    if (items.value.some((item) => item.id === notification.id)) return
     items.value = [notification, ...items.value].slice(0, 100)
     unreadCount.value += 1
     showToast(notification)
   }
 
+  const handleRead = (event: { payload?: { id?: string; readAt?: string } }) => {
+    const id = event.payload?.id
+    if (!id) return
+    const notification = items.value.find((item) => item.id === id)
+    if (notification && !notification.readAt) unreadCount.value = Math.max(0, unreadCount.value - 1)
+    items.value = items.value.map((item) => item.id === id
+      ? { ...item, readAt: event.payload?.readAt || new Date().toISOString() }
+      : item)
+    const liveNotification = realtimeNotifications.get(id)
+    if (liveNotification) liveNotification.readAt = event.payload?.readAt || new Date().toISOString()
+  }
+
   const start = async () => {
-    if (!import.meta.client || !user.value || activeSocket || startPromise) return startPromise
-    startPromise = (async () => {
+    if (!import.meta.client || !user.value) return
+    if (notificationStartPromise) return notificationStartPromise
+
+    notificationStartPromise = (async () => {
       await load()
-      const { io } = await import('socket.io-client')
-      activeSocket = io({ path: '/socket.io', withCredentials: true, transports: ['websocket'], upgrade: false })
-      activeSocket.on('connect', () => {
-        const reconnecting = connected.value
-        connected.value = true
-        if (reconnecting) void load()
-      })
-      activeSocket.on('disconnect', () => { connected.value = false })
-      activeSocket.on('notification.created', handleCreated)
-      activeSocket.on('notification.read', (event: { payload?: { id?: string; readAt?: string } }) => {
-        const id = event.payload?.id
-        if (!id) return
-        const notification = items.value.find((item) => item.id === id)
-        if (notification && !notification.readAt) unreadCount.value = Math.max(0, unreadCount.value - 1)
-        items.value = items.value.map((item) => item.id === id ? { ...item, readAt: event.payload?.readAt || new Date().toISOString() } : item)
-      })
-    })().finally(() => { startPromise = null })
-    return startPromise
+      if (!notificationSubscriptions.length) {
+        notificationSubscriptions = [
+          realtime.on<AppNotification>('notification.created', (event) => handleCreated({ payload: event.payload })),
+          realtime.on<{ id?: string; readAt?: string }>('notification.read', (event) => handleRead({ payload: event.payload })),
+          realtime.onConnected(() => {
+            const refresh = () => {
+              if (user.value) void load().catch((error) => console.error('[notifications] refresh after connection failed', error))
+            }
+            if (notificationLoadPromise) void notificationLoadPromise.then(refresh, refresh)
+            else refresh()
+          })
+        ]
+      }
+      await realtime.connect()
+    })().finally(() => { notificationStartPromise = null })
+    return notificationStartPromise
   }
 
   const stop = () => {
-    activeSocket?.removeAllListeners()
-    activeSocket?.disconnect()
-    activeSocket = null
-    connected.value = false
-    startPromise = null
+    notificationSubscriptions.forEach((unsubscribe) => unsubscribe())
+    notificationSubscriptions = []
+    realtime.disconnect()
+    notificationStartPromise = null
+    realtimeNotifications.clear()
     items.value = []
     unreadCount.value = 0
     pushEnabled.value = false
@@ -170,5 +194,5 @@ export const useNotifications = () => {
     pushEnabled.value = Boolean(await registration?.pushManager.getSubscription())
   }
 
-  return { items, unreadCount, connected, pushEnabled, loading, load, start, stop, markRead, enablePush, disablePush, syncPushState }
+  return { items, unreadCount, connected: realtime.connected, pushEnabled, loading, load, start, stop, markRead, enablePush, disablePush, syncPushState }
 }

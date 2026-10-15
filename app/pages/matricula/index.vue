@@ -82,10 +82,12 @@
                 <UiTableCell class="whitespace-nowrap text-right font-medium">{{ formatCurrency(row.programValue) }}
                 </UiTableCell>
                 <UiTableCell>
-                  <UiBadge :variant="statusVariant(row)">{{ statusLabel(row) }}</UiBadge>
+                  <UiBadge :variant="badgeFor(row.status).variant">{{ badgeFor(row.status).label }}</UiBadge>
                 </UiTableCell>
                 <UiTableCell>
-                  <UiBadge :variant="isSigned(row) ? 'default' : 'outline'">{{ isSigned(row) ? 'Firmado' : 'No firmado' }}</UiBadge>
+                  <UiBadge :variant="badgeFor(isSigned(row) ? 'FIRMADO' : 'NO_FIRMADO').variant">
+                    {{ badgeFor(isSigned(row) ? 'FIRMADO' : 'NO_FIRMADO').label }}
+                  </UiBadge>
                 </UiTableCell>
                 <UiTableCell class="hidden whitespace-nowrap text-muted-foreground sm:table-cell">{{
                   formatDate(row.registeredAt) }}</UiTableCell>
@@ -503,8 +505,15 @@ const onReceiptCreated = async (receiptId: string) => {
   await navigateTo(`/recibo/${receiptId}`)
 }
 
-const statusLabel = (row: ContractRow) => ({ REVISION: 'En revisión', APROBADO: 'Aprobado', ANULADO: 'Anulado' })[row.status];
-const statusVariant = (row: ContractRow) => ({ REVISION: 'outline', APROBADO: 'success', ANULADO: 'destructive' })[row.status];
+const badgeConfig = {
+  REVISION: { label: 'En revisión', variant: 'outline' },
+  APROBADO: { label: 'Aprobado', variant: 'success' },
+  ANULADO: { label: 'Anulado', variant: 'destructive' },
+  FIRMADO: { label: 'Firmado', variant: 'default' },
+  NO_FIRMADO: { label: 'No firmado', variant: 'outline' }
+} as const
+
+const badgeFor = (key: keyof typeof badgeConfig) => badgeConfig[key]
 
 const planClass = (plan: string | null) => ({ 
   Light: 'bg-amber-100 text-amber-800 border-amber-200', 

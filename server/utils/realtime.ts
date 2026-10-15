@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events'
 export type RealtimeEvent = {
   id: string
   type: string
-  recipientId: string
+  recipientId?: string
   payload: Record<string, unknown>
   occurredAt: string
 }
