@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ArrowLeft, Check, CheckCircle2, Copy, Download, ExternalLink, Mail, Printer, RefreshCw } from '@lucide/vue'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 interface Receipt {
   id: string
@@ -69,12 +70,14 @@ const props = defineProps<{
   actionLoading?: boolean
   canApproveContract?: boolean
   approvalLoading?: boolean
+  correctionRequestLoading?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
   accept: []
   approveContract: []
+  requestCorrection: [message: string]
   publicView: []
   publicLinkRegenerated: [tokenExpiresAt: string]
   downloadPdf: []
@@ -87,6 +90,8 @@ const termsLoading = ref(false)
 const termsError = ref(false)
 const termsRead = ref(false)
 const acceptedChecked = ref(false)
+const correctionMessage = ref('')
+const correctionPopoverOpen = ref(false)
 const sendPreviewOpen = ref(false)
 const sendLoading = ref(false)
 const sendError = ref('')
@@ -145,6 +150,18 @@ const publicLinkLabel = computed(() => hasValidPublicLink.value ? 'Enlace vigent
 const publicLinkTitle = computed(() => hasValidPublicLink.value ? 'Abrir enlace público vigente' : isPublicLinkExpired.value ? 'El enlace expiró; regénéralo para volver a abrirlo' : 'Genera un enlace público para poder abrirlo')
 const termsAvailable = computed(() => Boolean(props.contract && props.contract.status !== 'ANULADO'))
 const canAccept = computed(() => Boolean(props.contract && props.contract.status !== 'ANULADO' && !isSigned.value && termsHtml.value && !termsError.value))
+
+const cancelCorrectionRequest = () => {
+  correctionMessage.value = ''
+  correctionPopoverOpen.value = false
+}
+
+const submitCorrectionRequest = () => {
+  if (props.correctionRequestLoading || props.approvalLoading) return
+  emit('requestCorrection', correctionMessage.value.trim())
+  correctionMessage.value = ''
+  correctionPopoverOpen.value = false
+}
 
 const formatDate = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' }).format(new Date(value)) : '—'
 const formatDateTime = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'
@@ -296,6 +313,8 @@ watch(() => props.open, (open) => {
     loadTerms()
   } else {
     sendPreviewOpen.value = false
+    correctionMessage.value = ''
+    correctionPopoverOpen.value = false
   }
 })
 
@@ -305,6 +324,8 @@ watch(() => props.contract?.id, () => {
   termsRead.value = false
   acceptedChecked.value = false
   sendPreviewOpen.value = false
+  correctionMessage.value = ''
+  correctionPopoverOpen.value = false
   publicUrl.value = ''
   sendError.value = ''
   emailSent.value = false
@@ -418,11 +439,50 @@ onUnmounted(() => {
       <UiAlert v-else-if="error" variant="destructive" class="m-6"><UiAlertDescription>{{ error }}</UiAlertDescription></UiAlert>
       <div v-else-if="contract" class="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto bg-muted/20 p-6">
         <UiAlert v-if="contract.status === 'REVISION'" class="w-full min-w-0 border-amber-300 bg-amber-50 text-amber-950">
-          <UiAlertDescription class="flex min-w-0 flex-wrap items-center justify-between gap-3">
-            <span class="min-w-0 flex-1">Esta matrícula está pendiente de revisión y aprobación.</span>
-            <UiButton v-if="canApproveContract" type="button" size="sm" class="shrink-0" :disabled="approvalLoading" @click="emit('approveContract')">
-              {{ approvalLoading ? 'Aprobando…' : 'Aprobar matrícula' }}
-            </UiButton>
+          <UiAlertDescription class="flex min-w-0 items-center justify-between gap-3 [&_p:not(:last-child)]:mb-0">
+            <p class="min-w-0 flex-1">Esta matrícula está pendiente de revisión. El verificador puede aprobarla o solicitar una corrección.</p>
+            <div v-if="canApproveContract" class="flex shrink-0 items-center gap-2">
+              <Popover v-if="!isSigned" v-model:open="correctionPopoverOpen">
+                <PopoverTrigger as-child>
+                  <UiButton
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    :disabled="correctionRequestLoading || approvalLoading"
+                  >
+                    Solicitar corrección
+                  </UiButton>
+                </PopoverTrigger>
+                <PopoverContent align="end" class="space-y-3">
+                  <div class="space-y-1">
+                    <p class="font-medium">Solicitar corrección</p>
+                    <p class="text-xs text-muted-foreground">El mensaje es opcional y se enviará al asesor.</p>
+                  </div>
+                  <div class="space-y-2">
+                    <UiLabel for="contract-correction-message">Mensaje</UiLabel>
+                    <UiTextarea
+                      id="contract-correction-message"
+                      v-model="correctionMessage"
+                      rows="3"
+                      maxlength="1000"
+                      placeholder="Describe qué dato debe corregirse."
+                      :disabled="correctionRequestLoading || approvalLoading"
+                    />
+                  </div>
+                  <div class="flex justify-end gap-2">
+                    <UiButton type="button" variant="ghost" size="sm" :disabled="correctionRequestLoading" @click="cancelCorrectionRequest">
+                      Cancelar
+                    </UiButton>
+                    <UiButton type="button" size="sm" :disabled="correctionRequestLoading || approvalLoading" @click="submitCorrectionRequest">
+                      {{ correctionRequestLoading ? 'Enviando…' : 'Enviar solicitud' }}
+                    </UiButton>
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <UiButton type="button" size="sm" :disabled="approvalLoading || correctionRequestLoading" @click="emit('approveContract')">
+                {{ approvalLoading ? 'Aprobando…' : 'Aprobar matrícula' }}
+              </UiButton>
+            </div>
           </UiAlertDescription>
         </UiAlert>
 

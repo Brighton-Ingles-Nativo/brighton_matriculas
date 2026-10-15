@@ -54,7 +54,7 @@
                 <UiTableHead>Matrícula</UiTableHead>
                 <UiTableHead>Titular</UiTableHead>
                 <!-- <UiTableHead class="hidden md:table-cell">DNI</UiTableHead> -->
-                <UiTableHead v-if="user?.role?.name === 'admin'" class="hidden lg:table-cell">Asesor</UiTableHead>
+                <UiTableHead v-if="canViewAdvisorContext">Asesor</UiTableHead>
                 <UiTableHead>Programa</UiTableHead>
                 <UiTableHead>Plan</UiTableHead>
                 <UiTableHead class="text-right">Valor</UiTableHead>
@@ -72,8 +72,11 @@
                   <div class="text-xs text-muted-foreground">DNI:{{ row.holderDni }}</div>
                 </UiTableCell>
                 <!-- <UiTableCell class="hidden md:table-cell">{{ row.holderDni }}</UiTableCell> -->
-                <UiTableCell v-if="user?.role?.name === 'admin'"
-                  class="hidden max-w-36 truncate text-muted-foreground lg:table-cell">{{ row.advisor.name }}
+                <UiTableCell v-if="canViewAdvisorContext" class="max-w-48">
+                  <div class="truncate font-medium" :title="row.advisor.name">{{ row.advisor.name }}</div>
+                  <div class="truncate text-xs text-muted-foreground" :title="row.advisor.sites.join(', ')">
+                    {{ row.advisor.sites.length ? row.advisor.sites.join(', ') : 'Sin sede asignada' }}
+                  </div>
                 </UiTableCell>
                 <UiTableCell>{{ row.program }}</UiTableCell>
                 <UiTableCell><span v-if="row.plan"
@@ -144,13 +147,16 @@
     <MatriculaReceiptCreateDialog v-model:open="receiptDialogOpen" :contract="receiptContract" @created="onReceiptCreated" />
     <MatriculaContractDetailDialog v-model:open="detailOpen" :contract="selectedContract" :loading="detailLoading"
       :error="detailError" :action-loading="detailActionLoading" :can-approve-contract="canApproveContract" :approval-loading="approvalLoading"
-      @accept="acceptContract" @approve-contract="approveContract" @public-view="openPublicView" @public-link-regenerated="onPublicLinkRegenerated" @download-pdf="downloadContractPdf" @print-contract="printContract" />
+      :correction-request-loading="correctionRequestLoading" @accept="acceptContract" @approve-contract="approveContract"
+      @request-correction="requestContractCorrection" @public-view="openPublicView" @public-link-regenerated="onPublicLinkRegenerated"
+      @download-pdf="downloadContractPdf" @print-contract="printContract" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { useDebounceFn } from '@vueuse/core'
 import { ChevronLeft, ChevronRight, Download, Eye, FileCheck2, FilePlus2, Pencil, Plus } from '@lucide/vue'
+import { toast } from 'vue-sonner'
 
 interface ContractRow { 
   id: string; 
@@ -166,7 +172,8 @@ interface ContractRow {
   registeredAt: string; 
   advisor: { 
     name: string; 
-    username: string 
+    username: string;
+    sites: string[];
   }; 
   receiptCount: number; 
   latestReceiptId: string | null 
@@ -262,6 +269,7 @@ const detailLoading = ref(false);
 const detailError = ref(''); 
 const detailActionLoading = ref(false); 
 const approvalLoading = ref(false)
+const correctionRequestLoading = ref(false)
 const selectedContract = ref<ContractDetail | null>(null)
 const receiptDialogOpen = ref(false)
 const receiptContract = ref<ContractRow | null>(null)
@@ -269,6 +277,7 @@ const receiptContract = ref<ContractRow | null>(null)
 const canExport = computed(() => ['admin', 'asesor', 'supervisor', 'asistente_comercial', 'verificador'].includes(user.value?.role?.name || ''));
 const canEdit = computed(() => ['admin', 'asesor', 'supervisor', 'verificador'].includes(user.value?.role?.name || ''));
 const canFilterAdvisor = computed(() => user.value?.role?.name !== 'asesor')
+const canViewAdvisorContext = computed(() => ['admin', 'verificador'].includes(user.value?.role?.name || ''))
 const canManageReceipts = computed(() => ['admin', 'asesor'].includes(user.value?.role?.name || ''))
 const canCreateEnrollment = computed(() => ['admin', 'asesor', 'supervisor'].includes(user.value?.role?.name || ''))
 const canApproveContract = computed(() => user.value?.role?.name === 'verificador')
@@ -351,7 +360,7 @@ const formatCurrency = (value: string) => new Intl.NumberFormat('es-PE', {
   style: 'currency', 
   currency: 'PEN' }).format(Number(value))
 
-const openDetail = async (row: ContractRow) => { 
+const openDetail = async (row: Pick<ContractRow, 'id'>) => {
   detailOpen.value = true; 
   detailLoading.value = true; 
   detailError.value = ''; 
@@ -410,6 +419,27 @@ const approveContract = async () => {
     detailError.value = error?.data?.message || error?.data?.statusMessage || 'No se pudo aprobar la matrícula.'
   } finally {
     approvalLoading.value = false
+  }
+}
+
+const requestContractCorrection = async (message: string) => {
+  const contract = selectedContract.value
+  if (!contract || !canApproveContract.value || contract.status !== 'REVISION' || isSigned(contract)) return
+
+  correctionRequestLoading.value = true
+  detailError.value = ''
+  try {
+    await $fetch(`/api/contracts/${contract.id}/request-correction`, {
+      method: 'POST',
+      headers: await csrfHeaders(),
+      credentials: 'include',
+      body: { message }
+    })
+    toast.success('Se envió la solicitud al asesor. La matrícula sigue en revisión.')
+  } catch (error: any) {
+    detailError.value = error?.data?.message || error?.data?.statusMessage || 'No se pudo solicitar la corrección.'
+  } finally {
+    correctionRequestLoading.value = false
   }
 }
 
@@ -521,10 +551,29 @@ const planClass = (plan: string | null) => ({
   Premium: 'bg-rose-100 text-rose-800 border-rose-200' 
 }[plan || ''] || 'bg-muted text-muted-foreground')
 
+let routeContractOpenId: string | null = null
+
+const openContractFromRoute = async (contractId: string) => {
+  if (routeContractOpenId === contractId) return
+  routeContractOpenId = contractId
+  try {
+    await openDetail({ id: contractId })
+    const query = { ...route.query }
+    delete query.contractId
+    await navigateTo({ path: route.path, query }, { replace: true })
+  } finally {
+    routeContractOpenId = null
+  }
+}
+
 onMounted(async () => { 
   if (!user.value) await verifyToken(); 
-  await loadContracts() 
+  await loadContracts()
+  if (typeof route.query.contractId === 'string') await openContractFromRoute(route.query.contractId)
 })
 
 watch([holderName, holderDni, advisorName, status, signature], () => debouncedLoadContracts())
+watch([() => route.query.contractId, loading], ([contractId, isLoading]) => {
+  if (typeof contractId === 'string' && !isLoading) void openContractFromRoute(contractId)
+})
 </script>

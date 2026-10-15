@@ -223,13 +223,15 @@ const submit = async () => {
   success.value = ''; 
   try { 
     const { strategy: _strategy, strategyNameSnapshot: _strategyNameSnapshot, strategyDefinition: _strategyDefinition, ...editableForm } = form
-    await $fetch<any>(`/api/contracts/${route.params.id}`, { 
+    const response = await $fetch<{ data?: { verificationNotificationPending?: boolean } }>(`/api/contracts/${route.params.id}`, {
       method: 'PUT' as any, 
       headers: await csrfHeaders(), 
       credentials: 'include', 
       body: editableForm
     }); 
-    success.value = 'Matrícula actualizada correctamente.' 
+    success.value = response.data?.verificationNotificationPending
+      ? 'Matrícula actualizada, pero no se pudo notificar a Verificación. Guarda de nuevo para reintentar.'
+      : 'Matrícula actualizada correctamente.'
   } catch (err: any) { 
     error.value = err?.data?.message || err?.data?.statusMessage || 'No pudimos actualizar la matrícula.'
   } finally { 
