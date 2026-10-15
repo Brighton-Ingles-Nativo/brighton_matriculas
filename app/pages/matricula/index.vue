@@ -141,8 +141,8 @@
     </main>
     <MatriculaReceiptCreateDialog v-model:open="receiptDialogOpen" :contract="receiptContract" @created="onReceiptCreated" />
     <MatriculaContractDetailDialog v-model:open="detailOpen" :contract="selectedContract" :loading="detailLoading"
-      :error="detailError" :action-loading="detailActionLoading"
-      @accept="acceptContract" @public-view="openPublicView" @public-link-regenerated="onPublicLinkRegenerated" @download-pdf="downloadContractPdf" @print-contract="printContract" />
+      :error="detailError" :action-loading="detailActionLoading" :can-approve-contract="canApproveContract" :approval-loading="approvalLoading"
+      @accept="acceptContract" @approve-contract="approveContract" @public-view="openPublicView" @public-link-regenerated="onPublicLinkRegenerated" @download-pdf="downloadContractPdf" @print-contract="printContract" />
   </div>
 </template>
 
@@ -259,6 +259,7 @@ const detailOpen = ref(false);
 const detailLoading = ref(false); 
 const detailError = ref(''); 
 const detailActionLoading = ref(false); 
+const approvalLoading = ref(false)
 const selectedContract = ref<ContractDetail | null>(null)
 const receiptDialogOpen = ref(false)
 const receiptContract = ref<ContractRow | null>(null)
@@ -268,6 +269,7 @@ const canEdit = computed(() => ['admin', 'asesor', 'supervisor', 'verificador'].
 const canFilterAdvisor = computed(() => user.value?.role?.name !== 'asesor')
 const canManageReceipts = computed(() => ['admin', 'asesor'].includes(user.value?.role?.name || ''))
 const canCreateEnrollment = computed(() => ['admin', 'asesor', 'supervisor'].includes(user.value?.role?.name || ''))
+const canApproveContract = computed(() => user.value?.role?.name === 'verificador')
 const isSigned = (row?: ContractRow) => Boolean(row && (row.signedAccept || row.signedAt))
 const isContractLocked = (row?: ContractRow) => !row || isSigned(row) || row.status === 'ANULADO'
 
@@ -388,6 +390,27 @@ const acceptContract = async () => {
   } 
 }
 
+const approveContract = async () => {
+  const contract = selectedContract.value
+  if (!contract || !canApproveContract.value || contract.status !== 'REVISION') return
+
+  approvalLoading.value = true
+  detailError.value = ''
+  try {
+    await $fetch(`/api/contracts/${contract.id}/approve`, {
+      method: 'POST',
+      headers: await csrfHeaders(),
+      credentials: 'include'
+    })
+    contract.status = 'APROBADO'
+    await loadContracts()
+  } catch (error: any) {
+    detailError.value = error?.data?.message || error?.data?.statusMessage || 'No se pudo aprobar la matrícula.'
+  } finally {
+    approvalLoading.value = false
+  }
+}
+
 const openPublicView = async () => { 
   if (!selectedContract.value) return; 
   detailError.value = ''
@@ -481,7 +504,7 @@ const onReceiptCreated = async (receiptId: string) => {
 }
 
 const statusLabel = (row: ContractRow) => ({ REVISION: 'En revisión', APROBADO: 'Aprobado', ANULADO: 'Anulado' })[row.status];
-const statusVariant = (row: ContractRow): 'default' | 'outline' | 'destructive' => ({ REVISION: 'outline', APROBADO: 'default', ANULADO: 'destructive' })[row.status];
+const statusVariant = (row: ContractRow) => ({ REVISION: 'outline', APROBADO: 'success', ANULADO: 'destructive' })[row.status];
 
 const planClass = (plan: string | null) => ({ 
   Light: 'bg-amber-100 text-amber-800 border-amber-200', 

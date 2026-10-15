@@ -14,6 +14,9 @@ export const badgeVariants = cva(
         outline: 'border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground',
         ghost: 'hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50',
         link: 'text-primary underline-offset-4 hover:underline',
+        success: 'bg-green-200 [a]:hover:bg-emerald-400 border border-green-400 focus-visible:ring-success/20 dark:focus-visible:ring-success/40 text-emerald-800 dark:bg-success/20',
+        alert: 'bg-amber-200 [a]:hover:bg-yellow-400 focus-visible:ring-alert/20 dark:focus-visible:ring-alert/40 text-black dark:bg-alert/20',
+        warning: 'bg-warning/10 [a]:hover:bg-warning/20 focus-visible:ring-warning/20 dark:focus-visible:ring-warning/40 text-warning dark:bg-warning/20',
       },
     },
     defaultVariants: {

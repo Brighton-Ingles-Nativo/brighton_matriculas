@@ -67,11 +67,14 @@ const props = defineProps<{
   loading?: boolean
   error?: string
   actionLoading?: boolean
+  canApproveContract?: boolean
+  approvalLoading?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
   accept: []
+  approveContract: []
   publicView: []
   publicLinkRegenerated: [tokenExpiresAt: string]
   downloadPdf: []
@@ -371,6 +374,15 @@ onUnmounted(() => {
       <div v-else-if="loading" class="min-h-0 flex-1 space-y-4 overflow-y-auto p-6"><UiSkeleton v-for="item in 10" :key="item" class="h-12 w-full" /></div>
       <UiAlert v-else-if="error" variant="destructive" class="m-6"><UiAlertDescription>{{ error }}</UiAlertDescription></UiAlert>
       <div v-else-if="contract" class="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto bg-muted/20 p-6">
+        <UiAlert v-if="contract.status === 'REVISION'" class="w-full min-w-0 border-amber-300 bg-amber-50 text-amber-950">
+          <UiAlertDescription class="flex min-w-0 flex-wrap items-center justify-between gap-3">
+            <span class="min-w-0 flex-1">Esta matrícula está pendiente de revisión y aprobación.</span>
+            <UiButton v-if="canApproveContract" type="button" size="sm" class="shrink-0" :disabled="approvalLoading" @click="emit('approveContract')">
+              {{ approvalLoading ? 'Aprobando…' : 'Aprobar matrícula' }}
+            </UiButton>
+          </UiAlertDescription>
+        </UiAlert>
+
         <section class="rounded-lg border bg-card p-5 shadow-sm">
           <div class="flex flex-col justify-between gap-4 md:flex-row md:items-center">
             <div class="flex items-center gap-4"><div class="grid size-12 place-items-center rounded-full bg-primary text-primary-foreground"><CheckCircle2 class="size-6" /></div><div><h2 class="text-lg font-semibold">Contrato {{ contract.contractNumber }}</h2><p class="text-sm text-muted-foreground">{{ isSigned ? `Firmado digitalmente el ${formatDateTime(contract.signedAt)}.` : 'Seguimiento del contrato registrado.' }}</p></div></div>
