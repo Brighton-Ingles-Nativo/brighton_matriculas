@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { BadgeCheck, Download, Printer } from '@lucide/vue'
+import { Download, Printer } from '@lucide/vue'
+import ContractTermsContent from '@/components/contracts/ContractTermsContent.vue'
 
 definePageMeta({ middleware: 'auth', layout: false, ssr: false })
 
@@ -172,20 +173,9 @@ onMounted(async () => {
         </div>
       </section>
 
-      <section class="terms section">
-        <h2>Términos y condiciones del servicio</h2>
-        <div class="text-xs leading-relaxed" v-html="termsHtml" />
-        <div v-if="contract.signedAccept || contract.signedAt" class="relative mt-4 mb-2 grid grid-cols-[minmax(0,1fr)_minmax(180px,260px)] items-center gap-3 rounded-md border-2 border-emerald-200 bg-white p-4 text-green-800 print:break-inside-avoid before:absolute before:inset-[5px_-6px_-6px_5px] before:-z-10 before:bg-gray-100 before:content-['']" role="status">
-          <div class="flex items-center gap-3">
-            <BadgeCheck class="size-8 shrink-0 fill-emerald-900 text-white" aria-hidden="true" />
-            <div class="min-w-0 text-emerald-950">
-              <strong class="mb-1 block text-lg font-semibold leading-tight">Contrato Aceptado Digitalmente</strong>
-              <p class="text-justify text-[10px] leading-relaxed">Este documento fue validado el {{ formatDateTime(contract.signedAt) }}.</p>
-              <p class="mt-1 text-[10px] leading-relaxed text-slate-500">Registro de Seguridad (IP): {{ display(contract.signedIp) }}</p>
-            </div>
-          </div>
-          <div class="flex justify-center"><img class="w-full max-w-[260px] rotate-[9.75deg]" src="/assets/images/firma_gerencia-brighton.jpg" alt="Firma de gerencia Brighton"></div>
-        </div>
+      <section class="terms mt-4 break-inside-avoid">
+        <h2 class="mb-4 text-lg font-semibold">Términos y condiciones</h2>
+        <ContractTermsContent :html="termsHtml" :signed="contract.signedAccept || Boolean(contract.signedAt)" :signed-at="contract.signedAt" :fallback-at="contract.registeredAt" :signed-ip="contract.signedIp" />
       </section>
 
       <footer class="document-footer">Asesor: {{ contract.advisor.name }} <!--· Estado: {{ contract.status }} --></footer>
@@ -214,7 +204,6 @@ label { display: block; margin-bottom: 3px; color: #6c757d; font-size: 9px; font
 .section h2 { margin: 0 0 9px; border-left: 4px solid #004aad; background: #e9ecef; padding: 7px 10px; color: #004aad; font-size: 10px; text-transform: uppercase; }
 .data-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 9px 12px; }
 .span-2 { grid-column: span 2; }.span-3 { grid-column: span 3; }.span-4 { grid-column: span 4; }.span-6 { grid-column: span 6; }.span-12 { grid-column: span 12; }
-.terms h2 { margin-bottom: 14px; }
 .document-footer { margin-top: 22px; border-top: 1px solid #d1d5db; padding-top: 8px; color: #6c757d; font-size: 9px; }
 @media print {
   body { background: white; font-size: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -223,6 +212,5 @@ label { display: block; margin-bottom: 3px; color: #6c757d; font-size: 9px; font
   .legacy-header { margin: 0 0 16px; padding: 12px; }
   .no-print { display: none !important; }
   .section { break-inside: avoid; }
-  .terms { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 </style>

@@ -192,28 +192,27 @@ function buildPdf(contract: PdfContract, signatureImage: Buffer): Buffer {
     if (content) paragraph(content, { bold: /^Cláusula/i.test(content), indent: element.tagName === 'li' ? 12 : 0 })
   })
 
-  if (contract.signedAccept || contract.signedAt) {
-    const boxHeight = 126
-    ensure(boxHeight + 8)
-    const boxX = margin
-    const boxWidth = pageWidth - margin * 2
-    const boxBottom = y - boxHeight + 14
-    rect(boxX + 5, boxBottom - 6, boxWidth, boxHeight, '0.95 0.95 0.95')
-    rect(boxX, boxBottom, boxWidth, boxHeight, '1 1 1')
-    strokedRect(boxX, boxBottom, boxWidth, boxHeight, '0.61 0.83 0.74')
-    const badgeX = boxX + 30
-    const badgeY = boxBottom + 82
-    const badgeRadius = 14
-    const curve = badgeRadius * 0.5523
-    commands.push(`0.02 0.31 0.23 rg ${badgeX + badgeRadius} ${badgeY} m ${badgeX + badgeRadius} ${badgeY + curve} ${badgeX + curve} ${badgeY + badgeRadius} ${badgeX} ${badgeY + badgeRadius} c ${badgeX - curve} ${badgeY + badgeRadius} ${badgeX - badgeRadius} ${badgeY + curve} ${badgeX - badgeRadius} ${badgeY} c ${badgeX - badgeRadius} ${badgeY - curve} ${badgeX - curve} ${badgeY - badgeRadius} ${badgeX} ${badgeY - badgeRadius} c ${badgeX + curve} ${badgeY - badgeRadius} ${badgeX + badgeRadius} ${badgeY - curve} ${badgeX + badgeRadius} ${badgeY} c f`)
-    commands.push(`1 1 1 RG 2 w ${boxX + 23} ${boxBottom + 81} m ${boxX + 28} ${boxBottom + 76} l ${boxX + 37} ${boxBottom + 87} l S`)
-    text('Contrato Aceptado Digitalmente', boxX + 54, boxBottom + 91, 11, true, '0.07 0.23 0.18')
-    text(`Este documento fue validado el ${dateTime(contract.signedAt)}.`, boxX + 54, boxBottom + 69, 8)
-    text(`Registro de Seguridad (IP): ${contract.signedIp || '—'}`, boxX + 54, boxBottom + 50, 7.5, false, '0.39 0.45 0.54')
-    // Keep the management signature at the right, matching the public and print layouts.
-    commands.push(`q 150 0 0 97 ${boxX + boxWidth - 170} ${boxBottom + 14} cm /Im1 Do Q`)
-    y = boxBottom - 18
-  }
+  const boxHeight = 126
+  ensure(boxHeight + 8)
+  const boxX = margin
+  const boxWidth = pageWidth - margin * 2
+  const boxBottom = y - boxHeight + 14
+  rect(boxX + 5, boxBottom - 6, boxWidth, boxHeight, '0.95 0.95 0.95')
+  rect(boxX, boxBottom, boxWidth, boxHeight, '1 1 1')
+  strokedRect(boxX, boxBottom, boxWidth, boxHeight, '0.61 0.83 0.74')
+  const badgeX = boxX + 30
+  const badgeY = boxBottom + 82
+  const badgeRadius = 14
+  const curve = badgeRadius * 0.5523
+  commands.push(`0.02 0.31 0.23 rg ${badgeX + badgeRadius} ${badgeY} m ${badgeX + badgeRadius} ${badgeY + curve} ${badgeX + curve} ${badgeY + badgeRadius} ${badgeX} ${badgeY + badgeRadius} c ${badgeX - curve} ${badgeY + badgeRadius} ${badgeX - badgeRadius} ${badgeY + curve} ${badgeX - badgeRadius} ${badgeY} c ${badgeX - badgeRadius} ${badgeY - curve} ${badgeX - curve} ${badgeY - badgeRadius} ${badgeX} ${badgeY - badgeRadius} c ${badgeX + curve} ${badgeY - badgeRadius} ${badgeX + badgeRadius} ${badgeY - curve} ${badgeX + badgeRadius} ${badgeY} c f`)
+  commands.push(`1 1 1 RG 2 w ${boxX + 23} ${boxBottom + 81} m ${boxX + 28} ${boxBottom + 76} l ${boxX + 37} ${boxBottom + 87} l S`)
+  const signed = contract.signedAccept || Boolean(contract.signedAt)
+  text(signed ? 'Contrato Aceptado Digitalmente' : 'Firma pendiente de aceptación', boxX + 54, boxBottom + 91, signed ? 11 : 10, true, '0.07 0.23 0.18')
+  text(`${signed ? 'Este documento fue validado el' : 'Documento registrado el'} ${dateTime(contract.signedAt || contract.registeredAt)}.`, boxX + 54, boxBottom + 69, 8)
+  text(`Registro de Seguridad (IP): ${contract.signedIp || '—'}`, boxX + 54, boxBottom + 50, 7.5, false, '0.39 0.45 0.54')
+  // Keep the management signature at the right, matching the public and print layouts.
+  commands.push(`q 150 0 0 97 ${boxX + boxWidth - 170} ${boxBottom + 14} cm /Im1 Do Q`)
+  y = boxBottom - 18
   footer()
   pages.push(commands)
 

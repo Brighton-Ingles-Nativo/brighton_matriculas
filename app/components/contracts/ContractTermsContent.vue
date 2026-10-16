@@ -23,10 +23,10 @@ const acceptanceIp = computed(() => props.signedIp || props.fallbackIp || '—')
 </script>
 
 <template>
-  <div>
+  <div class="font-sans">
     <div v-html="html" />
     <div class="mt-4 grid items-center gap-8 text-green-800 sm:grid-cols-2" role="status">
-      <div class="relative z-0 flex items-center gap-3 rounded-md border-2 border-emerald-200 bg-white p-4 before:absolute before:inset-[5px_-6px_-6px_5px] before:-z-10 before:bg-gray-100 before:content-['']">
+      <div class="relative z-0 flex items-center gap-3 rounded-md border-2 border-emerald-200 bg-white p-4 print:break-inside-avoid before:absolute before:inset-[5px_-6px_-6px_5px] before:-z-10 before:bg-gray-100 before:content-['']">
         <BadgeCheck class="size-8 shrink-0 fill-emerald-900 text-white" aria-hidden="true" />
         <div class="min-w-0 text-emerald-950">
           <h3 class="mb-1 text-lg font-semibold leading-tight">{{ signed ? 'Contrato Aceptado Digitalmente' : 'Firma pendiente de aceptación' }}</h3>
