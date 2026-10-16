@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ChevronDown, ClipboardList, FolderOpen, LayoutDashboard, LogOut, Menu, Moon, ReceiptText, Settings2, Sun, UserRound } from '@lucide/vue'
+import { Bell, ChevronDown, ClipboardList, FolderOpen, LayoutDashboard, LogOut, Menu, Moon, ReceiptText, Settings2, Sun, UserRound } from '@lucide/vue'
 
 const { user, logout } = useAuth()
+const { unreadCount } = useNotifications()
 const { isDark, toggleTheme } = useTheme()
 const router = useRouter()
 const route = useRoute()
@@ -59,6 +60,11 @@ const handleLogout = async () => {
       </NuxtLink>
       <NuxtLink to="/recibos" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Recibos">
         <ReceiptText class="size-4" /> <span v-if="!isCollapsed">Recibos</span>
+      </NuxtLink>
+      <NuxtLink to="/notificaciones" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" :title="unreadCount ? `Notificaciones: ${unreadCount} sin leer` : 'Notificaciones'">
+        <span class="relative"><Bell class="size-4" /><span v-if="isCollapsed && unreadCount" class="absolute -right-2 -top-1 size-2 rounded-full bg-destructive" /></span>
+        <span v-if="!isCollapsed">Notificaciones</span>
+        <span v-if="!isCollapsed && unreadCount" class="ml-auto rounded-full bg-destructive px-1.5 text-[10px] font-semibold leading-4 text-destructive-foreground">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
       </NuxtLink>
       <p v-if="!isCollapsed" class="px-3 pb-2 pt-7 text-[10px] font-bold uppercase tracking-[.14em] text-sidebar-foreground/45">Cuenta</p>
       <NuxtLink to="/profile" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Mi perfil">

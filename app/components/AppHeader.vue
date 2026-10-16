@@ -8,7 +8,7 @@ const props = withDefaults(defineProps<{
 }>(), { subtitle: '' })
 
 const { user, logout } = useAuth()
-const { items: notifications, unreadCount, connected, markRead, enablePush, pushEnabled, syncPushState } = useNotifications()
+const { items: notifications, unreadCount, connected, loading, load, markRead, enablePush, pushEnabled, syncPushState } = useNotifications()
 const router = useRouter()
 const isCollapsed = useState('sidebar-collapsed', () => false)
 
@@ -38,7 +38,10 @@ const enableBrowserNotifications = async () => {
   await enablePush()
 }
 
-onMounted(() => { void syncPushState() })
+onMounted(() => {
+  void load().catch((error) => console.error('[notifications] header load failed', error))
+  void syncPushState()
+})
 </script>
 
 <template>
@@ -70,7 +73,7 @@ onMounted(() => { void syncPushState() })
           <UiDropdownMenuTrigger as-child>
             <UiButton variant="ghost" size="icon" class="relative rounded-full" aria-label="Notificaciones">
               <Bell class="size-4" />
-              <span v-if="unreadCount" class="absolute right-1 top-1 grid min-w-4 place-items-center rounded-full bg-destructive px-1 text-[9px] font-bold leading-4 text-destructive-foreground">
+              <span v-if="unreadCount" class="absolute right-1 top-1 grid min-w-4 place-items-center rounded-full bg-primary text-white px-1 text-[9px] font-bold leading-4">
                 {{ unreadCount > 99 ? '99+' : unreadCount }}
               </span>
             </UiButton>
@@ -86,7 +89,8 @@ onMounted(() => { void syncPushState() })
               </UiButton>
               <span v-else class="text-xs text-emerald-600">Navegador activo</span>
             </div>
-            <div v-if="!notifications.length" class="px-4 py-10 text-center text-sm text-muted-foreground">No tienes notificaciones.</div>
+            <div v-if="loading && !notifications.length" class="px-4 py-10 text-center text-sm text-muted-foreground">Cargando notificaciones…</div>
+            <div v-else-if="!notifications.length" class="px-4 py-10 text-center text-sm text-muted-foreground">No tienes notificaciones.</div>
             <div v-else class="max-h-96 overflow-y-auto p-2">
               <button
                 v-for="notification in notifications.slice(0, 12)"
@@ -104,8 +108,8 @@ onMounted(() => { void syncPushState() })
                 </span>
               </button>
             </div>
-            <div v-if="notifications.length" class="border-t px-4 py-2 text-right">
-              <NuxtLink to="/notificaciones" class="text-xs font-medium text-primary">Ver todas</NuxtLink>
+            <div class="border-t px-4 py-2 text-right">
+              <NuxtLink to="/notificaciones" class="text-xs font-medium text-primary">Ver centro de notificaciones</NuxtLink>
             </div>
           </UiDropdownMenuContent>
         </UiDropdownMenu>

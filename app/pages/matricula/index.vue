@@ -156,7 +156,7 @@
 <script setup lang="ts">
 import { useDebounceFn } from '@vueuse/core'
 import { ChevronLeft, ChevronRight, Download, Eye, FileCheck2, FilePlus2, Pencil, Plus } from '@lucide/vue'
-import { toast } from 'vue-sonner'
+import { toast } from '@/components/ui/sonner'
 
 interface ContractRow { 
   id: string; 

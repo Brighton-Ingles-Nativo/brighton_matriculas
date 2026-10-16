@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Toaster } from '@/components/ui/sonner'
+import 'vue-sonner/style.css'
 
 const { initTheme } = useTheme()
 onMounted(initTheme)
@@ -17,7 +18,7 @@ onMounted(initTheme)
         <NuxtLayout>
           <NuxtPage />
         </NuxtLayout>
-        <Toaster position="top-right" rich-colors close-button />
+        <Toaster position="bottom-right" rich-colors close-button />
         <template #fallback>
           <div class="grid min-h-[100dvh] place-items-center bg-background text-sm text-muted-foreground">
             Cargando sesión…

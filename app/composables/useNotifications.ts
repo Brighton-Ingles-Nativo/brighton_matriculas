@@ -1,4 +1,4 @@
-import { toast } from 'vue-sonner'
+import { toast } from '@/components/ui/sonner'
 
 export interface AppNotification {
   id: string
@@ -30,7 +30,11 @@ interface PushConfigResponse {
 let notificationSubscriptions: Array<() => void> = []
 let notificationStartPromise: Promise<void> | null = null
 let notificationLoadPromise: Promise<void> | null = null
+let notificationRefreshTimer: ReturnType<typeof setInterval> | null = null
+let notificationRefreshHandler: (() => void) | null = null
+let notificationLoadedUserId: string | null = null
 const realtimeNotifications = new Map<string, AppNotification>()
+const toastedNotificationIds = new Set<string>()
 
 const base64ToUint8Array = (value: string) => {
   const padding = '='.repeat((4 - value.length % 4) % 4)
@@ -50,16 +54,26 @@ export const useNotifications = () => {
   const load = async () => {
     if (!user.value) return
     if (notificationLoadPromise) return notificationLoadPromise
+    const requestedUserId = user.value.id
 
     notificationLoadPromise = (async () => {
       loading.value = true
       try {
         const response = await $fetch<NotificationResponse>('/api/notifications', { credentials: 'include' })
+        if (user.value?.id !== requestedUserId) return
+        const isInitialLoad = notificationLoadedUserId !== requestedUserId
+        const currentIds = new Set(items.value.map((notification) => notification.id))
         const responseIds = new Set(response.data.map((notification) => notification.id))
         const eventsDuringSync = [...realtimeNotifications.values()]
           .filter((notification) => !responseIds.has(notification.id))
         items.value = [...eventsDuringSync, ...response.data].slice(0, 100)
         unreadCount.value = response.unreadCount + eventsDuringSync.filter((notification) => !notification.readAt).length
+        notificationLoadedUserId = requestedUserId
+        if (!isInitialLoad) {
+          response.data
+            .filter((notification) => !currentIds.has(notification.id))
+            .forEach(showToastOnce)
+        }
       } finally {
         loading.value = false
       }
@@ -78,14 +92,21 @@ export const useNotifications = () => {
     })
   }
 
+  const showToastOnce = (notification: AppNotification) => {
+    if (notification.readAt || toastedNotificationIds.has(notification.id)) return
+    toastedNotificationIds.add(notification.id)
+    showToast(notification)
+  }
+
   const handleCreated = (event: { payload?: AppNotification }) => {
     const notification = event.payload
     if (!notification) return
     realtimeNotifications.set(notification.id, notification)
-    if (items.value.some((item) => item.id === notification.id)) return
-    items.value = [notification, ...items.value].slice(0, 100)
-    unreadCount.value += 1
-    showToast(notification)
+    if (!items.value.some((item) => item.id === notification.id)) {
+      items.value = [notification, ...items.value].slice(0, 100)
+      unreadCount.value += 1
+    }
+    showToastOnce(notification)
   }
 
   const handleRead = (event: { payload?: { id?: string; readAt?: string } }) => {
@@ -105,31 +126,47 @@ export const useNotifications = () => {
     if (notificationStartPromise) return notificationStartPromise
 
     notificationStartPromise = (async () => {
-      await load()
+      const refresh = () => {
+        if (!user.value || document.visibilityState !== 'visible') return
+        void load().catch((error) => console.error('[notifications] refresh failed', error))
+      }
+
       if (!notificationSubscriptions.length) {
         notificationSubscriptions = [
           realtime.on<AppNotification>('notification.created', (event) => handleCreated({ payload: event.payload })),
           realtime.on<{ id?: string; readAt?: string }>('notification.read', (event) => handleRead({ payload: event.payload })),
-          realtime.onConnected(() => {
-            const refresh = () => {
-              if (user.value) void load().catch((error) => console.error('[notifications] refresh after connection failed', error))
-            }
-            if (notificationLoadPromise) void notificationLoadPromise.then(refresh, refresh)
-            else refresh()
-          })
+          realtime.onConnected(refresh)
         ]
       }
-      await realtime.connect()
+
+      if (!notificationRefreshTimer) notificationRefreshTimer = setInterval(refresh, 15_000)
+      if (!notificationRefreshHandler) {
+        notificationRefreshHandler = refresh
+        window.addEventListener('focus', refresh)
+        document.addEventListener('visibilitychange', refresh)
+      }
+
+      await load().catch((error) => console.error('[notifications] initial load failed', error))
+      await realtime.connect().catch((error) => console.error('[notifications] realtime connection failed', error))
     })().finally(() => { notificationStartPromise = null })
     return notificationStartPromise
   }
 
   const stop = () => {
+    if (notificationRefreshTimer) clearInterval(notificationRefreshTimer)
+    notificationRefreshTimer = null
+    if (notificationRefreshHandler && import.meta.client) {
+      window.removeEventListener('focus', notificationRefreshHandler)
+      document.removeEventListener('visibilitychange', notificationRefreshHandler)
+    }
+    notificationRefreshHandler = null
     notificationSubscriptions.forEach((unsubscribe) => unsubscribe())
     notificationSubscriptions = []
     realtime.disconnect()
     notificationStartPromise = null
     realtimeNotifications.clear()
+    toastedNotificationIds.clear()
+    notificationLoadedUserId = null
     items.value = []
     unreadCount.value = 0
     pushEnabled.value = false
