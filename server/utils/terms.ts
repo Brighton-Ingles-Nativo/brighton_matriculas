@@ -1,10 +1,10 @@
 /** Términos vigentes, conservados con el contenido de la plantilla de impresión anterior. */
 export const TERMS_HTML = `
-<h5 style="text-align: center; line-height: 1.5">
+<h5 class="mb-4 text-center leading-6">
     <strong>TÉRMINOS Y CONDICIONES DE LICENCIA DE USO<br />DE CURSO EDUCATIVO Y COMPRAVENTA DE LIBROS</strong>
 </h5>
 <br>
-<div style="font-size: 12px;">
+<div class="text-xs">
     <p class="text-justify pb-2">BRIGHTON INGLéS NATIVO S.A.C., identificada con R.U.C. N.º 20612939765, con domicilio en Calle Gonzales Prada 110, Urbanización Magisterial, Umacollo, distrito, provincia y departamento de Arequipa, a quien en adelante se denominará la licenciante o BRIGHTON; establece los presentes Términos y Condiciones de Licencia de Uso de Curso Educativo y Compraventa de Libros, los cuales regulan la relación contractual con el usuario identificado como el licenciatario o EL CLIENTE, conforme a lo siguiente:</p>
     <p class="text-justify pb-2">Cláusula Primera: Objeto</p>
     <p class="text-justify pb-2">Por el presente contrato, BRIGHTON otorga a EL CLIENTE una licencia de uso personal, limitada, intransferible y exclusiva sobre el Curso Integral de inglés, desarrollado y titularizado por BRIGHTON, que comprende el acceso a materiales educativos digitales, libros electrónicos, videos, plataforma virtual, recursos audiovisuales y clases en vivo (presenciales o virtuales), con una duración de catorce (14) meses aproximadamente.</p>
@@ -18,10 +18,10 @@ export const TERMS_HTML = `
     <p class="text-justify pb-2">La vigencia de la licencia se computará a partir de la confirmación del primer pago y la activación de la cuenta del usuario mediante la creación de sus credenciales de acceso a la plataforma; el contenido se encuentra detallado en el programa y plan seleccionado.</p>
     <p class="text-justify pb-2">Durante dicho periodo, EL CLIENTE tendrá acceso a:</p>
     <ul class="text-justify list-disc pb-2">
-        <li>El contenido total del programa contratado, cuyos alcances, módulos y componentes se detallaron en la modalidad y plan seleccionado.</li>
-        <li>La plataforma virtual de estudiantes proporcionada por BRIGHTON.</li>
-        <li>Los materiales descargables.</li>
-        <li>Las clases presenciales y/o virtuales en vivo programadas por BRIGHTON.</li>
+        <li class="list-item list-disc text-justify">El contenido total del programa contratado, cuyos alcances, módulos y componentes se detallaron en la modalidad y plan seleccionado.</li>
+        <li class="list-item list-disc text-justify">La plataforma virtual de estudiantes proporcionada por BRIGHTON.</li>
+        <li class="list-item list-disc text-justify">Los materiales descargables.</li>
+        <li class="list-item list-disc text-justify">Las clases presenciales y/o virtuales en vivo programadas por BRIGHTON.</li>
     </ul>
     <p class="text-justify pb-2">BRIGHTON podrá realizar suspensiones temporales del acceso por razones técnicas de actualización, mantenimiento o en casos fortuitos, sin que ello genere obligación de devolución ni compensación, comprometiéndose a restablecer el servicio a la brevedad posible. No obstante, BRIGHTON se compromete a reprogramar las sesiones o dar extensión del acceso, sin que ello implique devolución monetaria alguna.</p>
     <p class="text-justify pb-2">Cláusula Cuarta: Uso de Imagen</p>
@@ -51,11 +51,11 @@ export const TERMS_HTML = `
     </ul>
     <p class="text-justify pb-2">BRIGHTON se obliga a:</p>
     <ul class="text-justify list-disc">
-        <li>Prestar clases virtuales y/o presenciales según corresponda.</li>
-        <li>Brindar un producto apto e idóneo para el aprendizaje del idioma inglés y para cumplir los fines propuestos al alumno o EL CLIENTE, quien deberá seguir las instrucciones del Brighton weekly boost (la agenda de aprendizaje), no faltar a clases y aplicar las lecciones impartidas por los docentes o monitores.</li>
-        <li>Habilitar talleres en beneficio de EL CLIENTE según corresponda al plan elegido.</li>
-        <li>Preparar al alumno o a EL CLIENTE por un plazo de 02 meses para el examen Cambridge o IELTS, según corresponda el plan.</li>
-        <li>Entregar el material necesario para el aprendizaje del idioma inglés.</li>
+        <li class="list-item list-disc text-justify">Prestar clases virtuales y/o presenciales según corresponda.</li>
+        <li class="list-item list-disc text-justify">Brindar un producto apto e idóneo para el aprendizaje del idioma inglés y para cumplir los fines propuestos al alumno o EL CLIENTE, quien deberá seguir las instrucciones del Brighton weekly boost (la agenda de aprendizaje), no faltar a clases y aplicar las lecciones impartidas por los docentes o monitores.</li>
+        <li class="list-item list-disc text-justify">Habilitar talleres en beneficio de EL CLIENTE según corresponda al plan elegido.</li>
+        <li class="list-item list-disc text-justify">Preparar al alumno o a EL CLIENTE por un plazo de 02 meses para el examen Cambridge o IELTS, según corresponda el plan.</li>
+        <li class="list-item list-disc text-justify">Entregar el material necesario para el aprendizaje del idioma inglés.</li>
     </ul>
     <p class="text-justify pb-2">Cláusula Décima: Política de Promociones</p>
     <p class="text-justify pb-2">EL CLIENTE declara conocer y aceptar que el costo total por la licencia y libros, puede estar sujeto a descuentos o a promociones especiales, los cuales serán otorgados, bajo condición expresa de que EL CLIENTE cumpla puntualmente con el pago de las cuotas establecidas en las fechas acordadas por ambas partes en el cronograma de pagos.</p>

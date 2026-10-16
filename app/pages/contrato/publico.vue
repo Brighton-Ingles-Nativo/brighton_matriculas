@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { BadgeCheck, CheckCircle2, LoaderCircle } from '@lucide/vue'
+import { CheckCircle2, LoaderCircle } from '@lucide/vue'
+import ContractTermsContent from '@/components/contracts/ContractTermsContent.vue'
 
 definePageMeta({ layout: 'public' })
 
@@ -47,7 +48,6 @@ const actionError = ref('')
 
 const formatDate = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium' }).format(new Date(value)) : '—'
 const formatDateTime = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'
-const formatAcceptanceDateTime = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(new Date(value)).replace(',', '') : '—'
 const money = (value: string | null | undefined) => value ? new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(value)) : '—'
 const display = (value: unknown) => value === null || value === undefined || value === '' ? '—' : String(value)
 const isSigned = computed(() => Boolean(contract.value && (contract.value.signedAccept || contract.value.signedAt)))
@@ -239,20 +239,7 @@ onMounted(load)
         <section v-if="showTerms" class="rounded-lg border bg-card p-6 shadow-sm">
           <h2 class="mb-4 text-lg font-semibold">Términos y condiciones</h2>
           <div ref="termsContainer" class="max-h-[28rem] overflow-y-auto rounded-md border p-4 print:max-h-none print:overflow-visible" @scroll="updateTermsRead">
-            <div class="[&_p]:text-justify [&_li]:text-justify [&_ul]:list-disc [&_ul]:pl-6 [&_h5]:mb-4 [&_h5]:text-center [&_h5]:leading-6" v-html="termsHtml" />
-            <div class="mt-4 grid items-center gap-8 text-green-800 sm:grid-cols-2" role="status">
-              <div class="relative z-0 flex items-center gap-3 rounded-md border-2 border-emerald-200 bg-white p-4 before:absolute before:inset-[5px_-6px_-6px_5px] before:-z-10 before:bg-gray-100 before:content-['']">
-                <BadgeCheck class="size-8 shrink-0 fill-emerald-900 text-white" aria-hidden="true" />
-                <div class="min-w-0 text-emerald-950">
-                  <h3 class="mb-1 text-lg font-semibold leading-tight">Contrato Aceptado Digitalmente</h3>
-                  <p class="text-justify text-xs leading-relaxed">Este documento fue validado el <strong>{{ formatAcceptanceDateTime(contract.signedAt || contract.displayedAt) }}</strong>.</p>
-                  <p class="mt-1 text-xs leading-relaxed text-slate-500">Registro de Seguridad (IP): {{ display(contract.signedIp || contract.viewerIp) }}</p>
-                </div>
-              </div>
-              <div class="flex justify-center">
-                <img class="w-full max-w-[260px]" src="/assets/images/firma_gerencia-brighton.jpg" alt="Firma de gerencia Brighton" />
-              </div>
-            </div>
+            <ContractTermsContent :html="termsHtml" :signed="isSigned" :signed-at="contract.signedAt" :fallback-at="contract.displayedAt" :signed-ip="contract.signedIp" :fallback-ip="contract.viewerIp" />
           </div>
           <div v-if="canSign" class="mt-5 space-y-4"><label class="flex items-start gap-3 text-sm">
               <UiCheckbox v-model="acceptedChecked" :disabled="!termsRead" /><span>Declaro haber leído y acepto los

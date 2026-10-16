@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Download, Printer } from '@lucide/vue'
+import { BadgeCheck, Download, Printer } from '@lucide/vue'
 
 definePageMeta({ middleware: 'auth', layout: false, ssr: false })
 
@@ -174,16 +174,18 @@ onMounted(async () => {
 
       <section class="terms section">
         <h2>Términos y condiciones del servicio</h2>
-        <div class="legacy-terms" v-html="termsHtml" />
-      </section>
-
-      <section v-if="contract.signedAccept || contract.signedAt" class="signature">
-        <div class="signature-notice">
-          <strong>Contrato aceptado digitalmente</strong>
-          <p>Validado el {{ formatDateTime(contract.signedAt) }}.</p>
-          <p>Registro de seguridad (IP): {{ display(contract.signedIp) }}</p>
+        <div class="text-xs leading-relaxed" v-html="termsHtml" />
+        <div v-if="contract.signedAccept || contract.signedAt" class="relative mt-4 mb-2 grid grid-cols-[minmax(0,1fr)_minmax(180px,260px)] items-center gap-3 rounded-md border-2 border-emerald-200 bg-white p-4 text-green-800 print:break-inside-avoid before:absolute before:inset-[5px_-6px_-6px_5px] before:-z-10 before:bg-gray-100 before:content-['']" role="status">
+          <div class="flex items-center gap-3">
+            <BadgeCheck class="size-8 shrink-0 fill-emerald-900 text-white" aria-hidden="true" />
+            <div class="min-w-0 text-emerald-950">
+              <strong class="mb-1 block text-lg font-semibold leading-tight">Contrato Aceptado Digitalmente</strong>
+              <p class="text-justify text-[10px] leading-relaxed">Este documento fue validado el {{ formatDateTime(contract.signedAt) }}.</p>
+              <p class="mt-1 text-[10px] leading-relaxed text-slate-500">Registro de Seguridad (IP): {{ display(contract.signedIp) }}</p>
+            </div>
+          </div>
+          <div class="flex justify-center"><img class="w-full max-w-[260px] rotate-[9.75deg]" src="/assets/images/firma_gerencia-brighton.jpg" alt="Firma de gerencia Brighton"></div>
         </div>
-        <img class="signature-image" src="/assets/images/firma_gerencia-brighton.jpg" alt="Firma de gerencia Brighton">
       </section>
 
       <footer class="document-footer">Asesor: {{ contract.advisor.name }} <!--· Estado: {{ contract.status }} --></footer>
@@ -213,16 +215,6 @@ label { display: block; margin-bottom: 3px; color: #6c757d; font-size: 9px; font
 .data-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 9px 12px; }
 .span-2 { grid-column: span 2; }.span-3 { grid-column: span 3; }.span-4 { grid-column: span 4; }.span-6 { grid-column: span 6; }.span-12 { grid-column: span 12; }
 .terms h2 { margin-bottom: 14px; }
-.legacy-terms { font-size: 11px; line-height: 1.45; }
-.legacy-terms h5 { margin: 0 0 14px; font-size: 13px; }
-.legacy-terms p, .legacy-terms li { margin: 0 0 8px; text-align: justify; }
-.legacy-terms p.pb-2 { padding-bottom: 8px; }
-.legacy-terms ul { padding-left: 22px; list-style: disc outside; }
-.legacy-terms li.list-item { display: list-item; }
-.signature { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 20px; margin-top: 22px; border: 2px solid #198754; border-radius: 6px; background: #d1e7dd; padding: 16px; break-inside: avoid; }
-.signature-notice strong { color: #146c43; font-size: 16px; }
-.signature p { margin: 5px 0; }
-.signature-image { justify-self: center; width: 250px; max-width: 100%; height: auto; transform: rotate(9.75deg); }
 .document-footer { margin-top: 22px; border-top: 1px solid #d1d5db; padding-top: 8px; color: #6c757d; font-size: 9px; }
 @media print {
   body { background: white; font-size: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -231,6 +223,6 @@ label { display: block; margin-bottom: 3px; color: #6c757d; font-size: 9px; font
   .legacy-header { margin: 0 0 16px; padding: 12px; }
   .no-print { display: none !important; }
   .section { break-inside: avoid; }
-  .legacy-terms { font-size: 10px; }
+  .terms { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 </style>

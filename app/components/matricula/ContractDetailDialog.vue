@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ArrowLeft, Check, CheckCircle2, Copy, Download, ExternalLink, Mail, Printer, RefreshCw } from '@lucide/vue'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import ContractTermsContent from '@/components/contracts/ContractTermsContent.vue'
 
 interface Receipt {
   id: string
@@ -526,12 +527,12 @@ onUnmounted(() => {
           <UiAlert v-if="termsError" variant="destructive">
             <UiAlertDescription>No se pudieron cargar los términos y condiciones.</UiAlertDescription>
           </UiAlert>
-          <div v-else ref="termsContainer" class="terms-container mt-4" @scroll="updateTermsRead">
+          <div v-else ref="termsContainer" class="mt-4 max-h-[28rem] overflow-y-auto rounded-md border p-4" @scroll="updateTermsRead">
             <div v-if="termsLoading" class="space-y-3">
               <UiSkeleton class="h-6 w-3/4" />
               <UiSkeleton v-for="item in 8" :key="item" class="h-4 w-full" />
             </div>
-            <div v-else class="legacy-terms" v-html="termsHtml" />
+            <ContractTermsContent v-else :html="termsHtml" :signed="isSigned" :signed-at="contract.signedAt" :fallback-at="contract.registeredAt" :signed-ip="contract.signedIp" />
           </div>
           <div v-if="canAccept" class="mt-5 space-y-4">
             <label class="flex items-start gap-3 text-sm">
@@ -544,11 +545,6 @@ onUnmounted(() => {
               <CheckCircle2 class="size-4" /> Firmar y aceptar contrato
             </UiButton>
             <p v-if="!termsRead" class="text-xs text-muted-foreground">Lee los términos hasta el final para habilitar la aceptación.</p>
-          </div>
-          <div v-else-if="isSigned"
-            class="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-            <p class="font-semibold">Contrato aceptado digitalmente</p>
-            <p>Validado el {{ formatDateTime(contract.signedAt) }}. IP: {{ display(contract.signedIp) }}</p>
           </div>
         </section>
         <section v-else class="rounded-lg border border-sky-200 bg-sky-50 p-5 text-sm text-sky-900">El contrato anulado no está disponible para firma.</section>
@@ -620,39 +616,4 @@ onUnmounted(() => {
   font-size: 0.875rem;
 }
 
-.terms-container {
-  max-height: 400px;
-  overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: 0.375rem;
-  background: var(--card);
-  color: var(--card-foreground);
-  padding: 1.25rem;
-  font-size: 0.875rem;
-  line-height: 1.5rem;
-}
-
-.legacy-terms :deep(p),
-.legacy-terms :deep(li) {
-  text-align: justify;
-}
-
-.legacy-terms :deep(p.pb-2) {
-  padding-bottom: 0.5rem;
-}
-
-.legacy-terms :deep(ul) {
-  list-style: disc outside;
-  padding-left: 1.5rem;
-}
-
-.legacy-terms :deep(li.list-item) {
-  display: list-item;
-}
-
-.legacy-terms :deep(h5) {
-  margin: 0 0 1rem;
-  text-align: center;
-  line-height: 1.5;
-}
 </style>
