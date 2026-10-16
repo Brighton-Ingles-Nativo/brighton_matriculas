@@ -185,7 +185,8 @@ export const useNotifications = () => {
     if (!config.enabled || !config.publicKey || !('Notification' in window)) return false
     const permission = Notification.permission === 'default' ? await Notification.requestPermission() : Notification.permission
     if (permission !== 'granted') return false
-    const registration = await navigator.serviceWorker.register('/sw.js')
+    await navigator.serviceWorker.register('/sw.js')
+    const registration = await navigator.serviceWorker.ready
     const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64ToUint8Array(config.publicKey) })
     await $fetch('/api/notifications/push-subscriptions', {
       method: 'POST',

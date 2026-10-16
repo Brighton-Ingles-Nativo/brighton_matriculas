@@ -216,7 +216,9 @@ label { display: block; margin-bottom: 3px; color: #6c757d; font-size: 9px; font
 .legacy-terms { font-size: 11px; line-height: 1.45; }
 .legacy-terms h5 { margin: 0 0 14px; font-size: 13px; }
 .legacy-terms p, .legacy-terms li { margin: 0 0 8px; text-align: justify; }
-.legacy-terms ul { padding-left: 22px; }
+.legacy-terms p.pb-2 { padding-bottom: 8px; }
+.legacy-terms ul { padding-left: 22px; list-style: disc outside; }
+.legacy-terms li.list-item { display: list-item; }
 .signature { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 20px; margin-top: 22px; border: 2px solid #198754; border-radius: 6px; background: #d1e7dd; padding: 16px; break-inside: avoid; }
 .signature-notice strong { color: #146c43; font-size: 16px; }
 .signature p { margin: 5px 0; }

@@ -9,12 +9,24 @@ const route = useRoute()
 const isAdmin = computed(() => user.value?.role?.name === 'admin')
 const canAccessExpedients = computed(() => ['admin', 'supervisor', 'asistente_comercial'].includes(user.value?.role?.name || ''))
 const isCollapsed = useState('sidebar-collapsed', () => false)
+const isMobileSidebarOpen = useState('mobile-sidebar-open', () => false)
 const isAdminSection = computed(() => route.path.startsWith('/admin') || ['/sites', '/users'].includes(route.path))
 const isAdminHome = computed(() => route.path === '/admin')
 const isAccessSection = computed(() => route.path.startsWith('/admin/accesos') || route.path === '/users')
 const isOrganizationSection = computed(() => route.path.startsWith('/admin/organizacion') || route.path === '/sites')
 const isConfigurationSection = computed(() => route.path.startsWith('/admin/configuracion'))
 const adminMenuOpen = ref(isAdminSection.value)
+
+watch(() => route.fullPath, () => {
+  isMobileSidebarOpen.value = false
+})
+
+const closeMobileSidebarOnEscape = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') isMobileSidebarOpen.value = false
+}
+
+onMounted(() => window.addEventListener('keydown', closeMobileSidebarOnEscape))
+onBeforeUnmount(() => window.removeEventListener('keydown', closeMobileSidebarOnEscape))
 
 watch(isAdminSection, (isInAdministration) => {
   if (isInAdministration) adminMenuOpen.value = true
@@ -39,7 +51,15 @@ const handleLogout = async () => {
 </script>
 
 <template>
-  <aside v-if="user" class="app-sidebar" :class="{ 'app-sidebar-collapsed': isCollapsed }">
+  <template v-if="user">
+    <button
+      v-if="isMobileSidebarOpen"
+      type="button"
+      class="app-sidebar-backdrop lg:hidden"
+      aria-label="Cerrar menú de navegación"
+      @click="isMobileSidebarOpen = false"
+    />
+    <aside id="app-sidebar" class="app-sidebar" :class="{ 'app-sidebar-collapsed': isCollapsed, 'app-sidebar-mobile-open': isMobileSidebarOpen }">
     <div class="app-sidebar-header">
       <div class="app-sidebar-brand" :class="{ 'app-sidebar-brand-collapsed': isCollapsed }">
         <img v-if="!isCollapsed" src="/assets/images/logoBlanco.webp" alt="Brighton" class="max-h-full w-full px-4 object-contain" />
@@ -181,5 +201,6 @@ const handleLogout = async () => {
         </UiDropdownMenuContent>
       </UiDropdownMenu>
     </div>
-  </aside>
+    </aside>
+  </template>
 </template>

@@ -637,6 +637,19 @@ onUnmounted(() => {
   text-align: justify;
 }
 
+.legacy-terms :deep(p.pb-2) {
+  padding-bottom: 0.5rem;
+}
+
+.legacy-terms :deep(ul) {
+  list-style: disc outside;
+  padding-left: 1.5rem;
+}
+
+.legacy-terms :deep(li.list-item) {
+  display: list-item;
+}
+
 .legacy-terms :deep(h5) {
   margin: 0 0 1rem;
   text-align: center;

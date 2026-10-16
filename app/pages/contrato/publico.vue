@@ -5,10 +5,29 @@ definePageMeta({ layout: 'public' })
 
 interface Receipt { id: string; amount: string | null; concepts: string | null; paymentMethod: string | null; transactionDate: string | null; registeredAt: string }
 interface Contract {
-  id: string; contractNumber: string; holderName: string; holderDni: string; holderBirthDate: string; holderEmail: string; holderPhone: string; holderAddress: string
-  contractDepartment: string | null; contractProvince: string | null; contractDistrict: string | null
-  program: string; plan: string | null; modality: string | null; programValue: string; initialPayment: string | null; balance: string | null; installmentCount: number | null; installmentValue: string | null
-  strategy: string; currentSituation: string; housingType: string; paymentStartDate: string | null; notes: string | null; dataAuthorization: boolean; testimonials: boolean; dataUsage: boolean | null
+  id: string; 
+  contractNumber: string; 
+  holderName: string; 
+  holderDni: string; 
+  holderBirthDate: string; 
+  holderEmail: string; 
+  holderPhone: string; 
+  holderAddress: string
+  contractDepartment: string | null; 
+  contractProvince: string | null; 
+  contractDistrict: string | null
+  program: string; 
+  plan: string | null; 
+  modality: string | null; 
+  programValue: string; 
+  initialPayment: string | null; 
+  balance: string | null; 
+  installmentCount: number | null; 
+  installmentValue: string | null
+  strategy: string; 
+  currentSituation: string; 
+  housingType: string; 
+  paymentStartDate: string | null; notes: string | null; dataAuthorization: boolean; testimonials: boolean; dataUsage: boolean | null
   status: 'REVISION' | 'APROBADO' | 'ANULADO'; signedAccept: boolean; signedAt: string | null; signedIp: string | null; registeredAt: string; receipts: Receipt[]
   students: Array<{ name: string; birthDate: string | null; dni: string | null; email: string | null; phone: string | null }>
 }
@@ -94,7 +113,10 @@ onMounted(load)
               <p class="mt-1 text-sm text-muted-foreground">Registrada el {{ formatDateTime(contract.registeredAt) }}
               </p>
             </div>
-            <div class="flex gap-2"><UiBadge variant="outline">Estado: {{ status }}</UiBadge><UiBadge>{{ isSigned ? 'Firmado' : 'No firmado' }}</UiBadge></div>
+            <div class="flex gap-2">
+              <!--<UiBadge variant="outline">Estado: {{ status }}</UiBadge>-->
+              <UiBadge>{{ isSigned ? 'Firmado' : 'No firmado' }}</UiBadge>
+            </div>
           </div>
         </section>
         <section class="rounded-lg border bg-card p-6 shadow-sm">
@@ -229,8 +251,19 @@ onMounted(load)
             <p v-if="!termsRead" class="text-xs text-muted-foreground">Lee los términos hasta el final para habilitar la
               firma.</p>
           </div>
-          <div v-else-if="isSigned" class="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-            Contrato aceptado digitalmente el {{ formatDateTime(contract.signedAt) }}.</div>
+          <div v-else-if="isSigned" class="acceptance-confirmation mt-5" role="status">
+            <div class="acceptance-copy">
+              <CheckCircle2 class="size-8 shrink-0" aria-hidden="true" />
+              <div>
+                <h3>Contrato aceptado digitalmente</h3>
+                <p>Este documento fue validado el <strong>{{ formatDateTime(contract.signedAt) }}</strong>.</p>
+                <p class="acceptance-ip">Registro de seguridad (IP): {{ display(contract.signedIp) }}</p>
+              </div>
+            </div>
+            <div class="acceptance-signature">
+              <img src="/assets/images/firma_gerencia-brighton.jpg" alt="Firma de gerencia Brighton" />
+            </div>
+          </div>
         </section>
       </template>
     </main>
@@ -251,9 +284,73 @@ onMounted(load)
   overflow-y: auto;
 }
 
+.acceptance-confirmation {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: 1rem;
+  border: 2px solid #86efac;
+  border-radius: 0.5rem;
+  background: #f0fdf4;
+  padding: 1rem;
+  color: #166534;
+}
+
+.acceptance-copy {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.acceptance-copy h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.acceptance-copy p {
+  margin: 0;
+}
+
+.acceptance-copy .acceptance-ip {
+  margin-top: 0.25rem;
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.acceptance-signature {
+  display: flex;
+  justify-content: center;
+}
+
+.acceptance-signature img {
+  width: min(250px, 100%);
+  height: auto;
+  transform: rotate(9.75deg);
+}
+
+@media (max-width: 640px) {
+  .acceptance-confirmation {
+    grid-template-columns: 1fr;
+  }
+}
+
 .legacy-terms :deep(p),
 .legacy-terms :deep(li) {
   text-align: justify;
+}
+
+.legacy-terms :deep(p.pb-2) {
+  padding-bottom: 0.5rem;
+}
+
+.legacy-terms :deep(ul) {
+  list-style: disc outside;
+  padding-left: 1.5rem;
+}
+
+.legacy-terms :deep(li.list-item) {
+  display: list-item;
 }
 
 .legacy-terms :deep(h5) {
