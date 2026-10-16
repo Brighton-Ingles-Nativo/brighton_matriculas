@@ -521,9 +521,59 @@ onUnmounted(() => {
 
         <section class="rounded-lg border bg-card p-5 shadow-sm"><div class="flex items-center justify-between"><h3 class="section-title m-0">Recibos</h3><UiBadge variant="secondary">{{ contract.receipts.length }}</UiBadge></div><div v-if="contract.receipts.length" class="mt-4 overflow-x-auto"><table class="w-full min-w-[680px] text-left text-sm"><thead><tr class="border-b text-xs uppercase text-muted-foreground"><th class="p-3">Concepto</th><th class="p-3">Importe</th><th class="p-3">Método</th><th class="p-3">Operación</th><th class="p-3">Fecha</th></tr></thead><tbody><tr v-for="receipt in contract.receipts" :key="receipt.id" class="border-b last:border-0"><td class="p-3">{{ receipt.concepts || 'Pago registrado' }}</td><td class="p-3 font-medium">{{ formatCurrency(receipt.amount) }}</td><td class="p-3">{{ display(receipt.paymentMethod) }}</td><td class="p-3">{{ display(receipt.operationNumber) }}</td><td class="p-3">{{ formatDate(receipt.transactionDate || receipt.registeredAt) }}</td></tr></tbody></table></div><p v-else class="mt-4 text-sm text-muted-foreground">No hay recibos registrados.</p></section>
 
-        <section v-if="termsAvailable" class="rounded-lg border bg-card p-5 shadow-sm"><h3 class="section-title m-0">Términos y condiciones del servicio</h3><UiAlert v-if="termsError" variant="destructive"><UiAlertDescription>No se pudieron cargar los términos y condiciones.</UiAlertDescription></UiAlert><div v-else ref="termsContainer" class="terms-container mt-4" @scroll="updateTermsRead"><div v-if="termsLoading" class="space-y-3"><UiSkeleton class="h-6 w-3/4" /><UiSkeleton v-for="item in 8" :key="item" class="h-4 w-full" /></div><div v-else class="legacy-terms" v-html="termsHtml" /></div><div v-if="canAccept" class="mt-5 space-y-4"><label class="flex items-start gap-3 text-sm"><UiCheckbox v-model="acceptedChecked" :disabled="!termsRead" /><span>Declaro haber leído y acepto los Términos y Condiciones de Licencia de Uso de Curso Educativo y Compraventa de Libros de BRIGHTON INGLÉS NATIVO S.A.C.</span></label><UiButton :disabled="!termsRead || !acceptedChecked || actionLoading" class="gap-2" @click="emit('accept')"><CheckCircle2 class="size-4" /> Firmar y aceptar contrato</UiButton><p v-if="!termsRead" class="text-xs text-muted-foreground">Lee los términos hasta el final para habilitar la aceptación.</p></div><div v-else-if="isSigned" class="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><p class="font-semibold">Contrato aceptado digitalmente</p><p>Validado el {{ formatDateTime(contract.signedAt) }}. IP: {{ display(contract.signedIp) }}</p></div></section><section v-else class="rounded-lg border border-sky-200 bg-sky-50 p-5 text-sm text-sky-900">El contrato anulado no está disponible para firma.</section>
+        <section v-if="termsAvailable" class="rounded-lg border bg-card p-5 shadow-sm">
+          <h3 class="section-title m-0">Términos y condiciones del servicio</h3>
+          <UiAlert v-if="termsError" variant="destructive">
+            <UiAlertDescription>No se pudieron cargar los términos y condiciones.</UiAlertDescription>
+          </UiAlert>
+          <div v-else ref="termsContainer" class="terms-container mt-4" @scroll="updateTermsRead">
+            <div v-if="termsLoading" class="space-y-3">
+              <UiSkeleton class="h-6 w-3/4" />
+              <UiSkeleton v-for="item in 8" :key="item" class="h-4 w-full" />
+            </div>
+            <div v-else class="legacy-terms" v-html="termsHtml" />
+          </div>
+          <div v-if="canAccept" class="mt-5 space-y-4">
+            <label class="flex items-start gap-3 text-sm">
+              <UiCheckbox v-model="acceptedChecked" :disabled="!termsRead" />
+              <span>Declaro haber leído y acepto los
+                Términos y Condiciones de Licencia de Uso de Curso Educativo y Compraventa de Libros de BRIGHTON INGLÉS
+                NATIVO S.A.C.</span>
+            </label>
+            <UiButton :disabled="!termsRead || !acceptedChecked || actionLoading" class="gap-2" @click="emit('accept')">
+              <CheckCircle2 class="size-4" /> Firmar y aceptar contrato
+            </UiButton>
+            <p v-if="!termsRead" class="text-xs text-muted-foreground">Lee los términos hasta el final para habilitar la aceptación.</p>
+          </div>
+          <div v-else-if="isSigned"
+            class="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+            <p class="font-semibold">Contrato aceptado digitalmente</p>
+            <p>Validado el {{ formatDateTime(contract.signedAt) }}. IP: {{ display(contract.signedIp) }}</p>
+          </div>
+        </section>
+        <section v-else class="rounded-lg border border-sky-200 bg-sky-50 p-5 text-sm text-sky-900">El contrato anulado no está disponible para firma.</section>
 
-        <section class="rounded-lg border bg-card p-5 shadow-sm"><h3 class="section-title m-0">Ficha del registro</h3><dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2"><div><dt class="label">Asesor</dt><dd class="value">{{ contract.advisor.name }}</dd></div><div><dt class="label">Última actualización</dt><dd class="value">{{ formatDateTime(contract.updatedAt) }}</dd></div><div><dt class="label">Firma</dt><dd class="value">{{ isSigned ? 'Sí' : 'No' }}</dd></div><div><dt class="label">Fecha de firma</dt><dd class="value">{{ formatDateTime(contract.signedAt) }}</dd></div></dl></section>
+        <section class="rounded-lg border bg-card p-5 shadow-sm">
+          <h3 class="section-title m-0">Ficha del registro</h3>
+          <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt class="label">Asesor</dt>
+              <dd class="value">{{ contract.advisor.name }}</dd>
+            </div>
+            <div>
+              <dt class="label">Última actualización</dt>
+              <dd class="value">{{ formatDateTime(contract.updatedAt) }}</dd>
+            </div>
+            <div>
+              <dt class="label">Firma</dt>
+              <dd class="value">{{ isSigned ? 'Sí' : 'No' }}</dd>
+            </div>
+            <div>
+              <dt class="label">Fecha de firma</dt>
+              <dd class="value">{{ formatDateTime(contract.signedAt) }}</dd>
+            </div>
+          </dl>
+        </section>
       </div>
     </UiDialogScrollContent>
   </UiDialog>

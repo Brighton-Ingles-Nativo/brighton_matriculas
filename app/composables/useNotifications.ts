@@ -30,7 +30,6 @@ interface PushConfigResponse {
 let notificationSubscriptions: Array<() => void> = []
 let notificationStartPromise: Promise<void> | null = null
 let notificationLoadPromise: Promise<void> | null = null
-let notificationRefreshTimer: ReturnType<typeof setInterval> | null = null
 let notificationRefreshHandler: (() => void) | null = null
 let notificationLoadedUserId: string | null = null
 const realtimeNotifications = new Map<string, AppNotification>()
@@ -139,7 +138,6 @@ export const useNotifications = () => {
         ]
       }
 
-      if (!notificationRefreshTimer) notificationRefreshTimer = setInterval(refresh, 15_000)
       if (!notificationRefreshHandler) {
         notificationRefreshHandler = refresh
         window.addEventListener('focus', refresh)
@@ -153,8 +151,6 @@ export const useNotifications = () => {
   }
 
   const stop = () => {
-    if (notificationRefreshTimer) clearInterval(notificationRefreshTimer)
-    notificationRefreshTimer = null
     if (notificationRefreshHandler && import.meta.client) {
       window.removeEventListener('focus', notificationRefreshHandler)
       document.removeEventListener('visibilitychange', notificationRefreshHandler)

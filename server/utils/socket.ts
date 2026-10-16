@@ -1,22 +1,10 @@
 import { Server as SocketIOServer, type Socket } from 'socket.io'
 import type { Server as HttpServer } from 'node:http'
-import type { Duplex } from 'node:stream'
-import type { IncomingMessage } from 'node:http'
 import { getUserBySessionToken, sessionCookieName } from './auth'
 import { prisma } from './prisma'
 import { subscribeToChannel, type RealtimeChannel } from './realtime'
 
 type RealtimeHttpServer = HttpServer & { __brightonSocketIO?: SocketIOServer }
-type UpgradeListener = (request: IncomingMessage, socket: Duplex, head: Buffer) => void
-
-const isSocketIORequest = (request: IncomingMessage): boolean => {
-  try {
-    const pathname = new URL(request.url || '/', 'http://localhost').pathname
-    return pathname === '/socket.io' || pathname.startsWith('/socket.io/')
-  } catch {
-    return false
-  }
-}
 
 function parseCookies(value: string | undefined): Record<string, string> {
   if (!value) return {}
@@ -67,31 +55,12 @@ function registerConnection(socket: Socket): void {
 export function installSocketIO(httpServer: RealtimeHttpServer): SocketIOServer {
   if (httpServer.__brightonSocketIO) return httpServer.__brightonSocketIO
 
-  // Nuxt dev registers a catch-all upgrade handler before Nitro receives the
-  // first request. Keep that handler for Vite/Nitro sockets, but route the
-  // Socket.IO path directly to Engine.IO before Nuxt treats it as an app URL.
-  const existingUpgradeListeners = httpServer.listeners('upgrade') as UpgradeListener[]
   const io = new SocketIOServer(httpServer, {
     path: '/socket.io',
     transports: ['websocket'],
     allowUpgrades: false,
-    destroyUpgrade: false,
     cors: { origin: false },
     serveClient: false
-  })
-
-  const socketIOUpgradeListeners = (httpServer.listeners('upgrade') as UpgradeListener[])
-    .filter((listener) => !existingUpgradeListeners.includes(listener))
-
-  httpServer.removeAllListeners('upgrade')
-  httpServer.on('upgrade', (request, socket, head) => {
-    const listeners = isSocketIORequest(request) ? socketIOUpgradeListeners : existingUpgradeListeners
-    if (!listeners.length) {
-      socket.destroy()
-      return
-    }
-
-    for (const listener of listeners) listener.call(httpServer, request, socket, head)
   })
 
   authenticate(io)
