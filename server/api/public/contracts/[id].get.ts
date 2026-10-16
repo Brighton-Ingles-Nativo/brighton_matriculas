@@ -1,4 +1,5 @@
 import { getQuery } from 'h3'
+import { getClientIPAddress } from '../../../utils/auth'
 import { prisma } from '../../../utils/prisma'
 
 function tokenIsValid(token: unknown): token is string {
@@ -34,6 +35,11 @@ export default defineEventHandler(async (event) => {
     success: true,
     data: {
       ...safeContract,
+      signedAccept: contract.signedAccept,
+      signedAt: contract.signedAt,
+      signedIp: contract.signedIp,
+      displayedAt: new Date().toISOString(),
+      viewerIp: getClientIPAddress(event),
       holderName: contract.customer.name,
       holderBirthDate: contract.customer.birthDate,
       holderDni: contract.customer.dni,

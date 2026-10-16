@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckCircle2, LoaderCircle } from '@lucide/vue'
+import { BadgeCheck, CheckCircle2, LoaderCircle } from '@lucide/vue'
 
 definePageMeta({ layout: 'public' })
 
@@ -28,7 +28,7 @@ interface Contract {
   currentSituation: string; 
   housingType: string; 
   paymentStartDate: string | null; notes: string | null; dataAuthorization: boolean; testimonials: boolean; dataUsage: boolean | null
-  status: 'REVISION' | 'APROBADO' | 'ANULADO'; signedAccept: boolean; signedAt: string | null; signedIp: string | null; registeredAt: string; receipts: Receipt[]
+  status: 'REVISION' | 'APROBADO' | 'ANULADO'; signedAccept: boolean; signedAt: string | null; signedIp: string | null; displayedAt: string; viewerIp: string; registeredAt: string; receipts: Receipt[]
   students: Array<{ name: string; birthDate: string | null; dni: string | null; email: string | null; phone: string | null }>
 }
 
@@ -47,6 +47,7 @@ const actionError = ref('')
 
 const formatDate = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium' }).format(new Date(value)) : '—'
 const formatDateTime = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'
+const formatAcceptanceDateTime = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(new Date(value)).replace(',', '') : '—'
 const money = (value: string | null | undefined) => value ? new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(value)) : '—'
 const display = (value: unknown) => value === null || value === undefined || value === '' ? '—' : String(value)
 const isSigned = computed(() => Boolean(contract.value && (contract.value.signedAccept || contract.value.signedAt)))
@@ -123,31 +124,31 @@ onMounted(load)
           <h2 class="mb-4 text-lg font-semibold">Datos del titular</h2>
           <dl class="grid gap-4 sm:grid-cols-2">
             <div>
-              <dt class="label">Nombre completo</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Nombre completo</dt>
               <dd>{{ contract.holderName }}</dd>
             </div>
             <div>
-              <dt class="label">DNI / CE</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">DNI / CE</dt>
               <dd>{{ contract.holderDni }}</dd>
             </div>
             <div>
-              <dt class="label">Fecha de nacimiento</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Fecha de nacimiento</dt>
               <dd>{{ formatDate(contract.holderBirthDate) }}</dd>
             </div>
             <div>
-              <dt class="label">Correo</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Correo</dt>
               <dd class="break-all">{{ contract.holderEmail }}</dd>
             </div>
             <div>
-              <dt class="label">Celular</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Celular</dt>
               <dd>{{ contract.holderPhone }}</dd>
             </div>
             <div>
-              <dt class="label">Dirección</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Dirección</dt>
               <dd>{{ contract.holderAddress }}</dd>
             </div>
             <div>
-              <dt class="label">Lugar de suscripción</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Lugar de suscripción</dt>
               <dd>{{ display(contract.contractDistrict) }}, {{ display(contract.contractProvince) }}, {{
                 display(contract.contractDepartment) }}</dd>
             </div>
@@ -165,39 +166,39 @@ onMounted(load)
           <h2 class="mb-4 text-lg font-semibold">Programa y pagos</h2>
           <dl class="grid gap-4 sm:grid-cols-3">
             <div>
-              <dt class="label">Programa</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Programa</dt>
               <dd>{{ contract.program }}</dd>
             </div>
             <div>
-              <dt class="label">Plan</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Plan</dt>
               <dd>{{ display(contract.plan) }}</dd>
             </div>
             <div>
-              <dt class="label">Modalidad</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Modalidad</dt>
               <dd>{{ display(contract.modality) }}</dd>
             </div>
             <div>
-              <dt class="label">Valor del programa</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Valor del programa</dt>
               <dd>{{ money(contract.programValue) }}</dd>
             </div>
             <div>
-              <dt class="label">Cuota inicial</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Cuota inicial</dt>
               <dd>{{ money(contract.initialPayment) }}</dd>
             </div>
             <div>
-              <dt class="label">Saldo</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Saldo</dt>
               <dd>{{ money(contract.balance) }}</dd>
             </div>
             <div>
-              <dt class="label">Número de cuotas</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Número de cuotas</dt>
               <dd>{{ display(contract.installmentCount) }}</dd>
             </div>
             <div>
-              <dt class="label">Valor de cuota</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Valor de cuota</dt>
               <dd>{{ money(contract.installmentValue) }}</dd>
             </div>
             <div>
-              <dt class="label">Inicio de pago</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Inicio de pago</dt>
               <dd>{{ display(contract.paymentStartDate) }}</dd>
             </div>
           </dl>
@@ -237,8 +238,21 @@ onMounted(load)
         </section>
         <section v-if="showTerms" class="rounded-lg border bg-card p-6 shadow-sm">
           <h2 class="mb-4 text-lg font-semibold">Términos y condiciones</h2>
-          <div ref="termsContainer" class="terms-container rounded-md border p-4" @scroll="updateTermsRead">
-            <div class="legacy-terms" v-html="termsHtml" />
+          <div ref="termsContainer" class="max-h-[28rem] overflow-y-auto rounded-md border p-4 print:max-h-none print:overflow-visible" @scroll="updateTermsRead">
+            <div class="[&_p]:text-justify [&_li]:text-justify [&_ul]:list-disc [&_ul]:pl-6 [&_h5]:mb-4 [&_h5]:text-center [&_h5]:leading-6" v-html="termsHtml" />
+            <div class="mt-4 grid items-center gap-8 text-green-800 sm:grid-cols-2" role="status">
+              <div class="relative z-0 flex items-center gap-3 rounded-md border-2 border-emerald-200 bg-white p-4 before:absolute before:inset-[5px_-6px_-6px_5px] before:-z-10 before:bg-gray-100 before:content-['']">
+                <BadgeCheck class="size-8 shrink-0 fill-emerald-900 text-white" aria-hidden="true" />
+                <div class="min-w-0 text-emerald-950">
+                  <h3 class="mb-1 text-lg font-semibold leading-tight">Contrato Aceptado Digitalmente</h3>
+                  <p class="text-justify text-xs leading-relaxed">Este documento fue validado el <strong>{{ formatAcceptanceDateTime(contract.signedAt || contract.displayedAt) }}</strong>.</p>
+                  <p class="mt-1 text-xs leading-relaxed text-slate-500">Registro de Seguridad (IP): {{ display(contract.signedIp || contract.viewerIp) }}</p>
+                </div>
+              </div>
+              <div class="flex justify-center">
+                <img class="w-full max-w-[260px]" src="/assets/images/firma_gerencia-brighton.jpg" alt="Firma de gerencia Brighton" />
+              </div>
+            </div>
           </div>
           <div v-if="canSign" class="mt-5 space-y-4"><label class="flex items-start gap-3 text-sm">
               <UiCheckbox v-model="acceptedChecked" :disabled="!termsRead" /><span>Declaro haber leído y acepto los
@@ -251,123 +265,9 @@ onMounted(load)
             <p v-if="!termsRead" class="text-xs text-muted-foreground">Lee los términos hasta el final para habilitar la
               firma.</p>
           </div>
-          <div v-else-if="isSigned" class="acceptance-confirmation mt-5" role="status">
-            <div class="acceptance-copy">
-              <CheckCircle2 class="size-8 shrink-0" aria-hidden="true" />
-              <div>
-                <h3>Contrato aceptado digitalmente</h3>
-                <p>Este documento fue validado el <strong>{{ formatDateTime(contract.signedAt) }}</strong>.</p>
-                <p class="acceptance-ip">Registro de seguridad (IP): {{ display(contract.signedIp) }}</p>
-              </div>
-            </div>
-            <div class="acceptance-signature">
-              <img src="/assets/images/firma_gerencia-brighton.jpg" alt="Firma de gerencia Brighton" />
-            </div>
-          </div>
         </section>
       </template>
     </main>
   </div>
 </template>
 
-<style scoped>
-.label {
-  color: var(--muted-foreground);
-  font-size: .7rem;
-  font-weight: 700;
-  letter-spacing: .025em;
-  text-transform: uppercase;
-}
-
-.terms-container {
-  max-height: 28rem;
-  overflow-y: auto;
-}
-
-.acceptance-confirmation {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: center;
-  gap: 1rem;
-  border: 2px solid #86efac;
-  border-radius: 0.5rem;
-  background: #f0fdf4;
-  padding: 1rem;
-  color: #166534;
-}
-
-.acceptance-copy {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-}
-
-.acceptance-copy h3 {
-  margin: 0 0 0.25rem;
-  font-size: 1rem;
-  font-weight: 700;
-}
-
-.acceptance-copy p {
-  margin: 0;
-}
-
-.acceptance-copy .acceptance-ip {
-  margin-top: 0.25rem;
-  color: #64748b;
-  font-size: 0.75rem;
-}
-
-.acceptance-signature {
-  display: flex;
-  justify-content: center;
-}
-
-.acceptance-signature img {
-  width: min(250px, 100%);
-  height: auto;
-  transform: rotate(9.75deg);
-}
-
-@media (max-width: 640px) {
-  .acceptance-confirmation {
-    grid-template-columns: 1fr;
-  }
-}
-
-.legacy-terms :deep(p),
-.legacy-terms :deep(li) {
-  text-align: justify;
-}
-
-.legacy-terms :deep(p.pb-2) {
-  padding-bottom: 0.5rem;
-}
-
-.legacy-terms :deep(ul) {
-  list-style: disc outside;
-  padding-left: 1.5rem;
-}
-
-.legacy-terms :deep(li.list-item) {
-  display: list-item;
-}
-
-.legacy-terms :deep(h5) {
-  margin: 0 0 1rem;
-  text-align: center;
-  line-height: 1.5;
-}
-
-@media print {
-  header {
-    background: white !important;
-    color: black !important;
-  }
-
-  .terms-container {
-    max-height: none;
-    overflow: visible;
-  }
-}
-</style>
