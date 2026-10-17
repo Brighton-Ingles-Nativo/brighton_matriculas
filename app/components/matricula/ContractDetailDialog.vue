@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ArrowLeft, Check, CheckCircle2, Copy, Download, ExternalLink, Mail, Printer, RefreshCw } from '@lucide/vue'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import ContractTermsContent from '@/components/contracts/ContractTermsContent.vue'
 
 interface Receipt {
   id: string
@@ -67,11 +69,16 @@ const props = defineProps<{
   loading?: boolean
   error?: string
   actionLoading?: boolean
+  canApproveContract?: boolean
+  approvalLoading?: boolean
+  correctionRequestLoading?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
   accept: []
+  approveContract: []
+  requestCorrection: [message: string]
   publicView: []
   publicLinkRegenerated: [tokenExpiresAt: string]
   downloadPdf: []
@@ -84,6 +91,8 @@ const termsLoading = ref(false)
 const termsError = ref(false)
 const termsRead = ref(false)
 const acceptedChecked = ref(false)
+const correctionMessage = ref('')
+const correctionPopoverOpen = ref(false)
 const sendPreviewOpen = ref(false)
 const sendLoading = ref(false)
 const sendError = ref('')
@@ -98,14 +107,41 @@ const now = ref(Date.now())
 let publicLinkClock: ReturnType<typeof setInterval> | undefined
 const { csrfHeaders } = useAuth()
 
-const statusLabel = computed(() => {
-  if (!props.contract) return '—'
-  return ({ REVISION: 'En revisión', APROBADO: 'Aprobado', ANULADO: 'Anulado' })[props.contract.status]
-})
+const contractStatusBadges = {
+  REVISION: { label: 'En revisión', variant: 'outline' },
+  APROBADO: { label: 'Aprobado', variant: 'default' },
+  ANULADO: { label: 'Anulado', variant: 'destructive' }
+} as const
 
-const statusVariant = computed<'default' | 'outline' | 'destructive'>(() => {
-  if (!props.contract) return 'outline'
-  return ({ REVISION: 'outline', APROBADO: 'default', ANULADO: 'destructive' })[props.contract.status]
+const statusBadge = computed(() => props.contract
+  ? contractStatusBadges[props.contract.status]
+  : { label: '—', variant: 'outline' as const })
+
+const authorizationBadgeStates = {
+  authorized: { label: '✓ AUTORIZADO', variant: 'default' },
+  unauthorized: { label: '✗ NO AUTORIZADO', variant: 'secondary' }
+} as const
+
+const authorizationBadges = computed(() => {
+  if (!props.contract) return []
+
+  return [
+    {
+      id: 'data-authorization',
+      label: 'Autorización y refrendación de uso de datos personales',
+      badge: authorizationBadgeStates[props.contract.dataAuthorization ? 'authorized' : 'unauthorized']
+    },
+    {
+      id: 'testimonials',
+      label: 'Autorización para proporcionar testimonios grabados',
+      badge: authorizationBadgeStates[props.contract.testimonials ? 'authorized' : 'unauthorized']
+    },
+    {
+      id: 'data-usage',
+      label: 'Autorización para uso de imagen y datos en campañas publicitarias',
+      badge: authorizationBadgeStates[props.contract.dataUsage ? 'authorized' : 'unauthorized']
+    }
+  ]
 })
 
 const isSigned = computed(() => Boolean(props.contract && (props.contract.signedAccept || props.contract.signedAt)))
@@ -115,6 +151,18 @@ const publicLinkLabel = computed(() => hasValidPublicLink.value ? 'Enlace vigent
 const publicLinkTitle = computed(() => hasValidPublicLink.value ? 'Abrir enlace público vigente' : isPublicLinkExpired.value ? 'El enlace expiró; regénéralo para volver a abrirlo' : 'Genera un enlace público para poder abrirlo')
 const termsAvailable = computed(() => Boolean(props.contract && props.contract.status !== 'ANULADO'))
 const canAccept = computed(() => Boolean(props.contract && props.contract.status !== 'ANULADO' && !isSigned.value && termsHtml.value && !termsError.value))
+
+const cancelCorrectionRequest = () => {
+  correctionMessage.value = ''
+  correctionPopoverOpen.value = false
+}
+
+const submitCorrectionRequest = () => {
+  if (props.correctionRequestLoading || props.approvalLoading) return
+  emit('requestCorrection', correctionMessage.value.trim())
+  correctionMessage.value = ''
+  correctionPopoverOpen.value = false
+}
 
 const formatDate = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' }).format(new Date(value)) : '—'
 const formatDateTime = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'
@@ -266,6 +314,8 @@ watch(() => props.open, (open) => {
     loadTerms()
   } else {
     sendPreviewOpen.value = false
+    correctionMessage.value = ''
+    correctionPopoverOpen.value = false
   }
 })
 
@@ -275,6 +325,8 @@ watch(() => props.contract?.id, () => {
   termsRead.value = false
   acceptedChecked.value = false
   sendPreviewOpen.value = false
+  correctionMessage.value = ''
+  correctionPopoverOpen.value = false
   publicUrl.value = ''
   sendError.value = ''
   emailSent.value = false
@@ -296,18 +348,34 @@ onUnmounted(() => {
   <UiDialog :open="open" @update:open="emit('update:open', $event)">
     <UiDialogScrollContent :class="['flex min-w-0 flex-col max-h-[calc(100vh-4rem)] overflow-hidden p-0', sendPreviewOpen ? 'max-w-2xl' : 'max-w-6xl']">
       <div class="flex shrink-0 items-center justify-between border-b bg-background px-6 py-4 pr-25">
-        <UiButton v-if="sendPreviewOpen" type="button" variant="ghost" size="sm" class="-ml-3 gap-2" @click="sendPreviewOpen = false"><ArrowLeft class="size-4" /> Regresar</UiButton>
+        <UiButton v-if="sendPreviewOpen" type="button" variant="ghost" size="sm" class="-ml-3 gap-2" @click="sendPreviewOpen = false">
+          <ArrowLeft class="size-4" /> Regresar
+        </UiButton>
         <div>
-          <UiDialogTitle>{{ sendPreviewOpen ? 'Preparar envío del contrato' : contract ? `Contrato ${contract.contractNumber}` : 'Detalle del contrato' }}</UiDialogTitle>
-          <UiDialogDescription>{{ sendPreviewOpen ? 'Revisa el contenido y envíalo directamente al correo del cliente.' : 'Detalle completo del registro, contrato y movimientos de pago.' }}</UiDialogDescription>
+          <UiDialogTitle>
+            {{ sendPreviewOpen ? 'Preparar envío del contrato' : contract ? `Contrato ${contract.contractNumber}` : 'Detalle del contrato' }}
+          </UiDialogTitle>
+          <UiDialogDescription>
+            {{ sendPreviewOpen ? 'Revisa el contenido y envíalo directamente al correo del cliente.' : 'Detalle completo del registro, contrato y movimientos de pago.' }}
+          </UiDialogDescription>
         </div>
         <div v-if="contract && !sendPreviewOpen" class="flex flex-wrap justify-end gap-2">
-          <UiButton v-if="!isSigned && contract.status !== 'ANULADO'" variant="outline" size="sm" class="gap-2" :disabled="sendLoading" @click="prepareSendPreview"><Mail class="size-4" /> {{ sendLoading ? 'Preparando…' : 'Enviar contrato' }}</UiButton>
+          <UiButton v-if="!isSigned && contract.status !== 'ANULADO'" variant="outline" size="sm" class="gap-2" :disabled="sendLoading" @click="prepareSendPreview">
+            <Mail class="size-4" /> {{ sendLoading ? 'Preparando…' : 'Enviar contrato' }}
+          </UiButton>
           <!-- <span :class="['self-center text-xs font-medium', hasValidPublicLink ? 'text-emerald-700' : 'text-amber-700']">{{ publicLinkLabel }}</span> -->
-          <UiButton v-if="!hasValidPublicLink" type="button" variant="outline" size="sm" class="gap-2" :disabled="sendLoading" @click="regeneratePublicLink"><RefreshCw class="size-4" /> {{ sendLoading ? 'Regenerando…' : 'Regenerar enlace' }}</UiButton>
-          <UiButton v-else type="button" variant="outline" size="sm" class="gap-2" :title="publicLinkTitle" :disabled="!hasValidPublicLink" @click="emit('publicView')"><ExternalLink class="size-4" /> Vista pública</UiButton>
-          <UiButton variant="outline" size="sm" class="gap-2" @click="emit('downloadPdf')"><Download class="size-4" /> Descargar PDF</UiButton>
-          <UiButton variant="outline" size="sm" class="gap-2" @click="emit('printContract')"><Printer class="size-4" /> Imprimir contrato</UiButton>
+          <UiButton v-if="!hasValidPublicLink" type="button" variant="outline" size="sm" class="gap-2" :disabled="sendLoading" @click="regeneratePublicLink">
+            <RefreshCw class="size-4" /> {{ sendLoading ? 'Regenerando…' : 'Regenerar enlace' }}
+          </UiButton>
+          <UiButton v-else type="button" variant="outline" size="sm" class="gap-2" :title="publicLinkTitle" :disabled="!hasValidPublicLink" @click="emit('publicView')">
+            <ExternalLink class="size-4" /> Vista pública
+          </UiButton>
+          <UiButton variant="outline" size="sm" class="gap-2" @click="emit('downloadPdf')">
+            <Download class="size-4" /> Descargar PDF
+          </UiButton>
+          <UiButton variant="outline" size="sm" class="gap-2" @click="emit('printContract')">
+            <Printer class="size-4" /> Imprimir contrato
+          </UiButton>
         </div>
       </div>
 
@@ -371,10 +439,66 @@ onUnmounted(() => {
       <div v-else-if="loading" class="min-h-0 flex-1 space-y-4 overflow-y-auto p-6"><UiSkeleton v-for="item in 10" :key="item" class="h-12 w-full" /></div>
       <UiAlert v-else-if="error" variant="destructive" class="m-6"><UiAlertDescription>{{ error }}</UiAlertDescription></UiAlert>
       <div v-else-if="contract" class="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto bg-muted/20 p-6">
+        <UiAlert v-if="contract.status === 'REVISION'" class="w-full min-w-0 border-amber-300 bg-amber-50 text-amber-950">
+          <UiAlertDescription class="flex min-w-0 items-center justify-between gap-3 [&_p:not(:last-child)]:mb-0">
+            <p class="min-w-0 flex-1">Esta matrícula está pendiente de revisión. El verificador puede aprobarla o solicitar una corrección.</p>
+            <div v-if="canApproveContract" class="flex shrink-0 items-center gap-2">
+              <Popover v-if="!isSigned" v-model:open="correctionPopoverOpen">
+                <PopoverTrigger as-child>
+                  <UiButton
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    :disabled="correctionRequestLoading || approvalLoading"
+                  >
+                    Solicitar corrección
+                  </UiButton>
+                </PopoverTrigger>
+                <PopoverContent align="end" class="space-y-3">
+                  <div class="space-y-1">
+                    <p class="font-medium">Solicitar corrección</p>
+                    <p class="text-xs text-muted-foreground">El mensaje es opcional y se enviará al asesor.</p>
+                  </div>
+                  <div class="space-y-2">
+                    <UiLabel for="contract-correction-message">Mensaje</UiLabel>
+                    <UiTextarea
+                      id="contract-correction-message"
+                      v-model="correctionMessage"
+                      rows="3"
+                      maxlength="1000"
+                      placeholder="Describe qué dato debe corregirse."
+                      :disabled="correctionRequestLoading || approvalLoading"
+                    />
+                  </div>
+                  <div class="flex justify-end gap-2">
+                    <UiButton type="button" variant="ghost" size="sm" :disabled="correctionRequestLoading" @click="cancelCorrectionRequest">
+                      Cancelar
+                    </UiButton>
+                    <UiButton type="button" size="sm" :disabled="correctionRequestLoading || approvalLoading" @click="submitCorrectionRequest">
+                      {{ correctionRequestLoading ? 'Enviando…' : 'Enviar solicitud' }}
+                    </UiButton>
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <UiButton type="button" size="sm" :disabled="approvalLoading || correctionRequestLoading" @click="emit('approveContract')">
+                {{ approvalLoading ? 'Aprobando…' : 'Aprobar matrícula' }}
+              </UiButton>
+            </div>
+          </UiAlertDescription>
+        </UiAlert>
+
         <section class="rounded-lg border bg-card p-5 shadow-sm">
           <div class="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-            <div class="flex items-center gap-4"><div class="grid size-12 place-items-center rounded-full bg-primary text-primary-foreground"><CheckCircle2 class="size-6" /></div><div><h2 class="text-lg font-semibold">Contrato {{ contract.contractNumber }}</h2><p class="text-sm text-muted-foreground">{{ isSigned ? `Firmado digitalmente el ${formatDateTime(contract.signedAt)}.` : 'Seguimiento del contrato registrado.' }}</p></div></div>
-            <UiBadge :variant="statusVariant">{{ statusLabel }}</UiBadge>
+            <div class="flex items-center gap-4">
+              <div class="grid size-12 place-items-center rounded-full bg-primary text-primary-foreground">
+                <CheckCircle2 class="size-6" />
+              </div>
+              <div>
+                <h2 class="text-lg font-semibold">Contrato {{ contract.contractNumber }}</h2>
+                <p class="text-sm text-muted-foreground">{{ isSigned ? `Firmado digitalmente el ${formatDateTime(contract.signedAt)}.` : 'Seguimiento del contrato registrado.' }}</p>
+              </div>
+            </div>
+            <UiBadge :variant="statusBadge.variant">{{ statusBadge.label }}</UiBadge>
           </div>
         </section>
 
@@ -387,25 +511,109 @@ onUnmounted(() => {
 
           <h3 class="section-title">Información del programa</h3><div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"><div><p class="label">Modalidad</p><p class="value">{{ display(contract.modality) }}</p></div><div><p class="label">Programa</p><p class="value font-semibold">{{ contract.program }}</p></div><div><p class="label">Plan</p><p class="value font-semibold">{{ display(contract.plan) }}</p></div><div><p class="label">Modalidad de pago</p><p class="value font-semibold">{{ paymentMode(contract) }}</p></div><div><p class="label">Fecha inicio pago</p><p class="value">{{ display(contract.paymentStartDate) }}</p></div></div>
           <h3 class="section-title">Detalles económicos</h3><div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"><div><p class="label">Valor programa</p><p class="value font-semibold text-primary">{{ formatCurrency(contract.programValue) }}</p></div><div><p class="label">Cuota inicial{{ contract.cashPayment ? ' (pago total)' : '' }}</p><p class="value">{{ formatCurrency(contract.initialPayment) }}</p></div><div v-if="!contract.cashPayment"><p class="label">Saldo</p><p class="value">{{ formatCurrency(contract.balance) }}</p></div><div v-if="!contract.cashPayment"><p class="label">Nro. cuotas</p><p class="value">{{ display(contract.installmentCount) }}</p></div><div v-if="!contract.cashPayment"><p class="label">Valor cuota</p><p class="value">{{ formatCurrency(contract.installmentValue) }}</p></div><div><p class="label">Descuento / otro pago</p><p class="value text-emerald-700">{{ display(contract.otherPayment) }}</p></div><div v-if="contract.notes" class="sm:col-span-2 lg:col-span-5"><p class="label">Observaciones</p><p class="value whitespace-pre-line">{{ contract.notes }}</p></div></div>
-          <h3 class="section-title">Autorizaciones</h3><div class="space-y-3"><div class="authorization"><span>Autorización y refrendación de uso de datos personales</span><UiBadge :variant="contract.dataAuthorization ? 'default' : 'secondary'">{{ contract.dataAuthorization ? '✓ AUTORIZADO' : '✗ NO AUTORIZADO' }}</UiBadge></div><div class="authorization"><span>Autorización para proporcionar testimonios grabados</span><UiBadge :variant="contract.testimonials ? 'default' : 'secondary'">{{ contract.testimonials ? '✓ AUTORIZADO' : '✗ NO AUTORIZADO' }}</UiBadge></div><div class="authorization"><span>Autorización para uso de imagen y datos en campañas publicitarias</span><UiBadge :variant="contract.dataUsage ? 'default' : 'secondary'">{{ contract.dataUsage ? '✓ AUTORIZADO' : '✗ NO AUTORIZADO' }}</UiBadge></div></div>
+          <h3 class="section-title">Autorizaciones</h3>
+          <div class="space-y-3">
+            <div v-for="authorization in authorizationBadges" :key="authorization.id" class="authorization">
+              <span>{{ authorization.label }}</span>
+              <UiBadge :variant="authorization.badge.variant">{{ authorization.badge.label }}</UiBadge>
+            </div>
+          </div>
         </section>
 
         <section class="rounded-lg border bg-card p-5 shadow-sm"><div class="flex items-center justify-between"><h3 class="section-title m-0">Recibos</h3><UiBadge variant="secondary">{{ contract.receipts.length }}</UiBadge></div><div v-if="contract.receipts.length" class="mt-4 overflow-x-auto"><table class="w-full min-w-[680px] text-left text-sm"><thead><tr class="border-b text-xs uppercase text-muted-foreground"><th class="p-3">Concepto</th><th class="p-3">Importe</th><th class="p-3">Método</th><th class="p-3">Operación</th><th class="p-3">Fecha</th></tr></thead><tbody><tr v-for="receipt in contract.receipts" :key="receipt.id" class="border-b last:border-0"><td class="p-3">{{ receipt.concepts || 'Pago registrado' }}</td><td class="p-3 font-medium">{{ formatCurrency(receipt.amount) }}</td><td class="p-3">{{ display(receipt.paymentMethod) }}</td><td class="p-3">{{ display(receipt.operationNumber) }}</td><td class="p-3">{{ formatDate(receipt.transactionDate || receipt.registeredAt) }}</td></tr></tbody></table></div><p v-else class="mt-4 text-sm text-muted-foreground">No hay recibos registrados.</p></section>
 
-        <section v-if="termsAvailable" class="rounded-lg border bg-card p-5 shadow-sm"><h3 class="section-title m-0">Términos y condiciones del servicio</h3><UiAlert v-if="termsError" variant="destructive"><UiAlertDescription>No se pudieron cargar los términos y condiciones.</UiAlertDescription></UiAlert><div v-else ref="termsContainer" class="terms-container mt-4" @scroll="updateTermsRead"><div v-if="termsLoading" class="space-y-3"><UiSkeleton class="h-6 w-3/4" /><UiSkeleton v-for="item in 8" :key="item" class="h-4 w-full" /></div><div v-else class="legacy-terms" v-html="termsHtml" /></div><div v-if="canAccept" class="mt-5 space-y-4"><label class="flex items-start gap-3 text-sm"><UiCheckbox v-model="acceptedChecked" :disabled="!termsRead" /><span>Declaro haber leído y acepto los Términos y Condiciones de Licencia de Uso de Curso Educativo y Compraventa de Libros de BRIGHTON INGLÉS NATIVO S.A.C.</span></label><UiButton :disabled="!termsRead || !acceptedChecked || actionLoading" class="gap-2" @click="emit('accept')"><CheckCircle2 class="size-4" /> Firmar y aceptar contrato</UiButton><p v-if="!termsRead" class="text-xs text-muted-foreground">Lee los términos hasta el final para habilitar la aceptación.</p></div><div v-else-if="isSigned" class="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><p class="font-semibold">Contrato aceptado digitalmente</p><p>Validado el {{ formatDateTime(contract.signedAt) }}. IP: {{ display(contract.signedIp) }}</p></div></section><section v-else class="rounded-lg border border-sky-200 bg-sky-50 p-5 text-sm text-sky-900">El contrato anulado no está disponible para firma.</section>
+        <section v-if="termsAvailable" class="rounded-lg border bg-card p-5 shadow-sm">
+          <h3 class="section-title m-0">Términos y condiciones del servicio</h3>
+          <UiAlert v-if="termsError" variant="destructive">
+            <UiAlertDescription>No se pudieron cargar los términos y condiciones.</UiAlertDescription>
+          </UiAlert>
+          <div v-else ref="termsContainer" class="mt-4 max-h-[28rem] overflow-y-auto rounded-md border p-4" @scroll="updateTermsRead">
+            <div v-if="termsLoading" class="space-y-3">
+              <UiSkeleton class="h-6 w-3/4" />
+              <UiSkeleton v-for="item in 8" :key="item" class="h-4 w-full" />
+            </div>
+            <ContractTermsContent v-else :html="termsHtml" :signed="isSigned" :signed-at="contract.signedAt" :fallback-at="contract.registeredAt" :signed-ip="contract.signedIp" />
+          </div>
+          <div v-if="canAccept" class="mt-5 space-y-4">
+            <label class="flex items-start gap-3 text-sm">
+              <UiCheckbox v-model="acceptedChecked" :disabled="!termsRead" />
+              <span>Declaro haber leído y acepto los
+                Términos y Condiciones de Licencia de Uso de Curso Educativo y Compraventa de Libros de BRIGHTON INGLÉS
+                NATIVO S.A.C.</span>
+            </label>
+            <UiButton :disabled="!termsRead || !acceptedChecked || actionLoading" class="gap-2" @click="emit('accept')">
+              <CheckCircle2 class="size-4" /> Firmar y aceptar contrato
+            </UiButton>
+            <p v-if="!termsRead" class="text-xs text-muted-foreground">Lee los términos hasta el final para habilitar la aceptación.</p>
+          </div>
+        </section>
+        <section v-else class="rounded-lg border border-sky-200 bg-sky-50 p-5 text-sm text-sky-900">El contrato anulado no está disponible para firma.</section>
 
-        <section class="rounded-lg border bg-card p-5 shadow-sm"><h3 class="section-title m-0">Ficha del registro</h3><dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2"><div><dt class="label">Asesor</dt><dd class="value">{{ contract.advisor.name }}</dd></div><div><dt class="label">Última actualización</dt><dd class="value">{{ formatDateTime(contract.updatedAt) }}</dd></div><div><dt class="label">Firma</dt><dd class="value">{{ isSigned ? 'Sí' : 'No' }}</dd></div><div><dt class="label">Fecha de firma</dt><dd class="value">{{ formatDateTime(contract.signedAt) }}</dd></div></dl></section>
+        <section class="rounded-lg border bg-card p-5 shadow-sm">
+          <h3 class="section-title m-0">Ficha del registro</h3>
+          <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt class="label">Asesor</dt>
+              <dd class="value">{{ contract.advisor.name }}</dd>
+            </div>
+            <div>
+              <dt class="label">Última actualización</dt>
+              <dd class="value">{{ formatDateTime(contract.updatedAt) }}</dd>
+            </div>
+            <div>
+              <dt class="label">Firma</dt>
+              <dd class="value">{{ isSigned ? 'Sí' : 'No' }}</dd>
+            </div>
+            <div>
+              <dt class="label">Fecha de firma</dt>
+              <dd class="value">{{ formatDateTime(contract.signedAt) }}</dd>
+            </div>
+          </dl>
+        </section>
       </div>
     </UiDialogScrollContent>
   </UiDialog>
 </template>
 
 <style scoped>
-.label { color: var(--muted-foreground); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.025em; text-transform: uppercase; }
-.value { min-height: 1.5rem; margin-top: 0.25rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; font-size: 0.875rem; }
-.section-title { margin: 1.5rem 0 1rem; border-left: 4px solid var(--primary); background: var(--muted); padding: 0.5rem 0.75rem; color: var(--primary); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.025em; text-transform: uppercase; }
-.authorization { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--border); border-radius: 0.375rem; background: color-mix(in srgb, var(--muted) 30%, transparent); padding: 0.75rem; font-size: 0.875rem; }
-  .terms-container { max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: 0.375rem; background: var(--card); color: var(--card-foreground); padding: 1.25rem; font-size: 0.875rem; line-height: 1.5rem; }
-.legacy-terms :deep(p), .legacy-terms :deep(li) { text-align: justify; }
-.legacy-terms :deep(h5) { margin: 0 0 1rem; text-align: center; line-height: 1.5; }
+.label {
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.value {
+  min-height: 1.5rem;
+  margin-top: 0.25rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.section-title {
+  margin: 1.5rem 0 1rem;
+  border-left: 4px solid var(--primary);
+  background: var(--muted);
+  padding: 0.5rem 0.75rem;
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.authorization {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--muted) 30%, transparent);
+  padding: 0.75rem;
+  font-size: 0.875rem;
+}
+
 </style>

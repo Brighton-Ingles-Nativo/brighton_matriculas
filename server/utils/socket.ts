@@ -1,6 +1,7 @@
 import { Server as SocketIOServer, type Socket } from 'socket.io'
 import type { Server as HttpServer } from 'node:http'
 import { getUserBySessionToken, sessionCookieName } from './auth'
+import { prisma } from './prisma'
 import { subscribeToChannel, type RealtimeChannel } from './realtime'
 
 type RealtimeHttpServer = HttpServer & { __brightonSocketIO?: SocketIOServer }
@@ -20,7 +21,20 @@ function authenticate(io: SocketIOServer): void {
       const cookies = parseCookies(socket.handshake.headers.cookie)
       const user = await getUserBySessionToken(cookies[sessionCookieName()])
       if (!user) return next(new Error('UNAUTHORIZED'))
+
+      const [memberships, supervisedTeams] = await Promise.all([
+        prisma.teamMember.findMany({ where: { userId: user.id }, select: { teamId: true } }),
+        prisma.teamSupervisor.findMany({ where: { supervisorId: user.id }, select: { teamId: true } })
+      ])
+
+      const channels: RealtimeChannel[] = [
+        `user:${user.id}`,
+        ...(user.role?.name ? [`role:${user.role.name}`] : []),
+        ...new Set([...memberships, ...supervisedTeams].map(({ teamId }) => `team:${teamId}` as const))
+      ]
+
       socket.data.user = user
+      socket.data.realtimeChannels = channels
       next()
     } catch {
       next(new Error('UNAUTHORIZED'))
@@ -29,12 +43,8 @@ function authenticate(io: SocketIOServer): void {
 }
 
 function registerConnection(socket: Socket): void {
-  const user = socket.data.user as { id: string; role?: { name?: string } }
-  socket.join(`user:${user.id}`)
-  if (user.role?.name) socket.join(`role:${user.role.name}`)
-
-  const channels: RealtimeChannel[] = [`user:${user.id}`]
-  if (user.role?.name) channels.push(`role:${user.role.name}`)
+  const channels = socket.data.realtimeChannels as RealtimeChannel[]
+  for (const channel of channels) socket.join(channel)
   const unsubscribers = channels.map((channel) => subscribeToChannel(channel, (message) => {
     socket.emit(message.type, message)
   }))
@@ -52,6 +62,7 @@ export function installSocketIO(httpServer: RealtimeHttpServer): SocketIOServer 
     cors: { origin: false },
     serveClient: false
   })
+
   authenticate(io)
   io.on('connection', registerConnection)
   httpServer.__brightonSocketIO = io

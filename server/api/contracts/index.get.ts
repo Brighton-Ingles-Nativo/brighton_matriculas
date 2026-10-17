@@ -22,6 +22,7 @@ export default defineEventHandler(async (event) => {
   const status = typeof query.status === 'string' ? query.status.trim() : ''
   const signature = typeof query.signature === 'string' ? query.signature.trim() : ''
   const missingExpedient = query.expedientStatus === 'sin_expediente'
+  const includeAdvisorOrganization = ['admin', 'verificador'].includes(user.role?.name ?? '')
 
   const statusFilter = status === 'revision'
     ? { status: 'REVISION' as const }
@@ -64,6 +65,22 @@ export default defineEventHandler(async (event) => {
     })
   ])
 
+  const advisorTeams = includeAdvisorOrganization && contracts.length
+    ? await prisma.teamMember.findMany({
+        where: { userId: { in: [...new Set(contracts.map(contract => contract.userId))] } },
+        select: { userId: true, team: { select: { site: { select: { name: true } } } } }
+      })
+    : []
+  const sitesByAdvisor = new Map<string, Set<string>>()
+  for (const membership of advisorTeams) {
+    let sites = sitesByAdvisor.get(membership.userId)
+    if (!sites) {
+      sites = new Set()
+      sitesByAdvisor.set(membership.userId, sites)
+    }
+    sites.add(membership.team.site.name)
+  }
+
   return {
     success: true,
     data: contracts.map((contract) => ({
@@ -78,7 +95,11 @@ export default defineEventHandler(async (event) => {
       signedAccept: contract.signedAccept,
       signedAt: contract.signedAt,
       registeredAt: contract.registeredAt,
-      advisor: contract.user,
+      advisor: {
+        ...contract.user,
+        sites: [...(sitesByAdvisor.get(contract.userId) ?? new Set<string>())]
+          .sort((a, b) => a.localeCompare(b))
+      },
       receiptCount: contract.receipts.length,
       latestReceiptId: contract.receipts[0]?.id ?? null
     })),

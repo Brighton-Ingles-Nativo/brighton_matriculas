@@ -1,15 +1,35 @@
 <script setup lang="ts">
 import { CheckCircle2, LoaderCircle } from '@lucide/vue'
+import ContractTermsContent from '@/components/contracts/ContractTermsContent.vue'
 
 definePageMeta({ layout: 'public' })
 
 interface Receipt { id: string; amount: string | null; concepts: string | null; paymentMethod: string | null; transactionDate: string | null; registeredAt: string }
 interface Contract {
-  id: string; contractNumber: string; holderName: string; holderDni: string; holderBirthDate: string; holderEmail: string; holderPhone: string; holderAddress: string
-  contractDepartment: string | null; contractProvince: string | null; contractDistrict: string | null
-  program: string; plan: string | null; modality: string | null; programValue: string; initialPayment: string | null; balance: string | null; installmentCount: number | null; installmentValue: string | null
-  strategy: string; currentSituation: string; housingType: string; paymentStartDate: string | null; notes: string | null; dataAuthorization: boolean; testimonials: boolean; dataUsage: boolean | null
-  status: 'REVISION' | 'APROBADO' | 'ANULADO'; signedAccept: boolean; signedAt: string | null; signedIp: string | null; registeredAt: string; receipts: Receipt[]
+  id: string; 
+  contractNumber: string; 
+  holderName: string; 
+  holderDni: string; 
+  holderBirthDate: string; 
+  holderEmail: string; 
+  holderPhone: string; 
+  holderAddress: string
+  contractDepartment: string | null; 
+  contractProvince: string | null; 
+  contractDistrict: string | null
+  program: string; 
+  plan: string | null; 
+  modality: string | null; 
+  programValue: string; 
+  initialPayment: string | null; 
+  balance: string | null; 
+  installmentCount: number | null; 
+  installmentValue: string | null
+  strategy: string; 
+  currentSituation: string; 
+  housingType: string; 
+  paymentStartDate: string | null; notes: string | null; dataAuthorization: boolean; testimonials: boolean; dataUsage: boolean | null
+  status: 'REVISION' | 'APROBADO' | 'ANULADO'; signedAccept: boolean; signedAt: string | null; signedIp: string | null; displayedAt: string; viewerIp: string; registeredAt: string; receipts: Receipt[]
   students: Array<{ name: string; birthDate: string | null; dni: string | null; email: string | null; phone: string | null }>
 }
 
@@ -94,38 +114,41 @@ onMounted(load)
               <p class="mt-1 text-sm text-muted-foreground">Registrada el {{ formatDateTime(contract.registeredAt) }}
               </p>
             </div>
-            <div class="flex gap-2"><UiBadge variant="outline">Estado: {{ status }}</UiBadge><UiBadge>{{ isSigned ? 'Firmado' : 'No firmado' }}</UiBadge></div>
+            <div class="flex gap-2">
+              <!--<UiBadge variant="outline">Estado: {{ status }}</UiBadge>-->
+              <UiBadge>{{ isSigned ? 'Firmado' : 'No firmado' }}</UiBadge>
+            </div>
           </div>
         </section>
         <section class="rounded-lg border bg-card p-6 shadow-sm">
           <h2 class="mb-4 text-lg font-semibold">Datos del titular</h2>
           <dl class="grid gap-4 sm:grid-cols-2">
             <div>
-              <dt class="label">Nombre completo</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Nombre completo</dt>
               <dd>{{ contract.holderName }}</dd>
             </div>
             <div>
-              <dt class="label">DNI / CE</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">DNI / CE</dt>
               <dd>{{ contract.holderDni }}</dd>
             </div>
             <div>
-              <dt class="label">Fecha de nacimiento</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Fecha de nacimiento</dt>
               <dd>{{ formatDate(contract.holderBirthDate) }}</dd>
             </div>
             <div>
-              <dt class="label">Correo</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Correo</dt>
               <dd class="break-all">{{ contract.holderEmail }}</dd>
             </div>
             <div>
-              <dt class="label">Celular</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Celular</dt>
               <dd>{{ contract.holderPhone }}</dd>
             </div>
             <div>
-              <dt class="label">Dirección</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Dirección</dt>
               <dd>{{ contract.holderAddress }}</dd>
             </div>
             <div>
-              <dt class="label">Lugar de suscripción</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Lugar de suscripción</dt>
               <dd>{{ display(contract.contractDistrict) }}, {{ display(contract.contractProvince) }}, {{
                 display(contract.contractDepartment) }}</dd>
             </div>
@@ -143,39 +166,39 @@ onMounted(load)
           <h2 class="mb-4 text-lg font-semibold">Programa y pagos</h2>
           <dl class="grid gap-4 sm:grid-cols-3">
             <div>
-              <dt class="label">Programa</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Programa</dt>
               <dd>{{ contract.program }}</dd>
             </div>
             <div>
-              <dt class="label">Plan</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Plan</dt>
               <dd>{{ display(contract.plan) }}</dd>
             </div>
             <div>
-              <dt class="label">Modalidad</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Modalidad</dt>
               <dd>{{ display(contract.modality) }}</dd>
             </div>
             <div>
-              <dt class="label">Valor del programa</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Valor del programa</dt>
               <dd>{{ money(contract.programValue) }}</dd>
             </div>
             <div>
-              <dt class="label">Cuota inicial</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Cuota inicial</dt>
               <dd>{{ money(contract.initialPayment) }}</dd>
             </div>
             <div>
-              <dt class="label">Saldo</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Saldo</dt>
               <dd>{{ money(contract.balance) }}</dd>
             </div>
             <div>
-              <dt class="label">Número de cuotas</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Número de cuotas</dt>
               <dd>{{ display(contract.installmentCount) }}</dd>
             </div>
             <div>
-              <dt class="label">Valor de cuota</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Valor de cuota</dt>
               <dd>{{ money(contract.installmentValue) }}</dd>
             </div>
             <div>
-              <dt class="label">Inicio de pago</dt>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Inicio de pago</dt>
               <dd>{{ display(contract.paymentStartDate) }}</dd>
             </div>
           </dl>
@@ -215,8 +238,8 @@ onMounted(load)
         </section>
         <section v-if="showTerms" class="rounded-lg border bg-card p-6 shadow-sm">
           <h2 class="mb-4 text-lg font-semibold">Términos y condiciones</h2>
-          <div ref="termsContainer" class="terms-container rounded-md border p-4" @scroll="updateTermsRead">
-            <div class="legacy-terms" v-html="termsHtml" />
+          <div ref="termsContainer" class="max-h-[28rem] overflow-y-auto rounded-md border p-4 print:max-h-none print:overflow-visible" @scroll="updateTermsRead">
+            <ContractTermsContent :html="termsHtml" :signed="isSigned" :signed-at="contract.signedAt" :fallback-at="contract.displayedAt" :signed-ip="contract.signedIp" :fallback-ip="contract.viewerIp" />
           </div>
           <div v-if="canSign" class="mt-5 space-y-4"><label class="flex items-start gap-3 text-sm">
               <UiCheckbox v-model="acceptedChecked" :disabled="!termsRead" /><span>Declaro haber leído y acepto los
@@ -229,48 +252,9 @@ onMounted(load)
             <p v-if="!termsRead" class="text-xs text-muted-foreground">Lee los términos hasta el final para habilitar la
               firma.</p>
           </div>
-          <div v-else-if="isSigned" class="mt-5 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-            Contrato aceptado digitalmente el {{ formatDateTime(contract.signedAt) }}.</div>
         </section>
       </template>
     </main>
   </div>
 </template>
 
-<style scoped>
-.label {
-  color: var(--muted-foreground);
-  font-size: .7rem;
-  font-weight: 700;
-  letter-spacing: .025em;
-  text-transform: uppercase;
-}
-
-.terms-container {
-  max-height: 28rem;
-  overflow-y: auto;
-}
-
-.legacy-terms :deep(p),
-.legacy-terms :deep(li) {
-  text-align: justify;
-}
-
-.legacy-terms :deep(h5) {
-  margin: 0 0 1rem;
-  text-align: center;
-  line-height: 1.5;
-}
-
-@media print {
-  header {
-    background: white !important;
-    color: black !important;
-  }
-
-  .terms-container {
-    max-height: none;
-    overflow: visible;
-  }
-}
-</style>

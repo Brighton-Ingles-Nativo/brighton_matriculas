@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Download, Printer } from '@lucide/vue'
+import ContractTermsContent from '@/components/contracts/ContractTermsContent.vue'
 
 definePageMeta({ middleware: 'auth', layout: false, ssr: false })
 
@@ -172,18 +173,9 @@ onMounted(async () => {
         </div>
       </section>
 
-      <section class="terms section">
-        <h2>Términos y condiciones del servicio</h2>
-        <div class="legacy-terms" v-html="termsHtml" />
-      </section>
-
-      <section v-if="contract.signedAccept || contract.signedAt" class="signature">
-        <div class="signature-notice">
-          <strong>Contrato aceptado digitalmente</strong>
-          <p>Validado el {{ formatDateTime(contract.signedAt) }}.</p>
-          <p>Registro de seguridad (IP): {{ display(contract.signedIp) }}</p>
-        </div>
-        <img class="signature-image" src="/assets/images/firma_gerencia-brighton.jpg" alt="Firma de gerencia Brighton">
+      <section class="terms mt-4 break-inside-avoid">
+        <h2 class="mb-4 text-lg font-semibold">Términos y condiciones</h2>
+        <ContractTermsContent :html="termsHtml" :signed="contract.signedAccept || Boolean(contract.signedAt)" :signed-at="contract.signedAt" :fallback-at="contract.registeredAt" :signed-ip="contract.signedIp" />
       </section>
 
       <footer class="document-footer">Asesor: {{ contract.advisor.name }} <!--· Estado: {{ contract.status }} --></footer>
@@ -212,15 +204,6 @@ label { display: block; margin-bottom: 3px; color: #6c757d; font-size: 9px; font
 .section h2 { margin: 0 0 9px; border-left: 4px solid #004aad; background: #e9ecef; padding: 7px 10px; color: #004aad; font-size: 10px; text-transform: uppercase; }
 .data-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 9px 12px; }
 .span-2 { grid-column: span 2; }.span-3 { grid-column: span 3; }.span-4 { grid-column: span 4; }.span-6 { grid-column: span 6; }.span-12 { grid-column: span 12; }
-.terms h2 { margin-bottom: 14px; }
-.legacy-terms { font-size: 11px; line-height: 1.45; }
-.legacy-terms h5 { margin: 0 0 14px; font-size: 13px; }
-.legacy-terms p, .legacy-terms li { margin: 0 0 8px; text-align: justify; }
-.legacy-terms ul { padding-left: 22px; }
-.signature { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 20px; margin-top: 22px; border: 2px solid #198754; border-radius: 6px; background: #d1e7dd; padding: 16px; break-inside: avoid; }
-.signature-notice strong { color: #146c43; font-size: 16px; }
-.signature p { margin: 5px 0; }
-.signature-image { justify-self: center; width: 250px; max-width: 100%; height: auto; transform: rotate(9.75deg); }
 .document-footer { margin-top: 22px; border-top: 1px solid #d1d5db; padding-top: 8px; color: #6c757d; font-size: 9px; }
 @media print {
   body { background: white; font-size: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -229,6 +212,5 @@ label { display: block; margin-bottom: 3px; color: #6c757d; font-size: 9px; font
   .legacy-header { margin: 0 0 16px; padding: 12px; }
   .no-print { display: none !important; }
   .section { break-inside: avoid; }
-  .legacy-terms { font-size: 10px; }
 }
 </style>

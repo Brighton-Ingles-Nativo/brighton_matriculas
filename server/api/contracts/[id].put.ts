@@ -1,8 +1,10 @@
+import type { Prisma } from '@prisma/client'
 import { assertCsrf, getUserBySession } from '../../utils/auth'
 import { prisma } from '../../utils/prisma'
 import { resolveActiveStrategy } from '../../utils/strategies'
 import { assertContractAccess } from '../../utils/contract-access'
 import { isContractSigned } from '../../utils/contract-signature'
+import { notify } from '../../utils/notifications'
 
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 const optionalText = (value: unknown) => text(value) || null
@@ -17,7 +19,7 @@ export default defineEventHandler(async (event) => {
   if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, message: 'ID de matrícula inválido' })
 
   const contract = await prisma.contract.findUnique({ where: { id }, select: {
-    id: true, userId: true, customerId: true, status: true, signedAccept: true, signedAt: true, strategyNameSnapshot: true,
+    id: true, contractNumber: true, userId: true, customerId: true, status: true, signedAccept: true, signedAt: true, strategyNameSnapshot: true,
     strategyDefinition: { select: { name: true } }
   } })
   if (!contract) throw createError({ statusCode: 404, message: 'Matrícula no encontrada' })
@@ -53,9 +55,9 @@ export default defineEventHandler(async (event) => {
     province: optionalText(body.holderProvince), district: optionalText(body.holderDistrict), phone: text(body.holderPhone)
   }
 
-  await prisma.$transaction(async (tx) => {
+  const updatedContract = await prisma.$transaction(async (tx) => {
     await tx.customer.update({ where: { id: contract.customerId }, data: holder })
-    await tx.contract.update({ where: { id }, data: {
+    const updated = await tx.contract.update({ where: { id }, data: {
       contractDepartment: text(body.contractDepartment), contractProvince: text(body.contractProvince), contractDistrict: text(body.contractDistrict),
       paymentStartDate: optionalText(body.paymentStartDate), modality: text(body.modality), program: text(body.program),
       plan: text(body.program) === 'Kids' ? null : optionalText(body.plan), cashPayment: paymentMode === 'contado',
@@ -64,7 +66,7 @@ export default defineEventHandler(async (event) => {
       installmentValue: money(body.installmentValue), otherPayment: optionalText(body.otherPayment),
       ...(strategyIdProvided ? { strategyId: selectedStrategy?.id, strategyNameSnapshot: strategyName } : {}),
       students: { deleteMany: {} }
-    } })
+    }, select: { status: true, updatedAt: true } })
     await tx.contractOtherData.upsert({ where: { contractId: id }, create: {
       contractId: id, currentSituation: text(body.currentSituation) || 'Empleado', housingType: text(body.housingType) || 'Propia',
       strategy: strategyName, notes: optionalText(body.notes), dataAuthorization: Boolean(body.dataAuthorization),
@@ -85,6 +87,74 @@ export default defineEventHandler(async (event) => {
         seen.add(saved.id)
       }
     }
+
+    return updated
   })
-  return { success: true, message: 'Matrícula actualizada correctamente' }
+
+  let verificationNotificationPending = false
+  if (updatedContract.status === 'REVISION' && user.role?.name !== 'verificador') {
+    try {
+      const correctionRequests = await prisma.notification.findMany({
+        where: {
+          recipientId: contract.userId,
+          type: 'CONTRATO_CORRECCION_SOLICITADA',
+          entityType: 'CONTRACT',
+          entityId: contract.id
+        },
+        select: { id: true, data: true },
+        orderBy: { createdAt: 'desc' }
+      })
+
+      // The existing notification metadata ties each open correction request to its verifier.
+      const pendingRequests = correctionRequests.flatMap((request) => {
+        if (!request.data || typeof request.data !== 'object' || Array.isArray(request.data)) return []
+        const metadata = request.data as Record<string, unknown>
+        const requestedByUserId = metadata.requestedByUserId
+        if (typeof requestedByUserId !== 'string' || metadata.resolvedAt) return []
+        return [{ id: request.id, requestedByUserId, metadata }]
+      })
+      const verifierIds = [...new Set(pendingRequests.map((request) => request.requestedByUserId))]
+
+      if (pendingRequests.length && verifierIds.length) {
+        try {
+          await notify({
+            recipients: verifierIds,
+            type: 'CONTRATO_CORRECCION_RECIBIDA',
+            title: 'Matrícula actualizada para revisión',
+            message: `La matrícula ${contract.contractNumber} fue actualizada por ${user.name} después de una solicitud de corrección y está lista para una nueva revisión.`,
+            entityType: 'CONTRACT',
+            entityId: contract.id,
+            actionUrl: `/matriculas?contractId=${contract.id}`,
+            priority: 'high',
+            data: { status: updatedContract.status, updatedByUserId: user.id },
+            dedupeKey: `contract:${contract.id}:correction-received:${pendingRequests[0].id}`
+          })
+        } catch (error) {
+          verificationNotificationPending = true
+          console.error('[contracts] failed to notify verification after correction', { contractId: contract.id, error })
+        }
+
+        if (!verificationNotificationPending) {
+          const resolvedAt = updatedContract.updatedAt.toISOString()
+          try {
+            await prisma.$transaction(pendingRequests.map((request) => prisma.notification.update({
+              where: { id: request.id },
+              data: { data: { ...request.metadata, resolvedAt } as Prisma.InputJsonValue }
+            })))
+          } catch (error) {
+            console.error('[contracts] failed to close correction request after notifying verification', { contractId: contract.id, error })
+          }
+        }
+      }
+    } catch (error) {
+      verificationNotificationPending = true
+      console.error('[contracts] failed to notify verification after correction', { contractId: contract.id, error })
+    }
+  }
+
+  return {
+    success: true,
+    message: 'Matrícula actualizada correctamente',
+    data: { verificationNotificationPending }
+  }
 })

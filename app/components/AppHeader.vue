@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ArrowLeft, Bell, ChevronDown, LogOut, PanelLeftClose, PanelLeftOpen, UserRound } from '@lucide/vue'
+import { ArrowLeft, Bell, ChevronDown, LogOut, Menu, PanelLeftClose, PanelLeftOpen, UserRound } from '@lucide/vue'
+import { toast } from '@/components/ui/sonner'
 
 const props = withDefaults(defineProps<{
   title: string
@@ -8,9 +9,12 @@ const props = withDefaults(defineProps<{
 }>(), { subtitle: '' })
 
 const { user, logout } = useAuth()
-const { items: notifications, unreadCount, connected, markRead, enablePush, pushEnabled, syncPushState } = useNotifications()
+const { items: notifications, unreadCount, connected, loading, load, markRead, enablePush, pushEnabled, syncPushState } = useNotifications()
 const router = useRouter()
 const isCollapsed = useState('sidebar-collapsed', () => false)
+const isMobileSidebarOpen = useState('mobile-sidebar-open', () => false)
+const pushActivating = ref(false)
+const pushError = ref('')
 
 const userInitials = computed(() => {
   const name = user.value?.name?.trim() || 'Usuario'
@@ -35,16 +39,56 @@ const openNotification = async (notification: typeof notifications.value[number]
 }
 
 const enableBrowserNotifications = async () => {
-  await enablePush()
+  pushActivating.value = true
+  pushError.value = ''
+
+  try {
+    const enabled = await enablePush()
+    if (!enabled) {
+      pushError.value = typeof Notification !== 'undefined' && Notification.permission === 'denied'
+        ? 'El permiso está bloqueado en la configuración del navegador.'
+        : 'No se pudo completar la suscripción a las notificaciones del navegador.'
+      toast.error('No se activaron las notificaciones del navegador', { description: pushError.value })
+      return
+    }
+
+    toast.success('Notificaciones del navegador activadas')
+  } catch (error) {
+    console.error('[notifications] browser push activation failed', error)
+    const isPushServiceError = error instanceof DOMException
+      && error.name === 'AbortError'
+      && error.message.toLowerCase().includes('push service')
+    pushError.value = isPushServiceError
+      ? 'El navegador no pudo completar el registro con su servicio push. El permiso está concedido, pero la suscripción no quedó activa.'
+      : 'No se pudo completar la suscripción. Intenta nuevamente.'
+    toast.error('No se activaron las notificaciones del navegador', { description: pushError.value })
+  } finally {
+    pushActivating.value = false
+  }
 }
 
-onMounted(() => { void syncPushState() })
+onMounted(() => {
+  void load().catch((error) => console.error('[notifications] header load failed', error))
+  void syncPushState()
+})
 </script>
 
 <template>
   <header class="sticky top-0 z-20 border-b border-border/80 bg-background/95 backdrop-blur">
     <div class="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
       <div class="flex min-w-0 items-center gap-3">
+        <UiButton
+          v-if="user"
+          variant="ghost"
+          size="icon"
+          class="lg:hidden"
+          :aria-label="isMobileSidebarOpen ? 'Cerrar menú de navegación' : 'Abrir menú de navegación'"
+          :aria-expanded="isMobileSidebarOpen"
+          aria-controls="app-sidebar"
+          @click="isMobileSidebarOpen = !isMobileSidebarOpen"
+        >
+          <Menu class="size-5" aria-hidden="true" />
+        </UiButton>
         <UiButton
           v-if="user"
           variant="ghost"
@@ -70,7 +114,7 @@ onMounted(() => { void syncPushState() })
           <UiDropdownMenuTrigger as-child>
             <UiButton variant="ghost" size="icon" class="relative rounded-full" aria-label="Notificaciones">
               <Bell class="size-4" />
-              <span v-if="unreadCount" class="absolute right-1 top-1 grid min-w-4 place-items-center rounded-full bg-destructive px-1 text-[9px] font-bold leading-4 text-destructive-foreground">
+              <span v-if="unreadCount" class="absolute right-1 top-1 grid min-w-4 place-items-center rounded-full bg-primary text-white px-1 text-[9px] font-bold leading-4">
                 {{ unreadCount > 99 ? '99+' : unreadCount }}
               </span>
             </UiButton>
@@ -81,12 +125,16 @@ onMounted(() => { void syncPushState() })
                 <p class="text-sm font-semibold">Notificaciones</p>
                 <p class="text-xs text-muted-foreground">{{ connected ? 'Conectado' : 'Conexión pendiente' }}</p>
               </div>
-              <UiButton v-if="!pushEnabled" variant="outline" size="sm" class="h-8 text-xs" @click="enableBrowserNotifications">
-                Activar navegador
-              </UiButton>
-              <span v-else class="text-xs text-emerald-600">Navegador activo</span>
+              <div class="flex max-w-56 flex-col items-end gap-1">
+                <UiButton v-if="!pushEnabled" variant="outline" size="sm" class="h-8 text-xs" :disabled="pushActivating" @click="enableBrowserNotifications">
+                  {{ pushActivating ? 'Activando…' : 'Activar navegador' }}
+                </UiButton>
+                <span v-else class="text-xs font-medium text-emerald-600">Notificaciones activas</span>
+                <span v-if="pushError && !pushEnabled" role="alert" class="text-right text-[11px] leading-4 text-destructive">{{ pushError }}</span>
+              </div>
             </div>
-            <div v-if="!notifications.length" class="px-4 py-10 text-center text-sm text-muted-foreground">No tienes notificaciones.</div>
+            <div v-if="loading && !notifications.length" class="px-4 py-10 text-center text-sm text-muted-foreground">Cargando notificaciones…</div>
+            <div v-else-if="!notifications.length" class="px-4 py-10 text-center text-sm text-muted-foreground">No tienes notificaciones.</div>
             <div v-else class="max-h-96 overflow-y-auto p-2">
               <button
                 v-for="notification in notifications.slice(0, 12)"
@@ -104,8 +152,8 @@ onMounted(() => { void syncPushState() })
                 </span>
               </button>
             </div>
-            <div v-if="notifications.length" class="border-t px-4 py-2 text-right">
-              <NuxtLink to="/notificaciones" class="text-xs font-medium text-primary">Ver todas</NuxtLink>
+            <div class="border-t px-4 py-2 text-right">
+              <NuxtLink to="/notificaciones" class="text-xs font-medium text-primary">Ver centro de notificaciones</NuxtLink>
             </div>
           </UiDropdownMenuContent>
         </UiDropdownMenu>

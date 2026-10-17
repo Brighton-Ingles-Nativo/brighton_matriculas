@@ -1,19 +1,32 @@
 <script setup lang="ts">
-import { ChevronDown, ClipboardList, FolderOpen, LayoutDashboard, LogOut, Menu, Moon, ReceiptText, Settings2, Sun, UserRound } from '@lucide/vue'
+import { Bell, ChevronDown, ClipboardList, FolderOpen, LayoutDashboard, LogOut, Menu, Moon, ReceiptText, Settings2, Sun, UserRound } from '@lucide/vue'
 
 const { user, logout } = useAuth()
+const { unreadCount } = useNotifications()
 const { isDark, toggleTheme } = useTheme()
 const router = useRouter()
 const route = useRoute()
 const isAdmin = computed(() => user.value?.role?.name === 'admin')
-const canAccessExpedients = computed(() => ['admin', 'supervisor', 'asistente_comercial', 'verificador'].includes(user.value?.role?.name || ''))
+const canAccessExpedients = computed(() => ['admin', 'supervisor', 'asistente_comercial'].includes(user.value?.role?.name || ''))
 const isCollapsed = useState('sidebar-collapsed', () => false)
+const isMobileSidebarOpen = useState('mobile-sidebar-open', () => false)
 const isAdminSection = computed(() => route.path.startsWith('/admin') || ['/sites', '/users'].includes(route.path))
 const isAdminHome = computed(() => route.path === '/admin')
 const isAccessSection = computed(() => route.path.startsWith('/admin/accesos') || route.path === '/users')
 const isOrganizationSection = computed(() => route.path.startsWith('/admin/organizacion') || route.path === '/sites')
 const isConfigurationSection = computed(() => route.path.startsWith('/admin/configuracion'))
 const adminMenuOpen = ref(isAdminSection.value)
+
+watch(() => route.fullPath, () => {
+  isMobileSidebarOpen.value = false
+})
+
+const closeMobileSidebarOnEscape = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') isMobileSidebarOpen.value = false
+}
+
+onMounted(() => window.addEventListener('keydown', closeMobileSidebarOnEscape))
+onBeforeUnmount(() => window.removeEventListener('keydown', closeMobileSidebarOnEscape))
 
 watch(isAdminSection, (isInAdministration) => {
   if (isInAdministration) adminMenuOpen.value = true
@@ -38,7 +51,15 @@ const handleLogout = async () => {
 </script>
 
 <template>
-  <aside v-if="user" class="app-sidebar" :class="{ 'app-sidebar-collapsed': isCollapsed }">
+  <template v-if="user">
+    <button
+      v-if="isMobileSidebarOpen"
+      type="button"
+      class="app-sidebar-backdrop lg:hidden"
+      aria-label="Cerrar menú de navegación"
+      @click="isMobileSidebarOpen = false"
+    />
+    <aside id="app-sidebar" class="app-sidebar" :class="{ 'app-sidebar-collapsed': isCollapsed, 'app-sidebar-mobile-open': isMobileSidebarOpen }">
     <div class="app-sidebar-header">
       <div class="app-sidebar-brand" :class="{ 'app-sidebar-brand-collapsed': isCollapsed }">
         <img v-if="!isCollapsed" src="/assets/images/logoBlanco.webp" alt="Brighton" class="max-h-full w-full px-4 object-contain" />
@@ -59,6 +80,11 @@ const handleLogout = async () => {
       </NuxtLink>
       <NuxtLink to="/recibos" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Recibos">
         <ReceiptText class="size-4" /> <span v-if="!isCollapsed">Recibos</span>
+      </NuxtLink>
+      <NuxtLink to="/notificaciones" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" :title="unreadCount ? `Notificaciones: ${unreadCount} sin leer` : 'Notificaciones'">
+        <span class="relative"><Bell class="size-4" /><span v-if="isCollapsed && unreadCount" class="absolute -right-2 -top-1 size-2 rounded-full bg-destructive" /></span>
+        <span v-if="!isCollapsed">Notificaciones</span>
+        <span v-if="!isCollapsed && unreadCount" class="ml-auto rounded-full bg-destructive px-1.5 text-[10px] font-semibold leading-4 text-destructive-foreground">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
       </NuxtLink>
       <p v-if="!isCollapsed" class="px-3 pb-2 pt-7 text-[10px] font-bold uppercase tracking-[.14em] text-sidebar-foreground/45">Cuenta</p>
       <NuxtLink to="/profile" class="sidebar-link" :class="{ 'sidebar-link-collapsed': isCollapsed }" active-class="sidebar-link-active" title="Mi perfil">
@@ -175,5 +201,6 @@ const handleLogout = async () => {
         </UiDropdownMenuContent>
       </UiDropdownMenu>
     </div>
-  </aside>
+    </aside>
+  </template>
 </template>
