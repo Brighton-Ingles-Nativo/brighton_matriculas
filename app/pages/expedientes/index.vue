@@ -18,12 +18,12 @@
       </section>
 
       <UiCard>
-        <UiCardHeader class="gap-4 border-b sm:flex-row sm:items-center sm:justify-between">
+        <UiCardHeader class="flex-col items-stretch gap-4 border-b">
           <div>
             <UiCardTitle>Expedientes</UiCardTitle>
             <UiCardDescription>Consulta y seguimiento de los expedientes registrados.</UiCardDescription>
           </div>
-          <div class="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:grid-cols-4">
+          <div class="filter-grid">
             <UiInput v-model="search" placeholder="Buscar por titular, DNI o asesor" aria-label="Buscar por titular, DNI o asesor" />
             <UiSelect v-model="status">
               <UiSelectTrigger class="w-full" aria-label="Estado del expediente"><UiSelectValue placeholder="Todos los estados" /></UiSelectTrigger>
@@ -233,6 +233,13 @@ onMounted(loadExpedients)
 </script>
 
 <style scoped>
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 0.5rem;
+  width: 100%;
+}
+
 .select {
   height: 2.25rem;
   width: 100%;

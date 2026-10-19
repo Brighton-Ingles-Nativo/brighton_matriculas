@@ -31,6 +31,8 @@
     "cheerio": "^1.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "html2canvas-pro": "2.3.7",
+    "jspdf": "^4.2.1",
     "nuxt": "^4.5.2",
     "reka-ui": "^2.10.4",
     "shadcn-nuxt": "2.8.2",

@@ -21,12 +21,12 @@
         </div>
       </section>
       <UiCard>
-        <UiCardHeader class="gap-4 border-b sm:flex-row sm:items-center sm:justify-between">
+        <UiCardHeader class="flex-col items-stretch gap-4 border-b">
           <div>
             <UiCardTitle>Matrículas</UiCardTitle>
             <UiCardDescription>{{ pagination.total }} matrículas encontradas</UiCardDescription>
           </div>
-          <div class="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:grid-cols-4">
+          <div class="filter-grid">
             <UiInput v-model="holderName" placeholder="Nombre del titular" aria-label="Nombre del titular" />
             <UiInput v-model="holderDni" placeholder="DNI del titular" aria-label="DNI del titular" />
             <UiInput v-if="canFilterAdvisor" v-model="advisorName" placeholder="Nombre del asesor" aria-label="Nombre del asesor" />
@@ -527,12 +527,12 @@ const openReceiptDialog = (contract: ContractRow) => {
 }
 
 const openLatestReceipt = (contract: ContractRow) => {
-  if (contract.latestReceiptId) navigateTo(`/recibo/${contract.latestReceiptId}`)
+  if (contract.latestReceiptId) navigateTo({ path: `/recibo/${contract.latestReceiptId}`, query: { returnTo: '/matriculas' } })
 }
 
 const onReceiptCreated = async (receiptId: string) => {
   await loadContracts()
-  await navigateTo(`/recibo/${receiptId}`)
+  await navigateTo({ path: `/recibo/${receiptId}`, query: { returnTo: '/matriculas' } })
 }
 
 const badgeConfig = {
@@ -577,3 +577,12 @@ watch([() => route.query.contractId, loading], ([contractId, isLoading]) => {
   if (typeof contractId === 'string' && !isLoading) void openContractFromRoute(contractId)
 })
 </script>
+
+<style scoped>
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 0.5rem;
+  width: 100%;
+}
+</style>

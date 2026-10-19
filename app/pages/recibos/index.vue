@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ChevronLeft, ChevronRight, Eye, FilePlus2, Search } from '@lucide/vue'
+import { ChevronLeft, ChevronRight, Eye, FileDown, FilePlus2, LoaderCircle, Printer, Search } from '@lucide/vue'
+import ReceiptDocument from '~/components/recibo/ReceiptDocument.vue'
+import { downloadReceiptPdf, waitForReceiptAssets } from '~/utils/receipt-pdf'
 definePageMeta({ 
   middleware: 'auth', 
   ssr: false 
@@ -37,6 +39,11 @@ const loading = ref(true);
 const error = ref(''); 
 const receipts = ref<ReceiptRow[]>([]); 
 const pagination = ref<ResponseData['pagination']>({ page: 1, limit: 15, total: 0, totalPages: 0 })
+const actionError = ref('')
+const actionReceipt = ref<any>(null)
+const actionReceiptDocument = ref<{ getRoot: () => HTMLElement | null } | null>(null)
+const actionProcessingId = ref<string | null>(null)
+const actionKind = ref<'download' | 'print' | null>(null)
 
 const loadReceipts = async () => { 
   loading.value = true; error.value = ''; 
@@ -85,6 +92,56 @@ const pageItems = computed<(number | 'ellipsis')[]>(() => {
 const formatDate = (value: string | null) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' }).format(new Date(value)) : '—'; 
 const formatCurrency = (value: string | null) => value ? new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(value)) : '—'; 
 const concept = (row: ReceiptRow) => row.concepts || (row.otherConcept ? `OTROS: ${row.otherConcept}` : '—')
+const receiptLink = (id: string) => ({ path: `/recibo/${id}`, query: { returnTo: '/recibos' } })
+
+const cleanupPrintAction = () => {
+  document.body.classList.remove('receipt-printing')
+  window.removeEventListener('afterprint', cleanupPrintAction)
+  actionReceipt.value = null
+  actionProcessingId.value = null
+  actionKind.value = null
+}
+
+const runReceiptAction = async (id: string, action: 'download' | 'print') => {
+  if (actionProcessingId.value) return
+  actionProcessingId.value = id
+  actionKind.value = action
+  actionError.value = ''
+
+  let waitingForPrint = false
+  try {
+    const response = await $fetch<{ data: any }>(`/api/receipts/${id}`, { credentials: 'include' })
+    actionReceipt.value = response.data
+    await nextTick()
+
+    const element = actionReceiptDocument.value?.getRoot()
+    if (!element) throw new Error('No se pudo preparar el recibo.')
+
+    if (action === 'download') {
+      await downloadReceiptPdf(element, String(response.data.contract?.contractNumber || 'recibo'))
+      return
+    }
+
+    await waitForReceiptAssets(element)
+    document.body.classList.add('receipt-printing')
+    window.addEventListener('afterprint', cleanupPrintAction, { once: true })
+    waitingForPrint = true
+    window.print()
+  } catch (err: any) {
+    console.error(`No se pudo ${action === 'download' ? 'descargar' : 'imprimir'} el recibo.`, err)
+    actionError.value = err?.data?.message || err?.data?.statusMessage ||
+      (action === 'download' ? 'No pudimos generar el PDF. Inténtalo nuevamente.' : 'No pudimos abrir la impresión del recibo.')
+    cleanupPrintAction()
+  } finally {
+    if (!waitingForPrint) {
+      actionReceipt.value = null
+      actionProcessingId.value = null
+      actionKind.value = null
+    }
+  }
+}
+
+onBeforeUnmount(cleanupPrintAction)
 
 onMounted(loadReceipts)
 </script>
@@ -107,6 +164,9 @@ onMounted(loadReceipts)
           </UiButton>
         </form>
       </section>
+      <UiAlert v-if="actionError" variant="destructive">
+        <UiAlertDescription>{{ actionError }}</UiAlertDescription>
+      </UiAlert>
       <UiCard>
         <UiCardContent class="p-0">
           <div v-if="loading" class="space-y-3 p-6">
@@ -138,17 +198,36 @@ onMounted(loadReceipts)
                   <div class="max-w-56 truncate font-medium uppercase">{{ receipt.contract.holderName }}</div>
                   <div class="text-xs text-muted-foreground">{{ receipt.contract.holderDni }}</div>
                 </UiTableCell>
-                <UiTableCell>{{ concept(receipt) }}</UiTableCell>
+                <UiTableCell class="max-w-64">
+                  <UiBadge variant="outline" class="max-w-56 truncate" :title="concept(receipt)">
+                    {{ concept(receipt) }}
+                  </UiBadge>
+                </UiTableCell>
                 <UiTableCell class="whitespace-nowrap font-semibold">{{ formatCurrency(receipt.amount) }}</UiTableCell>
-                <UiTableCell>{{ receipt.paymentMethod || '—' }}</UiTableCell>
+                <UiTableCell>
+                  <UiBadge v-if="receipt.paymentMethod" variant="secondary">
+                    {{ receipt.paymentMethod }}
+                  </UiBadge>
+                  <span v-else class="text-sm text-muted-foreground">—</span>
+                </UiTableCell>
                 <UiTableCell class="whitespace-nowrap">{{ formatDate(receipt.transactionDate || receipt.registeredAt) }}
                 </UiTableCell>
                 <UiTableCell>
-                  <div class="flex justify-end">
-                    <UiButton variant="ghost" size="icon" title="Ver recibo" aria-label="Ver recibo" as-child>
-                      <NuxtLink :to="`/recibo/${receipt.id}`">
+                  <div class="flex justify-end gap-1">
+                    <UiButton variant="default" size="icon-lg" title="Ver recibo" aria-label="Ver recibo" as-child>
+                      <NuxtLink :to="receiptLink(receipt.id)">
                         <Eye class="size-4" />
                       </NuxtLink>
+                    </UiButton>
+                    <UiButton variant="success" size="icon-lg" title="Descargar recibo PDF" aria-label="Descargar recibo PDF"
+                      :disabled="Boolean(actionProcessingId)" @click="runReceiptAction(receipt.id, 'download')">
+                      <LoaderCircle v-if="actionProcessingId === receipt.id && actionKind === 'download'" class="size-4 animate-spin" />
+                      <FileDown v-else class="size-4" />
+                    </UiButton>
+                    <UiButton variant="outline" size="icon-lg" title="Imprimir recibo" aria-label="Imprimir recibo"
+                      :disabled="Boolean(actionProcessingId)" @click="runReceiptAction(receipt.id, 'print')">
+                      <LoaderCircle v-if="actionProcessingId === receipt.id && actionKind === 'print'" class="size-4 animate-spin" />
+                      <Printer v-else class="size-4" />
                     </UiButton>
                   </div>
                 </UiTableCell>
@@ -183,5 +262,42 @@ onMounted(loadReceipts)
         </UiCardFooter>
       </UiCard>
     </main>
+    <div v-if="actionReceipt" id="receipt-print-stage" class="receipt-action-stage" aria-hidden="true">
+      <ReceiptDocument ref="actionReceiptDocument" :receipt="actionReceipt" />
+    </div>
   </div>
 </template>
+
+<style scoped>
+.receipt-action-stage {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  width: 848px;
+  pointer-events: none;
+}
+
+@media print {
+  :global(body.receipt-printing *) {
+    visibility: hidden !important;
+  }
+
+  :global(body.receipt-printing #receipt-print-stage),
+  :global(body.receipt-printing #receipt-print-stage *) {
+    visibility: visible !important;
+  }
+
+  :global(body.receipt-printing #receipt-print-stage) {
+    position: fixed !important;
+    inset: 0 auto auto 0 !important;
+    display: block !important;
+    width: 100% !important;
+    pointer-events: auto !important;
+  }
+
+  :global(body.receipt-printing #receipt-print-stage .receipt-page) {
+    width: 100% !important;
+    max-width: none !important;
+  }
+}
+</style>
