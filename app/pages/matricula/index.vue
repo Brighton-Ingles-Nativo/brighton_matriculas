@@ -28,11 +28,30 @@
           </div>
           <div class="filter-grid">
             <div class="relative sm:col-span-2">
-              <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <UiInput v-model="search" class="pl-9" placeholder="Buscar matrícula, titular, DNI o asesor" aria-label="Buscar matrícula, titular, DNI o asesor" />
+              <Search
+                class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <UiInput v-model="search" class="pl-9" placeholder="Buscar matrícula, titular, DNI o asesor"
+                aria-label="Buscar matrícula, titular, DNI o asesor" />
             </div>
-            <UiSelect v-model="status"><UiSelectTrigger class="w-full" aria-label="Estado del contrato"><UiSelectValue placeholder="Todos los estados" /></UiSelectTrigger><UiSelectContent><UiSelectItem value="revision">En revisión</UiSelectItem><UiSelectItem value="aprobado">Aprobado</UiSelectItem><UiSelectItem value="anulado">Anulado</UiSelectItem></UiSelectContent></UiSelect>
-            <UiSelect v-model="signature"><UiSelectTrigger class="w-full" aria-label="Firma del cliente"><UiSelectValue placeholder="Todas las firmas" /></UiSelectTrigger><UiSelectContent><UiSelectItem value="firmado">Firmado</UiSelectItem><UiSelectItem value="no_firmado">No firmado</UiSelectItem></UiSelectContent></UiSelect>
+            <UiSelect v-model="status">
+              <UiSelectTrigger class="w-full" aria-label="Estado del contrato">
+                <UiSelectValue placeholder="Todos los estados" />
+              </UiSelectTrigger>
+              <UiSelectContent>
+                <UiSelectItem value="revision">En revisión</UiSelectItem>
+                <UiSelectItem value="aprobado">Aprobado</UiSelectItem>
+                <UiSelectItem value="anulado">Anulado</UiSelectItem>
+              </UiSelectContent>
+            </UiSelect>
+            <UiSelect v-model="signature">
+              <UiSelectTrigger class="w-full" aria-label="Firma del cliente">
+                <UiSelectValue placeholder="Todas las firmas" />
+              </UiSelectTrigger>
+              <UiSelectContent>
+                <UiSelectItem value="firmado">Firmado</UiSelectItem>
+                <UiSelectItem value="no_firmado">No firmado</UiSelectItem>
+              </UiSelectContent>
+            </UiSelect>
           </div>
         </UiCardHeader>
         <UiCardContent class="p-0">
