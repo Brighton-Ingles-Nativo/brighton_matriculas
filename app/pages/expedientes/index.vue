@@ -32,6 +32,7 @@
                 <UiSelectItem value="EN_COMERCIAL">En comercial</UiSelectItem>
                 <UiSelectItem value="REBOTADO_COMERCIAL">Rebotado comercial</UiSelectItem>
                 <UiSelectItem value="EN_VERIFICACION">En verificación</UiSelectItem>
+                <UiSelectItem value="COLA_VERIFICACION">Cola de verificación</UiSelectItem>
                 <UiSelectItem value="REBOTADO_VERIFICACION">Rebotado verificación</UiSelectItem>
                 <UiSelectItem value="VERIFICADA_CON_OBSERVACIONES">Verificada con observaciones</UiSelectItem>
                 <UiSelectItem value="VERIFICADA">Verificada</UiSelectItem>
@@ -152,6 +153,7 @@ interface ExpedientsResponse {
 interface ReceiptDocumentInstance { getRoot: () => HTMLElement | null }
 
 const { user } = useAuth()
+const route = useRoute()
 
 const canCreateExpedient = computed(() => 
   ['asesor', 'supervisor','admin']
@@ -163,7 +165,7 @@ const canExport = computed(() =>
 )
 
 const search = ref('')
-const status = ref('')
+const status = ref(typeof route.query.status === 'string' ? route.query.status : '')
 const location = ref('')
 const page = ref(1)
 const loading = ref(true)

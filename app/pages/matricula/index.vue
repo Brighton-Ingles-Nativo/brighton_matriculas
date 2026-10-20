@@ -52,6 +52,14 @@
                 <UiSelectItem value="no_firmado">No firmado</UiSelectItem>
               </UiSelectContent>
             </UiSelect>
+            <UiSelect v-model="cancellationStatus">
+              <UiSelectTrigger class="w-full" aria-label="Estado de solicitud de anulación">
+                <UiSelectValue placeholder="Todas las solicitudes" />
+              </UiSelectTrigger>
+              <UiSelectContent>
+                <UiSelectItem value="PENDIENTE">Anulación pendiente</UiSelectItem>
+              </UiSelectContent>
+            </UiSelect>
           </div>
         </UiCardHeader>
         <UiCardContent class="p-0">
@@ -270,6 +278,7 @@ const route = useRoute()
 const search = ref(typeof route.query.search === 'string' ? route.query.search : typeof route.query.holderName === 'string' ? route.query.holderName : typeof route.query.holderDni === 'string' ? route.query.holderDni : '');
 const status = ref(typeof route.query.status === 'string' ? route.query.status : '');
 const signature = ref(typeof route.query.signature === 'string' ? route.query.signature : '');
+const cancellationStatus = ref(typeof route.query.cancellationStatus === 'string' ? route.query.cancellationStatus : '');
 const expedientStatus = route.query.expedientStatus === 'sin_expediente' ? 'sin_expediente' : '';
 const page = ref(1); 
 const loading = ref(true); 
@@ -306,6 +315,7 @@ const exportUrl = computed(() => {
   if (search.value) params.set('search', search.value)
   if (status.value) params.set('status', status.value)
   if (signature.value) params.set('signature', signature.value)
+  if (cancellationStatus.value) params.set('cancellationStatus', cancellationStatus.value)
   if (expedientStatus) params.set('expedientStatus', expedientStatus)
   params.set('format', 'xlsx')
   const query = params.toString()
@@ -322,6 +332,7 @@ const loadContracts = async () => {
         search: search.value || undefined,
         status: status.value || undefined,
         signature: signature.value || undefined,
+        cancellationStatus: cancellationStatus.value || undefined,
         expedientStatus: expedientStatus || undefined
       } 
       }); 
@@ -585,7 +596,7 @@ onMounted(async () => {
   if (typeof route.query.contractId === 'string') await openContractFromRoute(route.query.contractId)
 })
 
-watch([search, status, signature], () => debouncedLoadContracts())
+watch([search, status, signature, cancellationStatus], () => debouncedLoadContracts())
 watch([() => route.query.contractId, loading], ([contractId, isLoading]) => {
   if (typeof contractId === 'string' && !isLoading) void openContractFromRoute(contractId)
 })

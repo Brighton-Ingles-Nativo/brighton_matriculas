@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
   const search = typeof query.search === 'string' ? query.search.trim() : ''
   const status = typeof query.status === 'string' ? query.status.trim() : ''
   const signature = typeof query.signature === 'string' ? query.signature.trim() : ''
+  const cancellationStatus = typeof query.cancellationStatus === 'string' ? query.cancellationStatus.trim() : ''
   const missingExpedient = query.expedientStatus === 'sin_expediente'
   const includeAdvisorOrganization = ['admin', 'verificador'].includes(user.role?.name ?? '')
 
@@ -45,6 +46,7 @@ export default defineEventHandler(async (event) => {
   if (missingExpedient) clauses.push({ expedient: { is: null } })
   if (statusFilter) clauses.push(statusFilter)
   if (signatureFilter) clauses.push(signatureFilter)
+  if (cancellationStatus === 'PENDIENTE') clauses.push({ cancellationRequest: { is: { status: 'PENDIENTE' } } })
   const where: Prisma.ContractWhereInput = { AND: clauses }
 
   const [total, contracts] = await Promise.all([

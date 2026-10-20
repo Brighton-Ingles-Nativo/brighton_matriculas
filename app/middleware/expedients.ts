@@ -8,8 +8,7 @@ export default defineNuxtRouteMiddleware(async () => {
     return navigateTo('/login')
   }
 
-  //const allowedRoles = ['admin', 'asesor', 'supervisor', 'asistente_comercial', 'verificador']
-  const allowedRoles = ['admin']
+  const allowedRoles = ['admin', 'asesor', 'supervisor', 'asistente_comercial', 'verificador']
   if (!allowedRoles.includes(user.value?.role?.name || '')) {
     return navigateTo('/matriculas')
   }

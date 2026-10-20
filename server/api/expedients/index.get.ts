@@ -34,11 +34,13 @@ export default defineEventHandler(async (event) => {
   }
 
   const statusFilter: Prisma.ExpedientWhereInput = status === 'PENDIENTE'
-    ? { status: 'CREADO', currentLocation: 'SUPERVISOR' }
+    ? { status: { in: ['CREADO', 'REBOTADO'] }, currentLocation: 'SUPERVISOR' }
     : status === 'EN_COMERCIAL'
-      ? { status: 'CREADO', currentLocation: 'ASISTENTE_COMERCIAL' }
+      ? { status: { in: ['CREADO', 'REBOTADO'] }, currentLocation: 'ASISTENTE_COMERCIAL' }
       : status === 'EN_VERIFICACION'
         ? { status: 'CREADO', currentLocation: 'VERIFICACION' }
+        : status === 'COLA_VERIFICACION'
+          ? { status: { in: ['CREADO', 'AGENDADO', 'OBSERVADO', 'REBOTADO'] }, currentLocation: 'VERIFICACION' }
         : status === 'REBOTADO_COMERCIAL'
           ? { status: 'REBOTADO', currentLocation: 'ASESOR' }
           : status === 'REBOTADO_VERIFICACION'
