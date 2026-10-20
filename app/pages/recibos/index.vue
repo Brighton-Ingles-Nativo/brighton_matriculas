@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ChevronLeft, ChevronRight, Eye, FileDown, FilePlus2, LoaderCircle, Printer, Search } from '@lucide/vue'
+import { useDebounceFn } from '@vueuse/core'
 import ReceiptDocument from '~/components/recibo/ReceiptDocument.vue'
 import { downloadReceiptPdf, waitForReceiptAssets } from '~/utils/receipt-pdf'
 definePageMeta({ 
@@ -64,10 +65,11 @@ const loadReceipts = async () => {
   } 
 }
 
-const submitSearch = async () => { 
+const applySearch = async () => {
   page.value = 1; 
   await loadReceipts() 
 }; 
+const debouncedApplySearch = useDebounceFn(() => applySearch(), 350)
 const goToPage = async (nextPage: number) => { 
   if (nextPage < 1 || nextPage > pagination.value.totalPages || nextPage === page.value) 
   return; 
@@ -143,6 +145,7 @@ const runReceiptAction = async (id: string, action: 'download' | 'print') => {
 
 onBeforeUnmount(cleanupPrintAction)
 
+watch(search, () => debouncedApplySearch())
 onMounted(loadReceipts)
 </script>
 <template>
@@ -154,15 +157,12 @@ onMounted(loadReceipts)
           <h1 class="text-3xl font-semibold tracking-tight">Recibos</h1>
           <p class="mt-1 text-muted-foreground">{{ pagination.total }} recibos registrados.</p>
         </div>
-        <form class="flex w-full gap-2 sm:w-auto" @submit.prevent="submitSearch">
-          <div class="relative w-full sm:w-80">
+        <div class="w-full sm:w-80">
+          <div class="relative">
             <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <UiInput v-model="search" class="pl-9" placeholder="Buscar contrato, titular o DNI" />
+            <UiInput v-model="search" class="pl-9" placeholder="Buscar contrato, titular o DNI" aria-label="Buscar contrato, titular o DNI" />
           </div>
-          <UiButton type="submit" variant="outline" size="icon" aria-label="Buscar">
-            <Search class="size-4" />
-          </UiButton>
-        </form>
+        </div>
       </section>
       <UiAlert v-if="actionError" variant="destructive">
         <UiAlertDescription>{{ actionError }}</UiAlertDescription>

@@ -25,6 +25,7 @@ export default defineEventHandler(async (event) => {
     AND: [contractAccessWhere(user)],
     ...(search ? {
       OR: [
+        { contractNumber: { contains: search, mode: 'insensitive' as const } },
         { customer: { name: { contains: search, mode: 'insensitive' as const } } },
         { customer: { dni: { contains: search, mode: 'insensitive' as const } } },
         ...(user.role?.name !== 'asesor' ? [{ user: { name: { contains: search, mode: 'insensitive' as const } } }] : [])

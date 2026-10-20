@@ -13,8 +13,13 @@ export default defineEventHandler(async (event) => {
   const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
   const limit = Number.isInteger(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 50) : 15
   const search = typeof query.search === 'string' ? query.search.trim() : ''
+  const contractId = typeof query.contractId === 'string' ? query.contractId.trim() : ''
+  if (contractId && !/^[0-9a-f-]{36}$/i.test(contractId)) {
+    throw createError({ statusCode: 400, message: 'ID de contrato inválido' })
+  }
   const accessWhere = contractAccessWhere(user)
   const where: Prisma.ReceiptWhereInput = {
+    ...(contractId ? { contractId } : {}),
     ...(Object.keys(accessWhere).length ? { contract: accessWhere } : {}),
     ...(search ? { OR: [
       { contract: { contractNumber: { contains: search, mode: 'insensitive' as const } } },

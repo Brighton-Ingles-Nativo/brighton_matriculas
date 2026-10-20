@@ -24,7 +24,7 @@
             <UiCardDescription>Consulta y seguimiento de los expedientes registrados.</UiCardDescription>
           </div>
           <div class="filter-grid">
-            <UiInput v-model="search" placeholder="Buscar por titular, DNI o asesor" aria-label="Buscar por titular, DNI o asesor" />
+            <UiInput v-model="search" placeholder="Buscar por matrícula, titular, DNI o asesor" aria-label="Buscar por matrícula, titular, DNI o asesor" />
             <UiSelect v-model="status">
               <UiSelectTrigger class="w-full" aria-label="Estado del expediente"><UiSelectValue placeholder="Todos los estados" /></UiSelectTrigger>
               <UiSelectContent>
@@ -80,6 +80,10 @@
                 <UiTableCell class="hidden whitespace-nowrap text-muted-foreground sm:table-cell">{{ formatDate(expedient.updatedAt) }}</UiTableCell>
                 <UiTableCell class="text-right">
                   <div class="flex justify-end gap-1">
+                    <UiButton variant="outline" size="icon" :title="generatingPdfId === expedient.id ? 'Generando expediente PDF' : 'Generar expediente PDF'" :aria-label="`Generar expediente PDF para ${expedient.contractNumber}`" :disabled="Boolean(generatingPdfId)" @click="generateExpedientPdf(expedient)">
+                      <LoaderCircle v-if="generatingPdfId === expedient.id" class="size-4 animate-spin" />
+                      <FileDown v-else class="size-4" />
+                    </UiButton>
                     <UiButton variant="ghost" size="icon" title="Gestionar expediente" aria-label="Gestionar expediente" as-child>
                       <NuxtLink :to="`/expedientes/${expedient.id}`"><FolderOpen class="size-4" /></NuxtLink>
                     </UiButton>
@@ -106,13 +110,20 @@
           </nav>
         </UiCardFooter>
       </UiCard>
+      <UiAlert v-if="pdfError" variant="destructive"><UiAlertDescription>{{ pdfError }}</UiAlertDescription></UiAlert>
+      <div class="receipt-pdf-renderer" aria-hidden="true">
+        <ReceiptDocument v-for="(receipt, index) in receiptPdfRows" :key="receipt.id" :receipt="receipt" :ref="instance => setReceiptPdfRef(instance, index)" />
+      </div>
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ChevronLeft, ChevronRight, Download, Eye, FolderOpen, Plus } from '@lucide/vue'
+import type { PDFDocument as PdfDocument } from 'pdf-lib'
+import { ChevronLeft, ChevronRight, Download, Eye, FileDown, FolderOpen, LoaderCircle, Plus } from '@lucide/vue'
 import { useDebounceFn } from '@vueuse/core'
+import ReceiptDocument from '~/components/recibo/ReceiptDocument.vue'
+import { createReceiptPdf } from '~/utils/receipt-pdf'
 
 definePageMeta({ middleware: ['auth', 'expedients'], ssr: false })
 
@@ -138,6 +149,8 @@ interface ExpedientsResponse {
   pagination: { page: number; limit: number; total: number; totalPages: number }
 }
 
+interface ReceiptDocumentInstance { getRoot: () => HTMLElement | null }
+
 const { user } = useAuth()
 
 const canCreateExpedient = computed(() => 
@@ -157,6 +170,134 @@ const loading = ref(true)
 const error = ref('')
 const expedients = ref<ExpedientRow[]>([])
 const pagination = ref<ExpedientsResponse['pagination']>({ page: 1, limit: 15, total: 0, totalPages: 0 })
+const generatingPdfId = ref<string | null>(null)
+const pdfError = ref('')
+const receiptPdfRows = ref<any[]>([])
+const receiptPdfRefs = shallowRef<Array<ReceiptDocumentInstance | null>>([])
+
+const setReceiptPdfRef = (instance: unknown, index: number) => {
+  receiptPdfRefs.value[index] = instance as ReceiptDocumentInstance | null
+}
+
+const fetchAllReceiptDetails = async (contractId: string) => {
+  const receipts: Array<{ id: string }> = []
+  let page = 1
+  let totalPages = 1
+  do {
+    const response = await $fetch<{ data: Array<{ id: string }>; pagination: { totalPages: number } }>('/api/receipts', {
+      query: { contractId, page, limit: 50 }, credentials: 'include'
+    })
+    receipts.push(...response.data)
+    totalPages = response.pagination.totalPages
+    page += 1
+  } while (page <= totalPages)
+
+  const details = await Promise.all(receipts.map(async (receipt) => {
+    const response = await $fetch<{ data: any }>(`/api/receipts/${receipt.id}`, { credentials: 'include' })
+    return response.data
+  }))
+  return details.sort((left, right) => new Date(left.transactionDate || left.registeredAt).getTime() - new Date(right.transactionDate || right.registeredAt).getTime())
+}
+
+const imageAsPng = async (blob: Blob): Promise<Uint8Array> => {
+  const objectUrl = URL.createObjectURL(blob)
+  try {
+    const image = new Image()
+    image.src = objectUrl
+    await image.decode()
+    const canvas = document.createElement('canvas')
+    canvas.width = image.naturalWidth
+    canvas.height = image.naturalHeight
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('No se pudo procesar una imagen del expediente.')
+    context.drawImage(image, 0, 0)
+    const png = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('No se pudo convertir una imagen del expediente.')), 'image/png'))
+    return new Uint8Array(await png.arrayBuffer())
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
+}
+
+const appendPdf = async (target: PdfDocument, bytes: Uint8Array) => {
+  const { PDFDocument } = await import('pdf-lib')
+  const source = await PDFDocument.load(bytes)
+  const pages = await target.copyPages(source, source.getPageIndices())
+  pages.forEach(page => target.addPage(page))
+}
+
+const appendImage = async (target: PdfDocument, blob: Blob) => {
+  const image = await target.embedPng(await imageAsPng(blob))
+  const pageWidth = 595.28
+  const pageHeight = 841.89
+  const padding = 24
+  const scale = Math.min((pageWidth - padding * 2) / image.width, (pageHeight - padding * 2) / image.height)
+  const width = image.width * scale
+  const height = image.height * scale
+  const page = target.addPage([pageWidth, pageHeight])
+  page.drawImage(image, { x: (pageWidth - width) / 2, y: (pageHeight - height) / 2, width, height })
+}
+
+const downloadBlob = (blob: Blob, fileName: string) => {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.append(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+const generateExpedientPdf = async (row: ExpedientRow) => {
+  if (generatingPdfId.value) return
+  generatingPdfId.value = row.id
+  pdfError.value = ''
+  try {
+    const [detail, receiptDetails, contractResponse] = await Promise.all([
+      $fetch<{ data: { documents: Array<{ id: string; fileName: string; mimeType: string }> } }>(`/api/expedients/${row.id}`, { credentials: 'include' }),
+      fetchAllReceiptDetails(row.contractId),
+      fetch(`/api/contracts/${row.contractId}/pdf`, { credentials: 'include' })
+    ])
+    if (!contractResponse.ok) throw new Error('No se pudo generar el PDF de la matrícula/contrato.')
+
+    const { PDFDocument } = await import('pdf-lib')
+    const pdf = await PDFDocument.create()
+    await appendPdf(pdf, new Uint8Array(await contractResponse.arrayBuffer()))
+
+    const documents = detail.data.documents
+    const documentFiles = await Promise.all(documents.map(async document => {
+      const response = await fetch(`/api/expedients/${row.id}/documents/${document.id}/content`, { credentials: 'include' })
+      if (!response.ok) throw new Error(`No se pudo descargar ${document.fileName}.`)
+      return { document, blob: await response.blob() }
+    }))
+    for (const { document, blob } of documentFiles) {
+      if (document.mimeType === 'application/pdf') await appendPdf(pdf, new Uint8Array(await blob.arrayBuffer()))
+      else if (document.mimeType.startsWith('image/')) await appendImage(pdf, blob)
+      else throw new Error(`El archivo ${document.fileName} tiene un formato no compatible.`)
+    }
+
+    receiptPdfRows.value = receiptDetails
+    receiptPdfRefs.value = []
+    await nextTick()
+    for (let index = 0; index < receiptDetails.length; index += 1) {
+      const element = receiptPdfRefs.value[index]?.getRoot()
+      if (!element) throw new Error('No se pudo preparar uno de los recibos de pago.')
+      const receiptPdf = await createReceiptPdf(element)
+      await appendPdf(pdf, new Uint8Array(await receiptPdf.arrayBuffer()))
+    }
+
+    const output = await pdf.save()
+    const safeNumber = row.contractNumber.replace(/[^\p{L}\p{N}-]+/gu, '-')
+    downloadBlob(new Blob([output as BlobPart], { type: 'application/pdf' }), `Expediente-${safeNumber || row.id}.pdf`)
+    pdfError.value = ''
+  } catch (error: any) {
+    pdfError.value = error?.data?.message || error?.message || 'No se pudo generar el PDF del expediente.'
+  } finally {
+    receiptPdfRows.value = []
+    receiptPdfRefs.value = []
+    generatingPdfId.value = null
+  }
+}
 
 const exportUrl = computed(() => {
   const params = new URLSearchParams({ format: 'xlsx' })
@@ -238,6 +379,16 @@ onMounted(loadExpedients)
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
   gap: 0.5rem;
   width: 100%;
+}
+
+.receipt-pdf-renderer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  width: 848px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .select {

@@ -138,6 +138,7 @@ export async function buildEnrollmentExport(
   }
   const clauses: Prisma.ContractWhereInput[] = [contractAccessWhere(user)]
   if (filters.search) clauses.push({ OR: [
+        { contractNumber: { contains: filters.search, mode: 'insensitive' as const } },
         { customer: { name: { contains: filters.search, mode: 'insensitive' as const } } },
         { customer: { dni: { contains: filters.search, mode: 'insensitive' as const } } },
         { user: { name: { contains: filters.search, mode: 'insensitive' as const } } }

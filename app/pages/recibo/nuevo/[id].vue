@@ -2,9 +2,52 @@
 import { ArrowLeft, Save } from '@lucide/vue'
 
 definePageMeta({ middleware: 'auth', ssr: false })
-const route = useRoute(); const { csrfHeaders } = useAuth(); const loading = ref(true); const saving = ref(false); const error = ref(''); const contract = ref<any>(null); const form = reactive({ amount: '', concepts: '', otherConcept: '', paymentMethod: '', operationNumber: '', bank: '', transactionDate: new Date().toISOString().slice(0, 10) })
-onMounted(async () => { try { const response = await $fetch<any>(`/api/contracts/${route.params.id}`, { credentials: 'include' }); contract.value = response.data; form.amount = contract.value.initialPayment || '' } catch (err: any) { error.value = err?.data?.message || err?.data?.statusMessage || 'No pudimos cargar la matrícula.' } finally { loading.value = false } })
-const submit = async () => { saving.value = true; error.value = ''; try { const response = await $fetch<{ data: { id: string } }>('/api/receipts', { method: 'POST', headers: await csrfHeaders(), credentials: 'include', body: { ...form, contractId: route.params.id } }); await navigateTo(`/recibo/${response.data.id}`) } catch (err: any) { error.value = err?.data?.message || err?.data?.statusMessage || 'No pudimos registrar el recibo.' } finally { saving.value = false } }
+
+const route = useRoute(); 
+const { csrfHeaders } = useAuth();
+
+const loading = ref(true); 
+const saving = ref(false); const error = ref(''); 
+const contract = ref<any>(null); 
+const form = reactive({ 
+    amount: '', 
+    concepts: '', 
+    otherConcept: '', 
+    paymentMethod: '', 
+    operationNumber: '', 
+    bank: '', 
+    transactionDate: new Date().toISOString().slice(0, 10) 
+})
+
+onMounted(async () => { 
+    try { 
+        const response = await $fetch<any>(`/api/contracts/${route.params.id}`, { credentials: 'include' }); 
+        contract.value = response.data; 
+        form.amount = contract.value.initialPayment || '' 
+    } catch (err: any) { 
+        error.value = err?.data?.message || err?.data?.statusMessage || 'No pudimos cargar la matrícula.' 
+    } finally { 
+        loading.value = false 
+    } 
+})
+
+const submit = async () => { 
+    saving.value = true; 
+    error.value = ''; 
+    try { 
+        const response = await $fetch<{ data: { id: string } }>('/api/receipts', { 
+            method: 'POST', 
+            headers: await csrfHeaders(), 
+            credentials: 'include', 
+            body: { ...form, contractId: route.params.id } 
+        }); 
+        await navigateTo(`/recibo/${response.data.id}`) 
+    } catch (err: any) { 
+        error.value = err?.data?.message || err?.data?.statusMessage || 'No pudimos registrar el recibo.' 
+    } finally { 
+        saving.value = false 
+    }
+}
 </script>
 
 <template>
