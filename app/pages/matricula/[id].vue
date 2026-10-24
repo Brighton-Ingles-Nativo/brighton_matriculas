@@ -7,6 +7,7 @@ import {
   getMatriculaProgramPrice,
   isPlanBasedMatriculaProgram,
   MATRICULA_FINANCED_INSTALLMENT_OPTIONS,
+  MATRICULA_PROGRAM,
 } from '~/utils/matricula-pricing'
 
 definePageMeta({ middleware: 'auth', ssr: false })
@@ -39,7 +40,6 @@ const strategies = ref<{ id: string; code: string | null; name: string; descript
 type Beneficiary = { name: string; birthDate: string; dni: string; email: string; phone: string }
 const emptyBeneficiary = (): Beneficiary => ({ name: '', birthDate: '', dni: '', email: '', phone: '' })
 const modalities = ['Presencial', 'Virtual', 'Híbrido'] as const
-const programs = ['Paquete Integral', 'Nivel Básico', 'Nivel Intermedio', 'Nivel Avanzado'] as const
 const plans = ['Light', 'Elite', 'Premium'] as const
 
 const form = reactive<{ students: Beneficiary[]; [key: string]: any }>({
@@ -61,7 +61,7 @@ const form = reactive<{ students: Beneficiary[]; [key: string]: any }>({
   strategyId: '',
   paymentStartDate: '', 
   modality: '', 
-  program: '',
+  program: MATRICULA_PROGRAM,
   plan: '', 
   paymentMode: '', 
   programValue: '', 
@@ -168,7 +168,7 @@ const loadContract = async () => {
     initialPaymentManuallyEdited.value = false
     if (!isLocked.value) {
       if (!modalities.includes(form.modality as typeof modalities[number])) form.modality = ''
-      if (!programs.includes(form.program as typeof programs[number])) form.program = ''
+      form.program = MATRICULA_PROGRAM
       if (!plans.includes(form.plan as typeof plans[number])) form.plan = ''
     }
     if (!isLocked.value && isPlanBasedPricing.value) {
@@ -465,7 +465,7 @@ onMounted(async () => {
               <UiSelect v-model="form.program" required>
                 <UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger>
                 <UiSelectContent>
-                  <UiSelectItem v-for="item in programs" :key="item" :value="item">{{ item }}</UiSelectItem>
+                  <UiSelectItem :value="MATRICULA_PROGRAM">{{ MATRICULA_PROGRAM }}</UiSelectItem>
                 </UiSelectContent>
               </UiSelect>
             </div>

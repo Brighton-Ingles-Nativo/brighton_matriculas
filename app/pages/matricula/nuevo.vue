@@ -7,6 +7,7 @@ import {
   getMatriculaProgramPrice,
   isPlanBasedMatriculaProgram,
   MATRICULA_FINANCED_INSTALLMENT_OPTIONS,
+  MATRICULA_PROGRAM,
 } from '~/utils/matricula-pricing'
 
 definePageMeta({ middleware: 'auth', ssr: false })
@@ -39,7 +40,7 @@ const form = reactive({
   strategyId: '', 
   paymentStartDate: '', 
   modality: '', 
-  program: '', 
+  program: MATRICULA_PROGRAM,
   plan: '', 
   paymentMode: '', 
   programValue: '', 
@@ -504,10 +505,7 @@ const handleSubmit = async () => {
                   <UiSelectValue placeholder="Seleccione..." />
                 </UiSelectTrigger>
                 <UiSelectContent>
-                  <UiSelectItem value="Paquete Integral">Paquete Integral</UiSelectItem>
-                  <UiSelectItem value="Nivel Básico">Nivel Básico</UiSelectItem>
-                  <UiSelectItem value="Nivel Intermedio">Nivel Intermedio</UiSelectItem>
-                  <UiSelectItem value="Nivel Avanzado">Nivel Avanzado</UiSelectItem>
+                  <UiSelectItem :value="MATRICULA_PROGRAM">{{ MATRICULA_PROGRAM }}</UiSelectItem>
                 </UiSelectContent>
               </UiSelect>
             </div>

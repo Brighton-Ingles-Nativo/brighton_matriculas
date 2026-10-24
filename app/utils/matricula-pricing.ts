@@ -1,4 +1,5 @@
 export const MATRICULA_FINANCED_INSTALLMENT_OPTIONS = [3, 7, 14] as const
+export const MATRICULA_PROGRAM = 'Brighton' as const
 
 const planPrices = {
   Virtual: {
@@ -31,10 +32,8 @@ const planPrices = {
   },
 } as const
 
-const planBasedMatriculaPrograms = new Set(['Paquete Integral', 'Nivel Básico', 'Nivel Intermedio', 'Nivel Avanzado'])
-
 export function isPlanBasedMatriculaProgram(program: string): boolean {
-  return planBasedMatriculaPrograms.has(program)
+  return program === MATRICULA_PROGRAM
 }
 
 export function getMatriculaProgramPrice(

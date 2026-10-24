@@ -5,6 +5,7 @@ import { resolveActiveStrategy } from '../../utils/strategies'
 import { assertContractAccess } from '../../utils/contract-access'
 import { isContractSigned } from '../../utils/contract-signature'
 import { notify } from '../../utils/notifications'
+import { MATRICULA_PROGRAM } from '../../../app/utils/matricula-pricing'
 
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 const optionalText = (value: unknown) => text(value) || null
@@ -39,7 +40,8 @@ export default defineEventHandler(async (event) => {
   if (missing) throw createError({ statusCode: 400, message: `El campo ${missing} es obligatorio.` })
   if (strategyIdProvided && !selectedStrategy) throw createError({ statusCode: 400, message: 'La estrategia seleccionada es obligatoria.' })
   if (!body.dataAuthorization) throw createError({ statusCode: 400, message: 'La autorización de datos personales es obligatoria.' })
-  if (text(body.program) !== 'Kids' && !text(body.plan)) throw createError({ statusCode: 400, message: 'El plan es obligatorio para este programa.' })
+  if (text(body.program) !== MATRICULA_PROGRAM) throw createError({ statusCode: 400, message: 'El programa seleccionado no es válido.' })
+  if (!text(body.plan)) throw createError({ statusCode: 400, message: 'El plan es obligatorio.' })
 
   const paymentMode = text(body.paymentMode)
   const studentInputs = Array.isArray(body.students)
@@ -60,7 +62,7 @@ export default defineEventHandler(async (event) => {
     const updated = await tx.contract.update({ where: { id }, data: {
       contractDepartment: text(body.contractDepartment), contractProvince: text(body.contractProvince), contractDistrict: text(body.contractDistrict),
       paymentStartDate: optionalText(body.paymentStartDate), modality: text(body.modality), program: text(body.program),
-      plan: text(body.program) === 'Kids' ? null : optionalText(body.plan), cashPayment: paymentMode === 'contado',
+      plan: optionalText(body.plan), cashPayment: paymentMode === 'contado',
       financedPayment: paymentMode === 'financiado', programValue: money(body.programValue), initialPayment: money(body.initialPayment),
       balance: money(body.balance), installmentCount: Math.max(0, Math.trunc(Number(body.installmentCount) || 0)),
       installmentValue: money(body.installmentValue), otherPayment: optionalText(body.otherPayment),
