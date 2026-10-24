@@ -6,7 +6,7 @@ import {
   calculateMatriculaAmounts,
   getMatriculaProgramPrice,
   isPlanBasedMatriculaProgram,
-  MATRICULA_FINANCED_INSTALLMENT_OPTIONS,
+  MATRICULA_INSTALLMENT_OPTIONS,
   MATRICULA_PROGRAM,
 } from '~/utils/matricula-pricing'
 
@@ -67,7 +67,7 @@ const form = reactive<{ students: Beneficiary[]; [key: string]: any }>({
   programValue: '', 
   initialPayment: '0', 
   balance: '0', 
-  installmentCount: '0', 
+  installmentCount: '',
   installmentValue: '0', 
   otherPayment: '0', 
   notes: '', 
@@ -82,7 +82,7 @@ const contractNumber = ref('');
 const isCash = computed(() => form.paymentMode === 'contado'); 
 const isFinanced = computed(() => form.paymentMode === 'financiado'); 
 const isPlanBasedPricing = computed(() => isPlanBasedMatriculaProgram(form.program))
-const installments = MATRICULA_FINANCED_INSTALLMENT_OPTIONS
+const installments = MATRICULA_INSTALLMENT_OPTIONS
 const showPlan = computed(() => form.program !== '')
 
 const applyDniLookup = async (target: 'holder' | number, data: { nombres: string; apellidoPaterno: string; apellidoMaterno: string; fechaNacimiento?: string; ubigeoRuc?: string; departamento?: string; provincia?: string; distrito?: string }) => {
@@ -160,7 +160,7 @@ const loadContract = async () => {
       initialPayment: money(contract.initialPayment), 
       balance: money(contract.balance), 
       installmentValue: money(contract.installmentValue), 
-      installmentCount: String(contract.installmentCount || 0), 
+      installmentCount: String(contract.installmentCount || ''),
       otherPayment: contract.otherPayment || '' 
     }) 
     cashInitialManuallyEdited.value = Boolean(contract.cashPayment)
@@ -172,8 +172,8 @@ const loadContract = async () => {
     }
     if (!isLocked.value && isPlanBasedPricing.value) {
       if (isFinanced.value
-        && !MATRICULA_FINANCED_INSTALLMENT_OPTIONS.includes(Number(form.installmentCount) as 3 | 7 | 14)) {
-        form.installmentCount = '0'
+        && !MATRICULA_INSTALLMENT_OPTIONS.includes(Number(form.installmentCount))) {
+        form.installmentCount = ''
       }
       calculatePrice()
     } else if (!isLocked.value) {
@@ -256,8 +256,8 @@ watch(() => [form.modality, form.program, form.plan, form.paymentMode, form.inst
   initialPaymentManuallyEdited.value = false
 
   if (isFinanced.value && isPlanBasedPricing.value
-    && !MATRICULA_FINANCED_INSTALLMENT_OPTIONS.includes(Number(form.installmentCount) as 3 | 7 | 14)) {
-    form.installmentCount = '0'
+    && !MATRICULA_INSTALLMENT_OPTIONS.includes(Number(form.installmentCount))) {
+    form.installmentCount = ''
   }
 
   if (isPlanBasedPricing.value) calculatePrice()
@@ -287,8 +287,8 @@ const submit = async () => {
     error.value = 'Selecciona una modalidad, un programa con plan, un plan y un tipo de pago válidos.'
     return
   }
-  if (isFinanced.value && !MATRICULA_FINANCED_INSTALLMENT_OPTIONS.includes(Number(form.installmentCount) as 3 | 7 | 14)) {
-    error.value = 'Selecciona 3, 7 o 14 cuotas para usar la tarifa vigente.'
+  if (isFinanced.value && !MATRICULA_INSTALLMENT_OPTIONS.includes(Number(form.installmentCount))) {
+    error.value = 'Selecciona un número de cuotas entre 1 y 14.'
     return
   }
   saving.value = true; 

@@ -1,4 +1,4 @@
-export const MATRICULA_FINANCED_INSTALLMENT_OPTIONS = [3, 7, 14] as const
+export const MATRICULA_INSTALLMENT_OPTIONS = Array.from({ length: 14 }, (_, index) => index + 1)
 export const MATRICULA_PROGRAM = 'Brighton' as const
 
 const planPrices = {
@@ -55,7 +55,7 @@ export function getMatriculaProgramPrice(
 
   const count = Number(installmentCount)
   const financedPrice = planPrice.financiado[count as keyof typeof planPrice.financiado]
-  return financedPrice === undefined ? '' : financedPrice.toFixed(2)
+  return (financedPrice ?? planPrice.financiado[14]).toFixed(2)
 }
 
 type EnrollmentAmountsInput = {

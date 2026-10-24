@@ -6,7 +6,7 @@ import {
   calculateMatriculaAmounts,
   getMatriculaProgramPrice,
   isPlanBasedMatriculaProgram,
-  MATRICULA_FINANCED_INSTALLMENT_OPTIONS,
+  MATRICULA_INSTALLMENT_OPTIONS,
   MATRICULA_PROGRAM,
 } from '~/utils/matricula-pricing'
 
@@ -46,7 +46,7 @@ const form = reactive({
   programValue: '', 
   initialPayment: '0', 
   balance: '0', 
-  installmentCount: '0', 
+  installmentCount: '',
   installmentValue: '0', 
   otherPayment: '0', 
   notes: '',
@@ -64,7 +64,7 @@ const today = new Intl.DateTimeFormat('es-PE', { dateStyle: 'long' }).format(new
 const isCash = computed(() => form.paymentMode === 'contado')
 const isFinanced = computed(() => form.paymentMode === 'financiado')
 const isPlanBasedPricing = computed(() => isPlanBasedMatriculaProgram(form.program))
-const installments = MATRICULA_FINANCED_INSTALLMENT_OPTIONS
+const installments = MATRICULA_INSTALLMENT_OPTIONS
 const showPlan = computed(() => form.program !== '')
 const holderProvinces = computed(() => listarProvinciasInei(form.holderDepartment))
 const holderDistricts = computed(() => listarDistritosInei(form.holderDepartment, form.holderProvince))
@@ -160,8 +160,8 @@ const calculatePrice = () => {
 watch(() => [form.paymentMode, form.program, form.plan, form.modality, form.installmentCount], () => {
   cashInitialManuallyEdited.value = false
   if (isFinanced.value && isPlanBasedPricing.value
-    && !MATRICULA_FINANCED_INSTALLMENT_OPTIONS.includes(Number(form.installmentCount) as 3 | 7 | 14)) {
-    form.installmentCount = '0'
+    && !MATRICULA_INSTALLMENT_OPTIONS.includes(Number(form.installmentCount))) {
+    form.installmentCount = ''
   }
   if (isCash.value || isFinanced.value) calculatePrice()
 })
@@ -205,7 +205,7 @@ const validateForm = () => {
   for (const [field, label, id] of requiredFields) {
     const value = form[field as keyof typeof form]
     if (value === null || value === undefined || String(value).trim() === ''
-      || (field === 'installmentCount' && Number(value) === 0)) {
+      || (field === 'installmentCount' && !MATRICULA_INSTALLMENT_OPTIONS.includes(Number(value)))) {
       fieldErrors[field] = field === 'installmentCount'
         ? 'Selecciona el número de cuotas.'
         : `Completa ${label.toLowerCase()}.`
