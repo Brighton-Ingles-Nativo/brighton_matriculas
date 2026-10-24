@@ -95,7 +95,8 @@ export function calculateMatriculaAmounts(input: EnrollmentAmountsInput): Enroll
   }
 
   if (input.paymentMode === 'financiado' || input.treatUnknownPaymentModeAsFinanced) {
-    const balance = Math.max(programValue - initialPayment, 0)
+    const discount = numericValue(input.otherPayment)
+    const balance = Math.max(programValue - initialPayment - discount, 0)
     const installmentCount = numericValue(input.installmentCount)
 
     return {

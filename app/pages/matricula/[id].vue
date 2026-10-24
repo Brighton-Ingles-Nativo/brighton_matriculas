@@ -83,7 +83,6 @@ const isCash = computed(() => form.paymentMode === 'contado');
 const isFinanced = computed(() => form.paymentMode === 'financiado'); 
 const isPlanBasedPricing = computed(() => isPlanBasedMatriculaProgram(form.program))
 const installments = MATRICULA_FINANCED_INSTALLMENT_OPTIONS
-const programValueIsReadonly = true
 const showPlan = computed(() => form.program !== '')
 
 const applyDniLookup = async (target: 'holder' | number, data: { nombres: string; apellidoPaterno: string; apellidoMaterno: string; fechaNacimiento?: string; ubigeoRuc?: string; departamento?: string; provincia?: string; distrito?: string }) => {
@@ -530,7 +529,7 @@ onMounted(async () => {
           <UiCardContent class="grid gap-5 p-6 sm:grid-cols-2 lg:grid-cols-4">
             <div class="space-y-2">
               <UiLabel>Valor programa</UiLabel>
-              <UiInput v-model="form.programValue" type="number" min="0" step="0.01" required :readonly="programValueIsReadonly" />
+              <UiInput v-model="form.programValue" type="number" min="0" step="0.01" required />
             </div>
             <div class="space-y-2">
               <UiLabel>Cuota inicial</UiLabel>
@@ -553,7 +552,7 @@ onMounted(async () => {
               <UiLabel>Valor cuota</UiLabel>
               <UiInput v-model="form.installmentValue" readonly />
             </div>
-            <div v-if="isCash" class="space-y-2">
+            <div class="space-y-2">
               <UiLabel>Descuento</UiLabel>
               <UiInput v-model="form.otherPayment" type="number" min="0" step="0.01" @input="handleDiscountInput" />
             </div>

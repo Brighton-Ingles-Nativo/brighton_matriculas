@@ -65,7 +65,6 @@ const isCash = computed(() => form.paymentMode === 'contado')
 const isFinanced = computed(() => form.paymentMode === 'financiado')
 const isPlanBasedPricing = computed(() => isPlanBasedMatriculaProgram(form.program))
 const installments = MATRICULA_FINANCED_INSTALLMENT_OPTIONS
-const programValueIsReadonly = computed(() => isPlanBasedPricing.value)
 const showPlan = computed(() => form.program !== '')
 const holderProvinces = computed(() => listarProvinciasInei(form.holderDepartment))
 const holderDistricts = computed(() => listarDistritosInei(form.holderDepartment, form.holderProvince))
@@ -554,7 +553,7 @@ const handleSubmit = async () => {
             <div class="space-y-2 lg:col-span-2">
               <UiLabel for="programValue">Valor programa (S/) *</UiLabel>
               <UiInput id="programValue" v-model="form.programValue" :class="{ 'border-destructive': fieldErrors.programValue }" required type="number" min="0" step="0.01"
-                :readonly="programValueIsReadonly" @input="calculateAmounts" />
+                @input="calculateAmounts" />
               <p v-if="fieldErrors.programValue" class="text-xs text-destructive">{{ fieldErrors.programValue }}</p>
             </div>
             <div class="space-y-2 lg:col-span-2">
@@ -582,7 +581,7 @@ const handleSubmit = async () => {
               <UiLabel for="installmentValue">Valor cuota (S/)</UiLabel>
               <UiInput id="installmentValue" v-model="form.installmentValue" type="number" readonly />
             </div>
-            <div v-if="isCash" class="space-y-2 lg:col-span-2">
+            <div class="space-y-2 lg:col-span-2">
               <UiLabel for="otherPayment">Descuento</UiLabel>
               <UiInput id="otherPayment" v-model="form.otherPayment" type="number" min="0" step="0.01" />
             </div>
