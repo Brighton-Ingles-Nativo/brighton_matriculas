@@ -2,6 +2,7 @@
 import { ArrowLeft, Save } from '@lucide/vue'
 import { ubigeoPeru } from '~/shared/ubigeo'
 import { listarDepartamentosInei, listarDistritosInei, listarProvinciasInei } from '~/shared/ubigeo-inei'
+import { calculateMatriculaAmounts, getMatriculaProgramPrice, MATRICULA_INSTALLMENT_OPTIONS } from '~/utils/matricula-pricing'
 
 definePageMeta({ middleware: 'auth', ssr: false })
 
@@ -11,15 +12,42 @@ const holderDepartments = listarDepartamentosInei()
 const teams = ref<{ id: string; name: string; site: { id: string; name: string } }[]>([])
 const teamAutoAssigned = ref(false)
 const teamAssignmentMessage = ref('')
-const installments = Array.from({ length: 13 }, (_, index) => index + 2)
+const installments = MATRICULA_INSTALLMENT_OPTIONS
 type Beneficiary = { name: string; birthDate: string; dni: string; email: string; phone: string }
 const emptyBeneficiary = (): Beneficiary => ({ name: '', birthDate: '', dni: '', email: '', phone: '' })
 const students = ref<Beneficiary[]>([emptyBeneficiary()])
 
 const form = reactive({
-  contractDepartment: 'Arequipa', contractProvince: 'Arequipa', contractDistrict: '',
-  holderName: '', holderBirthDate: '', holderDni: '', holderEmail: '', holderAddress: '', holderDepartment: '', holderProvince: '', holderDistrict: '', holderPhone: '',
-  currentSituation: 'Empleado', housingType: 'Propia', strategyId: '', paymentStartDate: '', modality: '', program: '', plan: '', paymentMode: '', programValue: '', initialPayment: '0', balance: '0', installmentCount: '0', installmentValue: '0', otherPayment: '0', notes: '', dataAuthorization: false, testimonials: false, dataUsage: false,
+  contractDepartment: 'Arequipa', 
+  contractProvince: 'Arequipa', 
+  contractDistrict: '',
+  holderName: '', 
+  holderBirthDate: '', 
+  holderDni: '', 
+  holderEmail: '', 
+  holderAddress: '', 
+  holderDepartment: '', 
+  holderProvince: '', 
+  holderDistrict: '', 
+  holderPhone: '',
+  currentSituation: 'Empleado', 
+  housingType: 'Propia', 
+  strategyId: '', 
+  paymentStartDate: '', 
+  modality: '', 
+  program: '', 
+  plan: '', 
+  paymentMode: '', 
+  programValue: '', 
+  initialPayment: '0', 
+  balance: '0', 
+  installmentCount: '0', 
+  installmentValue: '0', 
+  otherPayment: '0', 
+  notes: '',
+  dataAuthorization: false, 
+  testimonials: false, 
+  dataUsage: false,
 })
 
 const saving = ref(false)
@@ -93,31 +121,21 @@ const removeBeneficiary = (index: number) => {
 }
 
 const calculateAmounts = () => {
-  const programValue = Number(form.programValue) || 0
-  const initial = Number(form.initialPayment) || 0
-  if (isCash.value) {
-    const discount = Number(form.otherPayment) || 0
-    form.initialPayment = Math.max(programValue - discount, 0).toFixed(2)
-    form.balance = '0.00'
-    form.installmentCount = '0'
-    form.installmentValue = '0.00'
-  } else if (isFinanced.value) {
-    const balance = Math.max(programValue - initial, 0)
-    form.balance = balance.toFixed(2)
-    form.installmentValue = form.installmentCount && Number(form.installmentCount) > 0 ? (balance / Number(form.installmentCount)).toFixed(2) : '0.00'
-  }
+  const amounts = calculateMatriculaAmounts({
+    paymentMode: form.paymentMode,
+    programValue: form.programValue,
+    initialPayment: form.initialPayment,
+    installmentCount: form.installmentCount,
+    otherPayment: form.otherPayment,
+    applyCashDiscountToInitial: true,
+  })
+  if (amounts) Object.assign(form, amounts)
 }
 
 const calculatePrice = () => {
   if (!isCash.value) return
-  if (form.program === 'Kids') form.programValue = '5900.00'
-  else if (form.program === 'Paquete Integral') {
-    const prices = form.modality === 'Virtual' ? { Light: 5310, Elite: 6210, Premium: 7110 } : { Light: 5900, Elite: 6900, Premium: 7900 }
-    form.programValue = String(prices[form.plan as keyof typeof prices] || '')
-  } else if (['Nivel Básico', 'Nivel Intermedio', 'Nivel Avanzado'].includes(form.program)) {
-    const prices = form.modality === 'Virtual' ? { Light: 2250, Elite: 2520, Premium: 2700 } : { Light: 2500, Elite: 2800, Premium: 3000 }
-    form.programValue = String(prices[form.plan as keyof typeof prices] || '')
-  }
+  const price = getMatriculaProgramPrice(form.program, form.plan, form.modality)
+  if (price !== null) form.programValue = price
   calculateAmounts()
 }
 

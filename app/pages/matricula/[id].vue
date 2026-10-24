@@ -2,6 +2,7 @@
 import { ArrowLeft, Save } from '@lucide/vue'
 import { ubigeoPeru } from '~/shared/ubigeo'
 import { listarDepartamentosInei, listarDistritosInei, listarProvinciasInei } from '~/shared/ubigeo-inei'
+import { calculateMatriculaAmounts, MATRICULA_INSTALLMENT_OPTIONS } from '~/utils/matricula-pricing'
 
 definePageMeta({ middleware: 'auth', ssr: false })
 
@@ -30,7 +31,7 @@ const strategies = ref<{ id: string; code: string | null; name: string; descript
 type Beneficiary = { name: string; birthDate: string; dni: string; email: string; phone: string }
 const emptyBeneficiary = (): Beneficiary => ({ name: '', birthDate: '', dni: '', email: '', phone: '' })
 
-const installments = Array.from({ length: 13 }, (_, index) => index + 2)
+const installments = MATRICULA_INSTALLMENT_OPTIONS
 const form = reactive<{ students: Beneficiary[]; [key: string]: any }>({
   contractDepartment: 'Arequipa', 
   contractProvince: 'Arequipa', 
@@ -182,18 +183,16 @@ const reviewCancellation = async (decision: 'APROBAR' | 'RECHAZAR') => {
   } finally { cancellationLoading.value = false }
 }
 
-const calculateAmounts = () => { 
-  const total = Number(form.programValue) || 0; 
-  const initial = Number(form.initialPayment) || 0; 
-  if (isCash.value) { 
-    form.balance = '0.00'; 
-    form.installmentCount = '0'; 
-    form.installmentValue = '0.00' 
-  } else { 
-    const balance = Math.max(total - initial, 0); 
-    form.balance = balance.toFixed(2); 
-    form.installmentValue = Number(form.installmentCount) > 0 ? (balance / Number(form.installmentCount)).toFixed(2) : '0.00' 
-  } 
+const calculateAmounts = () => {
+  const amounts = calculateMatriculaAmounts({
+    paymentMode: form.paymentMode,
+    programValue: form.programValue,
+    initialPayment: form.initialPayment,
+    installmentCount: form.installmentCount,
+    otherPayment: form.otherPayment,
+    treatUnknownPaymentModeAsFinanced: true,
+  })
+  if (amounts) Object.assign(form, amounts)
 }
 
 watch(() => [

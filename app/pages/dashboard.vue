@@ -4,14 +4,115 @@ import type { Component } from 'vue'
 
 definePageMeta({ middleware: 'auth', ssr: false })
 
-interface Metric { key: string; label: string; value: number; format: 'number' | 'currency' | 'percent' | 'days'; change: number | null; previousValue: number | null }
-interface TrendPoint { label: string; registered: number; signed: number; commercial: number; verification: number; verified: number; appointments: number }
-interface Breakdown { key: string; label: string; value: number }
-interface WorkItem { id: string; contractId: string; contractNumber: string; holderName: string; holderDni: string; program: string; advisorName: string; status: string; location: string; updatedAt: string; queueEnteredAt: string | null; appointmentAt: string | null; appointmentType: string | null; observation: string | null; queueReason?: string | null; documentCount: number; missingDocuments: string[] }
-interface Advisor { id: string; name: string; total: number; signed: number; cancelled: number; contracted: number; signingRate: number }
-interface FinanceSummary { collected: number; receiptCount: number; previousCollected: number; previousReceiptCount: number; collectionChange: number | null; outstandingBalance: number; contractsWithBalance: number }
-interface OrganizationSummary { activeSites: number; activeTeams: number; teamBreakdown: Array<{ id: string; name: string; site: string; advisors: number; registrations: number; signatures: number }>; siteBreakdown: Array<{ id: string; name: string; teams: number; advisors: number; registrations: number; signatures: number }> }
-interface DashboardData { role: string; scope: string; period: number; grouping: string; groupingOptions: string[]; summary: Record<string, number>; financeSummary: FinanceSummary | null; organization: OrganizationSummary | null; metrics: Metric[]; trend: TrendPoint[]; contractStatusBreakdown: Breakdown[]; expedientStatusBreakdown: Breakdown[]; locationBreakdown: Array<{ location: string; status: string; value: number }>; priorities: Array<{ key: string; label: string; value: number; href: string }>; advisors: Advisor[]; workQueueTotal: number; workQueue: WorkItem[] }
+interface Metric { 
+  key: string; 
+  label: string; 
+  value: number; 
+  format: 'number' | 'currency' | 'percent' | 'days'; 
+  change: number | null; 
+  previousValue: number | null 
+}
+interface TrendPoint { 
+  label: string; 
+  registered: number; 
+  signed: number; 
+  commercial: number; 
+  verification: number; 
+  verified: number; 
+  appointments: number 
+}
+interface Breakdown { 
+  key: string; 
+  label: string; 
+  value: number 
+}
+interface WorkItem { 
+  id: string; 
+  contractId: string; 
+  contractNumber: string; 
+  holderName: string; 
+  holderDni: string; 
+  program: string; 
+  advisorName: string; 
+  status: string; 
+  location: string; 
+  updatedAt: string; 
+  queueEnteredAt: string | null; 
+  appointmentAt: string | null; 
+  appointmentType: string | null; 
+  observation: string | null; 
+  queueReason?: string | null; 
+  documentCount: number; 
+  missingDocuments: string[] 
+}
+interface Advisor { 
+  id: string; 
+  name: string; 
+  total: number; 
+  signed: number; 
+  cancelled: number; 
+  contracted: number; 
+  signingRate: number 
+}
+
+interface FinanceSummary { 
+  collected: number; 
+  receiptCount: number; 
+  previousCollected: number; 
+  previousReceiptCount: number; 
+  collectionChange: number | null; 
+  outstandingBalance: number; 
+  contractsWithBalance: number 
+}
+interface OrganizationSummary { 
+  activeSites: number; 
+  activeTeams: number; 
+  teamBreakdown: Array<{ 
+    id: string; 
+    name: string; 
+    site: string; 
+    advisors: number; 
+    registrations: number; 
+    signatures: number 
+  }>; 
+    siteBreakdown: Array<{ 
+      id: string; 
+      name: string; 
+      teams: number; 
+      advisors: number; 
+      registrations: number; 
+      signatures: number 
+    }> 
+}
+
+interface DashboardData { 
+  role: string; 
+  scope: string; 
+  period: number; 
+  grouping: string; 
+  groupingOptions: string[]; 
+  summary: Record<string, number>; 
+  financeSummary: FinanceSummary | null; 
+  organization: OrganizationSummary | null; 
+  metrics: Metric[]; 
+  trend: TrendPoint[]; 
+  contractStatusBreakdown: Breakdown[]; 
+  expedientStatusBreakdown: Breakdown[]; 
+  locationBreakdown: Array<{ 
+    location: string; 
+    status: string; 
+    value: number 
+  }>; 
+  priorities: Array<{ 
+    key: string; 
+    label: string; 
+    value: number; 
+    href: string 
+  }>; 
+  advisors: Advisor[]; 
+  workQueueTotal: number; 
+  workQueue: WorkItem[] 
+}
 
 const { user, verifyToken } = useAuth()
 const data = ref<DashboardData | null>(null)
@@ -19,7 +120,12 @@ const loading = ref(true)
 const error = ref('')
 const lastUpdatedAt = ref<Date | null>(null)
 const period = ref(30)
-const periodSelection = computed({ get: () => String(period.value), set: (value: string) => { period.value = Number(value) } })
+const periodSelection = computed({ 
+  get: () => String(period.value), 
+  set: (value: string) => { 
+    period.value = Number(value) 
+  } 
+})
 const ALL_QUEUE_STATUSES = '__all__'
 const queueStatus = ref(ALL_QUEUE_STATUSES)
 const chartGrouping = ref('weekly')
@@ -29,16 +135,49 @@ const nf = new Intl.NumberFormat('es-PE')
 const money = (value: number) => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN', maximumFractionDigits: 0 }).format(value || 0)
 const formatValue = (metric: Metric, value = metric.value) => metric.format === 'currency' ? money(value) : metric.format === 'percent' ? `${nf.format(value)}%` : metric.format === 'days' ? `${nf.format(value)} d` : nf.format(value)
 const firstName = computed(() => user.value?.name?.split(' ')[0] || 'bienvenido')
-const roleCopyByRole: Record<string, { title: string; subtitle: string; scope: string }> = {
-  admin: { title: 'Resumen general', subtitle: 'Estado de matrículas, contratos, cobros y expedientes en toda la operación.', scope: 'Vista global de la operación' },
-  supervisor: { title: 'Operación de tu equipo', subtitle: 'Seguimiento de tu equipo y expedientes que esperan tu revisión.', scope: 'Datos de tus asesores y equipos asignados' },
-  asesor: { title: 'Tu cartera', subtitle: 'Matrículas, firmas, cobros y expedientes asignados a tu gestión.', scope: 'Datos de tus matrículas' },
-  asistente_comercial: { title: 'Revisión comercial', subtitle: 'Expedientes pendientes, documentos faltantes y derivaciones a verificación.', scope: 'Cola de trabajo del área comercial' },
-  verificador: { title: 'Agenda de verificación', subtitle: 'Citas, expedientes pendientes y verificaciones realizadas.', scope: 'Cola de trabajo de verificación' }
+const roleCopyByRole: Record<string, { 
+  title: string; 
+  subtitle: string; 
+  scope: string 
+}> = {
+  admin: { 
+    title: 'Resumen general', 
+    subtitle: 'Estado de matrículas, contratos, cobros y expedientes en toda la operación.', 
+    scope: 'Vista global de la operación' 
+  },
+  supervisor: { 
+    title: 'Operación de tu equipo', 
+    subtitle: 'Seguimiento de tu equipo y expedientes que esperan tu revisión.', 
+    scope: 'Datos de tus asesores y equipos asignados' 
+  },
+  asesor: { 
+    title: 'Tu cartera', 
+    subtitle: 'Matrículas, firmas, cobros y expedientes asignados a tu gestión.', 
+    scope: 'Datos de tus matrículas' },
+  asistente_comercial: { 
+    title: 'Revisión comercial', 
+    subtitle: 'Expedientes pendientes, documentos faltantes y derivaciones a verificación.', 
+    scope: 'Cola de trabajo del área comercial' 
+  },
+  verificador: { 
+    title: 'Agenda de verificación', 
+    subtitle: 'Citas, expedientes pendientes y verificaciones realizadas.', 
+    scope: 'Cola de trabajo de verificación' 
+  }
 }
-const roleCopyDefault = { title: 'Dashboard', subtitle: 'Resumen operativo del sistema.', scope: '' }
+const roleCopyDefault = { 
+  title: 'Dashboard', 
+  subtitle: 'Resumen operativo del sistema.', 
+  scope: '' 
+}
 const roleCopy = computed(() => roleCopyByRole[data.value?.role || user.value?.role?.name || ''] || roleCopyDefault)
-const roleLabels: Record<string, string> = { admin: 'Administrador', supervisor: 'Supervisor', asesor: 'Asesor', asistente_comercial: 'Asistente comercial', verificador: 'Verificador' }
+const roleLabels: Record<string, string> = { 
+  admin: 'Administrador', 
+  supervisor: 'Supervisor', 
+  asesor: 'Asesor', 
+  asistente_comercial: 'Asistente comercial', 
+  verificador: 'Verificador' 
+}
 const roleLabel = computed(() => roleLabels[data.value?.role || ''] || 'Operación')
 const groupingOptions = computed(() => period.value <= 7 ? ['daily'] : period.value <= 30 ? ['daily', 'weekly'] : period.value <= 90 ? ['weekly', 'monthly'] : ['monthly'])
 const groupingLabels: Record<string, string> = { daily: 'Diaria', weekly: 'Semanal', monthly: 'Mensual' }
