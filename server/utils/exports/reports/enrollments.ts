@@ -102,7 +102,7 @@ function rowFor(contract: EnrollmentContract): Record<string, unknown> {
 
 export async function buildEnrollmentExport(
   user: { id: string; role: { name: string } },
-  filters: { holderName?: string; holderDni?: string; advisorName?: string; status?: string; signature?: string; search?: string; expedientStatus?: string; location?: string }
+  filters: { holderName?: string; holderDni?: string; advisorName?: string; status?: string; signature?: string; cancellationStatus?: string; search?: string; expedientStatus?: string; location?: string }
 ): Promise<ExportDocument> {
   const role = user.role.name as ExportRole
   const missingExpedient = filters.expedientStatus === 'sin_expediente'
@@ -119,14 +119,16 @@ export async function buildEnrollmentExport(
       ? { signedAccept: false, signedAt: null }
       : null
   const expedientFilter: Prisma.ExpedientWhereInput = filters.expedientStatus === 'PENDIENTE'
-    ? { status: 'CREADO', currentLocation: 'SUPERVISOR' }
+    ? { status: { in: ['CREADO', 'REBOTADO'] }, currentLocation: 'SUPERVISOR' }
     : filters.expedientStatus === 'EN_COMERCIAL'
-      ? { status: 'CREADO', currentLocation: 'ASISTENTE_COMERCIAL' }
+      ? { status: { in: ['CREADO', 'REBOTADO'] }, currentLocation: 'ASISTENTE_COMERCIAL' }
       : filters.expedientStatus === 'REBOTADO_COMERCIAL'
         ? { status: 'REBOTADO', currentLocation: 'ASESOR' }
         : filters.expedientStatus === 'EN_VERIFICACION'
           ? { status: 'CREADO', currentLocation: 'VERIFICACION' }
-          : filters.expedientStatus === 'REBOTADO_VERIFICACION'
+          : filters.expedientStatus === 'COLA_VERIFICACION'
+            ? { status: { in: ['CREADO', 'AGENDADO', 'OBSERVADO', 'REBOTADO'] }, currentLocation: 'VERIFICACION' }
+            : filters.expedientStatus === 'REBOTADO_VERIFICACION'
             ? { status: 'REBOTADO', currentLocation: 'ASISTENTE_COMERCIAL' }
             : filters.expedientStatus === 'VERIFICADA_CON_OBSERVACIONES'
               ? { status: 'OBSERVADO' }
@@ -138,6 +140,7 @@ export async function buildEnrollmentExport(
   }
   const clauses: Prisma.ContractWhereInput[] = [contractAccessWhere(user)]
   if (filters.search) clauses.push({ OR: [
+        { contractNumber: { contains: filters.search, mode: 'insensitive' as const } },
         { customer: { name: { contains: filters.search, mode: 'insensitive' as const } } },
         { customer: { dni: { contains: filters.search, mode: 'insensitive' as const } } },
         { user: { name: { contains: filters.search, mode: 'insensitive' as const } } }
@@ -153,6 +156,7 @@ export async function buildEnrollmentExport(
   else if (Object.keys(expedientFilter).length) clauses.push({ expedient: expedientFilter })
   if (statusFilter && Object.keys(statusFilter).length) clauses.push(statusFilter)
   if (signatureFilter) clauses.push(signatureFilter)
+  if (filters.cancellationStatus === 'PENDIENTE') clauses.push({ cancellationRequest: { is: { status: 'PENDIENTE' } } })
   const where: Prisma.ContractWhereInput = { AND: clauses }
   const contracts = await prisma.contract.findMany({
     where,

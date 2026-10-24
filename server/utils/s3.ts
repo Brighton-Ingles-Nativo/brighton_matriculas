@@ -76,6 +76,18 @@ export async function removeS3Object(key: string | null | undefined) {
   }
 }
 
+export async function getS3ObjectBuffer(key: string): Promise<Buffer> {
+  const { client, bucket } = getClient()
+  try {
+    const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
+    if (!response.Body) throw createError({ statusCode: 404, message: 'Archivo no encontrado en almacenamiento.' })
+    return Buffer.from(await response.Body.transformToByteArray())
+  } catch (error) {
+    logS3Error('download', error)
+    throw error
+  }
+}
+
 export async function getS3DownloadUrl(key: string, contentType: string, fileName: string) {
   const { client, bucket } = getClient()
   try {

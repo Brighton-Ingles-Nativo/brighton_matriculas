@@ -21,17 +21,45 @@
         </div>
       </section>
       <UiCard>
-        <UiCardHeader class="gap-4 border-b sm:flex-row sm:items-center sm:justify-between">
+        <UiCardHeader class="flex-col items-stretch gap-4 border-b">
           <div>
             <UiCardTitle>Matrículas</UiCardTitle>
             <UiCardDescription>{{ pagination.total }} matrículas encontradas</UiCardDescription>
           </div>
-          <div class="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:grid-cols-4">
-            <UiInput v-model="holderName" placeholder="Nombre del titular" aria-label="Nombre del titular" />
-            <UiInput v-model="holderDni" placeholder="DNI del titular" aria-label="DNI del titular" />
-            <UiInput v-if="canFilterAdvisor" v-model="advisorName" placeholder="Nombre del asesor" aria-label="Nombre del asesor" />
-            <UiSelect v-model="status"><UiSelectTrigger class="w-full" aria-label="Estado del contrato"><UiSelectValue placeholder="Todos los estados" /></UiSelectTrigger><UiSelectContent><UiSelectItem value="revision">En revisión</UiSelectItem><UiSelectItem value="aprobado">Aprobado</UiSelectItem><UiSelectItem value="anulado">Anulado</UiSelectItem></UiSelectContent></UiSelect>
-            <UiSelect v-model="signature"><UiSelectTrigger class="w-full" aria-label="Firma del cliente"><UiSelectValue placeholder="Todas las firmas" /></UiSelectTrigger><UiSelectContent><UiSelectItem value="firmado">Firmado</UiSelectItem><UiSelectItem value="no_firmado">No firmado</UiSelectItem></UiSelectContent></UiSelect>
+          <div class="filter-grid">
+            <div class="relative sm:col-span-2">
+              <Search
+                class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <UiInput v-model="search" class="pl-9" placeholder="Buscar matrícula, titular, DNI o asesor"
+                aria-label="Buscar matrícula, titular, DNI o asesor" />
+            </div>
+            <UiSelect v-model="status">
+              <UiSelectTrigger class="w-full" aria-label="Estado del contrato">
+                <UiSelectValue placeholder="Todos los estados" />
+              </UiSelectTrigger>
+              <UiSelectContent>
+                <UiSelectItem value="revision">En revisión</UiSelectItem>
+                <UiSelectItem value="aprobado">Aprobado</UiSelectItem>
+                <UiSelectItem value="anulado">Anulado</UiSelectItem>
+              </UiSelectContent>
+            </UiSelect>
+            <UiSelect v-model="signature">
+              <UiSelectTrigger class="w-full" aria-label="Firma del cliente">
+                <UiSelectValue placeholder="Todas las firmas" />
+              </UiSelectTrigger>
+              <UiSelectContent>
+                <UiSelectItem value="firmado">Firmado</UiSelectItem>
+                <UiSelectItem value="no_firmado">No firmado</UiSelectItem>
+              </UiSelectContent>
+            </UiSelect>
+            <UiSelect v-model="cancellationStatus">
+              <UiSelectTrigger class="w-full" aria-label="Estado de solicitud de anulación">
+                <UiSelectValue placeholder="Todas las solicitudes" />
+              </UiSelectTrigger>
+              <UiSelectContent>
+                <UiSelectItem value="PENDIENTE">Anulación pendiente</UiSelectItem>
+              </UiSelectContent>
+            </UiSelect>
           </div>
         </UiCardHeader>
         <UiCardContent class="p-0">
@@ -155,7 +183,7 @@
 
 <script setup lang="ts">
 import { useDebounceFn } from '@vueuse/core'
-import { ChevronLeft, ChevronRight, Download, Eye, FileCheck2, FilePlus2, Pencil, Plus } from '@lucide/vue'
+import { ChevronLeft, ChevronRight, Download, Eye, FileCheck2, FilePlus2, Pencil, Plus, Search } from '@lucide/vue'
 import { toast } from '@/components/ui/sonner'
 
 interface ContractRow { 
@@ -247,11 +275,10 @@ definePageMeta({
 const { user, verifyToken, csrfHeaders } = useAuth(); 
 const route = useRoute()
 
-const holderName = ref(typeof route.query.holderName === 'string' ? route.query.holderName : '');
-const holderDni = ref(typeof route.query.holderDni === 'string' ? route.query.holderDni : '');
-const advisorName = ref('');
+const search = ref(typeof route.query.search === 'string' ? route.query.search : typeof route.query.holderName === 'string' ? route.query.holderName : typeof route.query.holderDni === 'string' ? route.query.holderDni : '');
 const status = ref(typeof route.query.status === 'string' ? route.query.status : '');
 const signature = ref(typeof route.query.signature === 'string' ? route.query.signature : '');
+const cancellationStatus = ref(typeof route.query.cancellationStatus === 'string' ? route.query.cancellationStatus : '');
 const expedientStatus = route.query.expedientStatus === 'sin_expediente' ? 'sin_expediente' : '';
 const page = ref(1); 
 const loading = ref(true); 
@@ -276,7 +303,6 @@ const receiptContract = ref<ContractRow | null>(null)
 
 const canExport = computed(() => ['admin', 'asesor', 'supervisor', 'asistente_comercial', 'verificador'].includes(user.value?.role?.name || ''));
 const canEdit = computed(() => ['admin', 'asesor', 'supervisor', 'verificador'].includes(user.value?.role?.name || ''));
-const canFilterAdvisor = computed(() => user.value?.role?.name !== 'asesor')
 const canViewAdvisorContext = computed(() => ['admin', 'verificador'].includes(user.value?.role?.name || ''))
 const canManageReceipts = computed(() => ['admin', 'asesor'].includes(user.value?.role?.name || ''))
 const canCreateEnrollment = computed(() => ['admin', 'asesor', 'supervisor'].includes(user.value?.role?.name || ''))
@@ -286,11 +312,10 @@ const isContractLocked = (row?: ContractRow) => !row || isSigned(row) || row.sta
 
 const exportUrl = computed(() => {
   const params = new URLSearchParams()
-  if (holderName.value) params.set('holderName', holderName.value)
-  if (holderDni.value) params.set('holderDni', holderDni.value)
-  if (canFilterAdvisor.value && advisorName.value) params.set('advisorName', advisorName.value)
+  if (search.value) params.set('search', search.value)
   if (status.value) params.set('status', status.value)
   if (signature.value) params.set('signature', signature.value)
+  if (cancellationStatus.value) params.set('cancellationStatus', cancellationStatus.value)
   if (expedientStatus) params.set('expedientStatus', expedientStatus)
   params.set('format', 'xlsx')
   const query = params.toString()
@@ -304,11 +329,10 @@ const loadContracts = async () => {
     const response = await $fetch<ContractsResponse>('/api/contracts', { 
       query: { 
         page: page.value, 
-        holderName: holderName.value || undefined,
-        holderDni: holderDni.value || undefined,
-        advisorName: canFilterAdvisor.value ? advisorName.value || undefined : undefined,
+        search: search.value || undefined,
         status: status.value || undefined,
         signature: signature.value || undefined,
+        cancellationStatus: cancellationStatus.value || undefined,
         expedientStatus: expedientStatus || undefined
       } 
       }); 
@@ -527,12 +551,12 @@ const openReceiptDialog = (contract: ContractRow) => {
 }
 
 const openLatestReceipt = (contract: ContractRow) => {
-  if (contract.latestReceiptId) navigateTo(`/recibo/${contract.latestReceiptId}`)
+  if (contract.latestReceiptId) navigateTo({ path: `/recibo/${contract.latestReceiptId}`, query: { returnTo: '/matriculas' } })
 }
 
 const onReceiptCreated = async (receiptId: string) => {
   await loadContracts()
-  await navigateTo(`/recibo/${receiptId}`)
+  await navigateTo({ path: `/recibo/${receiptId}`, query: { returnTo: '/matriculas' } })
 }
 
 const badgeConfig = {
@@ -572,8 +596,17 @@ onMounted(async () => {
   if (typeof route.query.contractId === 'string') await openContractFromRoute(route.query.contractId)
 })
 
-watch([holderName, holderDni, advisorName, status, signature], () => debouncedLoadContracts())
+watch([search, status, signature, cancellationStatus], () => debouncedLoadContracts())
 watch([() => route.query.contractId, loading], ([contractId, isLoading]) => {
   if (typeof contractId === 'string' && !isLoading) void openContractFromRoute(contractId)
 })
 </script>
+
+<style scoped>
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 0.5rem;
+  width: 100%;
+}
+</style>

@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { assertCsrf, getUserBySession } from '../../utils/auth'
 import { prisma } from '../../utils/prisma'
 import { resolveActiveStrategy } from '../../utils/strategies'
+import { MATRICULA_PROGRAM } from '../../../app/utils/matricula-pricing'
 
 type ContractPayload = {
   contractDepartment?: string
@@ -98,7 +99,8 @@ export default defineEventHandler(async (event) => {
   const missing = required.find(([, value]) => !text(value))
   if (missing) throw createError({ statusCode: 400, message: `El campo ${missing[0]} es obligatorio.` })
   if (!body.dataAuthorization) throw createError({ statusCode: 400, message: 'La autorización de datos personales es obligatoria.' })
-  if (text(body.program) !== 'Kids' && !text(body.plan)) throw createError({ statusCode: 400, message: 'El plan es obligatorio para este programa.' })
+  if (text(body.program) !== MATRICULA_PROGRAM) throw createError({ statusCode: 400, message: 'El programa seleccionado no es válido.' })
+  if (!text(body.plan)) throw createError({ statusCode: 400, message: 'El plan es obligatorio.' })
 
   const programValue = money(body.programValue, -1)
   if (programValue < 0) throw createError({ statusCode: 400, message: 'El valor del programa no es válido.' })
@@ -156,7 +158,7 @@ export default defineEventHandler(async (event) => {
           paymentStartDate: optionalText(body.paymentStartDate),
           modality: text(body.modality),
           program: text(body.program),
-          plan: text(body.program) === 'Kids' ? null : optionalText(body.plan),
+          plan: optionalText(body.plan),
           cashPayment: paymentMode === 'contado',
           financedPayment: paymentMode === 'financiado',
           programValue,

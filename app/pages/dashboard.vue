@@ -1,35 +1,199 @@
 <script setup lang="ts">
-import { ArrowDownRight, ArrowRight, ArrowUpRight, CalendarDays, CircleAlert, Coins, FileCheck2, FileText, RefreshCw, Users, Clock3 } from '@lucide/vue'
+import { ArrowDownRight, ArrowRight, ArrowUpRight, CalendarDays, CircleAlert, Coins, FileCheck2, FileText, FolderOpen, RefreshCw, Users, Clock3 } from '@lucide/vue'
+import type { Component } from 'vue'
 
 definePageMeta({ middleware: 'auth', ssr: false })
 
-interface Metric { key: string; label: string; value: number; format: 'number' | 'currency' | 'percent' | 'days'; change: number | null; previousValue: number | null }
-interface TrendPoint { label: string; registered: number; signed: number; commercial: number; verification: number; verified: number; appointments: number }
-interface Breakdown { key: string; label: string; value: number }
-interface WorkItem { id: string; contractId: string; contractNumber: string; holderName: string; holderDni: string; program: string; advisorName: string; status: string; location: string; updatedAt: string; queueEnteredAt: string | null; appointmentAt: string | null; appointmentType: string | null; observation: string | null; queueReason?: string | null; documentCount: number; missingDocuments: string[] }
-interface Advisor { id: string; name: string; total: number; signed: number; cancelled: number; contracted: number; signingRate: number }
-interface DashboardData { role: string; scope: string; period: number; summary: Record<string, number>; metrics: Metric[]; trend: TrendPoint[]; contractStatusBreakdown: Breakdown[]; expedientStatusBreakdown: Breakdown[]; locationBreakdown: Array<{ location: string; status: string; value: number }>; priorities: Array<{ key: string; label: string; value: number; href: string }>; advisors: Advisor[]; workQueue: WorkItem[] }
+interface Metric { 
+  key: string; 
+  label: string; 
+  value: number; 
+  format: 'number' | 'currency' | 'percent' | 'days'; 
+  change: number | null; 
+  previousValue: number | null 
+}
+interface TrendPoint { 
+  label: string; 
+  registered: number; 
+  signed: number; 
+  commercial: number; 
+  verification: number; 
+  verified: number; 
+  appointments: number 
+}
+interface Breakdown { 
+  key: string; 
+  label: string; 
+  value: number 
+}
+interface WorkItem { 
+  id: string; 
+  contractId: string; 
+  contractNumber: string; 
+  holderName: string; 
+  holderDni: string; 
+  program: string; 
+  advisorName: string; 
+  status: string; 
+  location: string; 
+  updatedAt: string; 
+  queueEnteredAt: string | null; 
+  appointmentAt: string | null; 
+  appointmentType: string | null; 
+  observation: string | null; 
+  queueReason?: string | null; 
+  documentCount: number; 
+  missingDocuments: string[] 
+}
+interface Advisor { 
+  id: string; 
+  name: string; 
+  total: number; 
+  signed: number; 
+  cancelled: number; 
+  contracted: number; 
+  signingRate: number 
+}
+
+interface FinanceSummary { 
+  collected: number; 
+  receiptCount: number; 
+  previousCollected: number; 
+  previousReceiptCount: number; 
+  collectionChange: number | null; 
+  outstandingBalance: number; 
+  contractsWithBalance: number 
+}
+interface OrganizationSummary { 
+  activeSites: number; 
+  activeTeams: number; 
+  teamBreakdown: Array<{ 
+    id: string; 
+    name: string; 
+    site: string; 
+    advisors: number; 
+    registrations: number; 
+    signatures: number 
+  }>; 
+    siteBreakdown: Array<{ 
+      id: string; 
+      name: string; 
+      teams: number; 
+      advisors: number; 
+      registrations: number; 
+      signatures: number 
+    }> 
+}
+
+interface DashboardData { 
+  role: string; 
+  scope: string; 
+  period: number; 
+  grouping: string; 
+  groupingOptions: string[]; 
+  summary: Record<string, number>; 
+  financeSummary: FinanceSummary | null; 
+  organization: OrganizationSummary | null; 
+  metrics: Metric[]; 
+  trend: TrendPoint[]; 
+  contractStatusBreakdown: Breakdown[]; 
+  expedientStatusBreakdown: Breakdown[]; 
+  locationBreakdown: Array<{ 
+    location: string; 
+    status: string; 
+    value: number 
+  }>; 
+  priorities: Array<{ 
+    key: string; 
+    label: string; 
+    value: number; 
+    href: string 
+  }>; 
+  advisors: Advisor[]; 
+  workQueueTotal: number; 
+  workQueue: WorkItem[] 
+}
 
 const { user, verifyToken } = useAuth()
 const data = ref<DashboardData | null>(null)
 const loading = ref(true)
 const error = ref('')
+const lastUpdatedAt = ref<Date | null>(null)
 const period = ref(30)
-const periodSelection = computed({ get: () => String(period.value), set: (value: string) => { period.value = Number(value) } })
+const periodSelection = computed({ 
+  get: () => String(period.value), 
+  set: (value: string) => { 
+    period.value = Number(value) 
+  } 
+})
 const ALL_QUEUE_STATUSES = '__all__'
 const queueStatus = ref(ALL_QUEUE_STATUSES)
-const chartGrouping = ref('monthly')
+const chartGrouping = ref('weekly')
 const showAllAdvisors = ref(false)
 const showAllQueue = ref(false)
 const nf = new Intl.NumberFormat('es-PE')
 const money = (value: number) => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN', maximumFractionDigits: 0 }).format(value || 0)
 const formatValue = (metric: Metric, value = metric.value) => metric.format === 'currency' ? money(value) : metric.format === 'percent' ? `${nf.format(value)}%` : metric.format === 'days' ? `${nf.format(value)} d` : nf.format(value)
 const firstName = computed(() => user.value?.name?.split(' ')[0] || 'bienvenido')
-const statusLabels: Record<string, string> = { REVISION: 'En revisión', APROBADO: 'Aprobado', ANULADO: 'Anulado', CREADO: 'Por revisar', REBOTADO: 'Rebotado', AGENDADO: 'Cita programada', OBSERVADO: 'Con observaciones', VERIFICADO: 'Verificado', ANULACION_PENDIENTE: 'Firma pendiente' }
+const roleCopyByRole: Record<string, { 
+  title: string; 
+  subtitle: string; 
+  scope: string 
+}> = {
+  admin: { 
+    title: 'Resumen general', 
+    subtitle: 'Estado de matrículas, contratos, cobros y expedientes en toda la operación.', 
+    scope: 'Vista global de la operación' 
+  },
+  supervisor: { 
+    title: 'Operación de tu equipo', 
+    subtitle: 'Seguimiento de tu equipo y expedientes que esperan tu revisión.', 
+    scope: 'Datos de tus asesores y equipos asignados' 
+  },
+  asesor: { 
+    title: 'Tu cartera', 
+    subtitle: 'Matrículas, firmas, cobros y expedientes asignados a tu gestión.', 
+    scope: 'Datos de tus matrículas' },
+  asistente_comercial: { 
+    title: 'Revisión comercial', 
+    subtitle: 'Expedientes pendientes, documentos faltantes y derivaciones a verificación.', 
+    scope: 'Cola de trabajo del área comercial' 
+  },
+  verificador: { 
+    title: 'Agenda de verificación', 
+    subtitle: 'Citas, expedientes pendientes y verificaciones realizadas.', 
+    scope: 'Cola de trabajo de verificación' 
+  }
+}
+const roleCopyDefault = { 
+  title: 'Dashboard', 
+  subtitle: 'Resumen operativo del sistema.', 
+  scope: '' 
+}
+const roleCopy = computed(() => roleCopyByRole[data.value?.role || user.value?.role?.name || ''] || roleCopyDefault)
+const roleLabels: Record<string, string> = { 
+  admin: 'Administrador', 
+  supervisor: 'Supervisor', 
+  asesor: 'Asesor', 
+  asistente_comercial: 'Asistente comercial', 
+  verificador: 'Verificador' 
+}
+const roleLabel = computed(() => roleLabels[data.value?.role || ''] || 'Operación')
+const groupingOptions = computed(() => period.value <= 7 ? ['daily'] : period.value <= 30 ? ['daily', 'weekly'] : period.value <= 90 ? ['weekly', 'monthly'] : ['monthly'])
+const groupingLabels: Record<string, string> = { daily: 'Diaria', weekly: 'Semanal', monthly: 'Mensual' }
+const groupingLabel = (value: string) => groupingLabels[value] || value
+const statusLabels: Record<string, string> = { REVISION: 'En revisión', APROBADO: 'Aprobado', ANULADO: 'Anulado', CREADO: 'Por revisar', REBOTADO: 'Rebotado', AGENDADO: 'Cita programada', OBSERVADO: 'Con observaciones', VERIFICADO: 'Verificado', ANULACION_PENDIENTE: 'Anulación solicitada' }
 const statusTone: Record<string, string> = { REVISION: 'pending', APROBADO: 'signed', ANULADO: 'neutral', CREADO: 'review', REBOTADO: 'danger', AGENDADO: 'review', OBSERVADO: 'pending', VERIFICADO: 'signed', ANULACION_PENDIENTE: 'pending' }
 const fmtStatus = (key: string) => statusLabels[key] || key.replaceAll('_', ' ')
-const metricIcons = [Users, FileText, Clock3, Coins]
-const chartSeries = computed(() => ['asistente_comercial', 'verificador'].includes(data.value?.role || '') ? [{ key: 'commercial', label: 'Recibidos', color: 'var(--secondary)' }, { key: 'verification', label: 'Derivados', color: 'var(--primary)' }] : [{ key: 'registered', label: 'Matrículas', color: 'var(--secondary)' }, { key: 'signed', label: 'Contratos firmados', color: 'var(--primary)' }])
+const metricIcons: Record<string, Component> = { registrations: Users, signatures: FileCheck2, pendingSignatures: Clock3, supervisorReview: FolderOpen, signedValue: Coins, commercialQueue: FolderOpen, commercialReturned: CircleAlert, queueAge: Clock3, sentToVerification: ArrowRight, verificationQueue: FileCheck2, upcomingAppointments: CalendarDays, overdueAppointments: CircleAlert, verified: FileCheck2 }
+const metricIcon = (key: string) => metricIcons[key] || FileText
+const chartSeries = computed(() => data.value?.role === 'asistente_comercial'
+  ? [{ key: 'commercial', label: 'Enviados a Comercial', color: 'var(--secondary)' }, { key: 'verification', label: 'Enviados a Verificación', color: 'var(--primary)' }]
+  : data.value?.role === 'verificador'
+    ? [{ key: 'appointments', label: 'Programaciones de cita', color: 'var(--secondary)' }, { key: 'verified', label: 'Verificaciones realizadas', color: 'var(--primary)' }]
+    : [{ key: 'registered', label: 'Matrículas registradas', color: 'var(--secondary)' }, { key: 'signed', label: 'Contratos firmados', color: 'var(--primary)' }])
+const chartTitle = computed(() => data.value?.role === 'asistente_comercial' ? 'Flujo de expedientes comerciales' : data.value?.role === 'verificador' ? 'Actividad de verificación' : 'Matrículas y firmas')
+const chartDescription = computed(() => `Actividad agrupada ${groupingLabel(data.value?.grouping || chartGrouping.value).toLowerCase()} durante los últimos ${data.value?.period || period.value} días.`)
 const chartPoints = computed(() => {
   const points = data.value?.trend || []
   const max = Math.max(...points.flatMap((point) => chartSeries.value.map((series) => Number(point[series.key as keyof TrendPoint]) || 0)), 1)
@@ -38,48 +202,143 @@ const chartPoints = computed(() => {
 const linePath = (seriesIndex: number) => chartPoints.value.map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.values[seriesIndex]?.y ?? 204}`).join(' ')
 const areaPath = (seriesIndex: number) => `${linePath(seriesIndex)} L ${chartPoints.value.at(-1)?.x || 684} 204 L ${chartPoints.value[0]?.x || 34} 204 Z`
 const chartMax = computed(() => Math.max(...(data.value?.trend || []).flatMap((point) => chartSeries.value.map((series) => Number(point[series.key as keyof TrendPoint]) || 0)), 1))
-const doughnutTotal = computed(() => (data.value?.contractStatusBreakdown || []).reduce((total, segment) => total + segment.value, 0))
-const doughnutStyle = computed(() => { let cursor = 0; const colors = ['var(--primary)', 'color-mix(in srgb, var(--secondary) 70%, var(--card))', 'var(--secondary)', 'color-mix(in srgb, var(--secondary) 35%, var(--card))']; return (data.value?.contractStatusBreakdown || []).map((segment, index) => { const start = cursor; cursor += doughnutTotal.value ? segment.value / doughnutTotal.value * 100 : 0; return `${colors[index % colors.length]} ${start}% ${cursor}%` }).join(', ') || 'var(--muted) 0 100%' })
-const stageGroups = computed(() => { const locations = [{ key: 'ASESOR', label: 'Admisión' }, { key: 'ASISTENTE_COMERCIAL', label: 'Finanzas' }, { key: 'SUPERVISOR', label: 'Legal' }, { key: 'VERIFICACION', label: 'Firma de contrato' }]; return locations.map((location) => ({ ...location, value: (data.value?.locationBreakdown || []).filter((row) => row.location === location.key && row.status !== 'VERIFICADO').reduce((sum, row) => sum + row.value, 0) })).filter((stage) => stage.value > 0) })
+const statusBreakdown = computed(() => ['asistente_comercial', 'verificador'].includes(data.value?.role || '') ? data.value?.expedientStatusBreakdown || [] : data.value?.contractStatusBreakdown || [])
+const statusHeading = computed(() => ['asistente_comercial', 'verificador'].includes(data.value?.role || '') ? 'Estado de expedientes' : 'Estado de contratos')
+const statusTotalLabel = computed(() => ['asistente_comercial', 'verificador'].includes(data.value?.role || '') ? 'expedientes' : 'contratos')
+const doughnutTotal = computed(() => statusBreakdown.value.reduce((total, segment) => total + segment.value, 0))
+const doughnutStyle = computed(() => { let cursor = 0; const colors = ['var(--primary)', 'color-mix(in srgb, var(--secondary) 70%, var(--card))', 'var(--secondary)', 'color-mix(in srgb, var(--secondary) 35%, var(--card))']; return statusBreakdown.value.map((segment, index) => { const start = cursor; cursor += doughnutTotal.value ? segment.value / doughnutTotal.value * 100 : 0; return `${colors[index % colors.length]} ${start}% ${cursor}%` }).join(', ') || 'var(--muted) 0 100%' })
+const stageGroups = computed(() => { const locations = [{ key: 'ASESOR', label: 'Asesor' }, { key: 'SUPERVISOR', label: 'Supervisor' }, { key: 'ASISTENTE_COMERCIAL', label: 'Comercial' }, { key: 'VERIFICACION', label: 'Verificación' }]; return locations.map((location) => ({ ...location, value: (data.value?.locationBreakdown || []).filter((row) => row.location === location.key && row.status !== 'VERIFICADO').reduce((sum, row) => sum + row.value, 0) })).filter((stage) => stage.value > 0) })
+const stageHeading = computed(() => data.value?.role === 'asistente_comercial' ? 'Expedientes en tu cola comercial' : data.value?.role === 'verificador' ? 'Expedientes en verificación' : 'Expedientes por etapa responsable')
+const stageDescription = computed(() => ['asistente_comercial', 'verificador'].includes(data.value?.role || '') ? 'Carga actual de los expedientes asignados a tu área.' : 'Número de expedientes en cada etapa del proceso.')
+
 const maxStage = computed(() => Math.max(...stageGroups.value.map((stage) => stage.value), 1))
+
 const advisorRows = computed(() => {
   const advisors = [...(data.value?.advisors || [])].sort((a, b) => b.signed - a.signed)
   return showAllAdvisors.value ? advisors : advisors.slice(0, 5)
 })
+
 const queueItems = computed(() => (data.value?.workQueue || []).filter((item) => queueStatus.value === ALL_QUEUE_STATUSES || item.status === queueStatus.value))
+
 const filteredQueue = computed(() => showAllQueue.value ? queueItems.value : queueItems.value.slice(0, 5))
+
 const queueStatuses = computed(() => [...new Set((data.value?.workQueue || []).map((item) => item.status))])
-const changeIsGood = (metric: Metric) => ['pendingSignatures', 'commercialReturned', 'overdueAppointments'].includes(metric.key) ? (metric.change || 0) <= 0 : (metric.change || 0) >= 0
+
+const canSeeAdvisorPerformance = computed(() => ['admin', 'supervisor'].includes(data.value?.role || ''))
+
+const queueHref = computed(() => data.value?.role === 'asistente_comercial' ? '/expedientes?status=EN_COMERCIAL' : data.value?.role === 'verificador' ? '/expedientes?status=COLA_VERIFICACION' : data.value?.role === 'supervisor' ? '/expedientes?status=PENDIENTE' : '/matricula')
+
+const queueModuleLabel = computed(() => ['asistente_comercial', 'verificador', 'supervisor'].includes(data.value?.role || '') ? 'Abrir lista de expedientes' : 'Abrir matrículas')
+
+const queueTitle = computed(() => data.value?.role === 'supervisor' ? 'Expedientes que requieren tu revisión' : data.value?.role === 'asistente_comercial' ? 'Cola de revisión comercial' : data.value?.role === 'verificador' ? 'Cola de verificación' : 'Casos para seguimiento')
+
+const queueDescription = computed(() => data.value?.role === 'verificador'
+  ? 'Las citas vencidas o más próximas aparecen primero; también se incluyen expedientes pendientes de programar.'
+  : data.value?.role === 'supervisor'
+    ? 'Dentro de la muestra, se ordenan por el tiempo desde su último ingreso a tu cola de revisión.'
+    : data.value?.role === 'asistente_comercial'
+      ? 'Dentro de la muestra, se ordenan por el tiempo desde su último ingreso a la cola comercial.'
+      : 'Dentro de la muestra, se ordenan por la fecha de ingreso al seguimiento.')
+
+const appointmentTypeLabels: Record<string, string> = { 
+  PRESENCIAL: 'Presencial', 
+  VIRTUAL: 'Virtual' 
+}
+
+const appointmentTypeLabel = (value: string | null) => appointmentTypeLabels[value || ''] || 'Tipo de cita pendiente'
+
+const queueCountSummary = computed(() => queueStatus.value === ALL_QUEUE_STATUSES
+  ? `${nf.format(data.value?.workQueueTotal || 0)} casos en total.`
+  : `Filtro sobre ${nf.format(data.value?.workQueue.length || 0)} casos cargados de ${nf.format(data.value?.workQueueTotal || 0)} en total.`)
+
+  const changeIsGood = (metric: Metric) => ['pendingSignatures', 'commercialReturned', 'overdueAppointments'].includes(metric.key) ? (metric.change ?? 0) <= 0 : (metric.change ?? 0) >= 0
+
 const ageDays = (item: WorkItem) => Math.max(0, Math.floor((Date.now() - new Date(item.queueEnteredAt || item.updatedAt).getTime()) / 86400000))
-const loadDashboard = async () => { loading.value = true; error.value = ''; try { data.value = await $fetch<DashboardData>('/api/dashboard', { credentials: 'include', query: { period: period.value } }) } catch (err: any) { error.value = err?.data?.message || err?.data?.statusMessage || 'No pudimos cargar el dashboard.' } finally { loading.value = false } }
-watch(period, () => { void loadDashboard() })
-onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboard() })
+
+const dateTime = (value: string | null) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : 'Sin cita programada'
+
+const queueTiming = (item: WorkItem) => {
+
+  if (data.value?.role !== 'verificador') return `${nf.format(ageDays(item))} d`
+  
+  if (!item.appointmentAt) return 'Sin cita'
+  
+  const delta = new Date(item.appointmentAt).getTime() - Date.now()
+
+  if (delta < 0) return `Vencida hace ${nf.format(Math.max(1, Math.ceil(Math.abs(delta) / 86400000)))} d`
+  
+  const daysUntil = Math.ceil(delta / 86400000)
+  
+  return daysUntil === 0 ? 'Hoy' : `En ${nf.format(daysUntil)} d`
+}
+
+const updatedAtLabel = computed(() => lastUpdatedAt.value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short', timeStyle: 'short' }).format(lastUpdatedAt.value) : '')
+
+const loadDashboard = async () => { 
+  loading.value = true; 
+  error.value = ''; 
+  try { 
+    data.value = await $fetch<DashboardData>('/api/dashboard', { 
+      credentials: 'include', 
+      query: { 
+        period: period.value, 
+        grouping: chartGrouping.value 
+      } 
+    }); 
+    lastUpdatedAt.value = new Date() 
+  } catch (err: any) { 
+    data.value = null; 
+    error.value = err?.data?.message || err?.data?.statusMessage || 'No pudimos cargar el dashboard.' 
+  } finally { 
+    loading.value = false 
+  } 
+}
+
+watch(period, () => { 
+  if (!groupingOptions.value.includes(chartGrouping.value)) 
+  chartGrouping.value = period.value <= 7 ? 'daily' : period.value <= 90 ? 'weekly' : 'monthly' 
+})
+
+watch([period, chartGrouping], () => { 
+  void loadDashboard() 
+})
+onMounted(async () => { 
+  if (!user.value) await verifyToken(); 
+  await loadDashboard() 
+})
 </script>
 
 <template>
   <div class="dashboard-page">
-    <AppHeader title="Dashboard" subtitle="Centro de operaciones de matrículas" />
+    <AppHeader :title="roleCopy.title" :subtitle="roleLabel" />
     <main class="dashboard-content">
       <section class="dashboard-intro">
         <div>
           <h1>Hola, {{ firstName }}</h1>
-          <p>Aquí tienes el resumen de la operación de matrículas y contratos.</p>
+          <p>{{ roleCopy.subtitle }}</p>
+          <small class="scope-caption">{{ roleCopy.scope }}</small>
         </div>
-        <div class="period-control"><label for="dashboard-period">Periodo</label>
-          <div class="period-select-wrap">
-            <UiSelect v-model="periodSelection">
-              <UiSelectTrigger id="dashboard-period" class="period-select-trigger h-[34px] w-full pl-9 pr-3">
-                <UiSelectValue />
-              </UiSelectTrigger>
-              <UiSelectContent>
-                <UiSelectItem value="7">Últimos 7 días</UiSelectItem>
-                <UiSelectItem value="30">Últimos 30 días</UiSelectItem>
-                <UiSelectItem value="90">Últimos 90 días</UiSelectItem>
-                <UiSelectItem value="365">Último año</UiSelectItem>
-              </UiSelectContent>
-            </UiSelect>
-            <CalendarDays class="period-icon" aria-hidden="true" />
+        <div class="dashboard-controls">
+          <div class="period-control"><label for="dashboard-period">Periodo</label>
+            <div class="period-select-wrap">
+              <UiSelect v-model="periodSelection">
+                <UiSelectTrigger id="dashboard-period" class="period-select-trigger h-[34px] w-full pl-9 pr-3">
+                  <UiSelectValue />
+                </UiSelectTrigger>
+                <UiSelectContent>
+                  <UiSelectItem value="7">Últimos 7 días</UiSelectItem>
+                  <UiSelectItem value="30">Últimos 30 días</UiSelectItem>
+                  <UiSelectItem value="90">Últimos 90 días</UiSelectItem>
+                  <UiSelectItem value="365">Último año</UiSelectItem>
+                </UiSelectContent>
+              </UiSelect>
+              <CalendarDays class="period-icon" aria-hidden="true" />
+            </div>
           </div>
+          <button type="button" class="dashboard-refresh" :disabled="loading" @click="loadDashboard">
+            <RefreshCw :size="15" :class="{ 'animate-spin': loading }" /> Actualizar
+          </button>
+          <small v-if="lastUpdatedAt" class="dashboard-updated">Actualizado {{ updatedAtLabel }}</small>
         </div>
       </section>
 
@@ -94,7 +353,7 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
         <section class="metric-grid" aria-label="Indicadores principales">
           <UiCard v-for="(metric, index) in data.metrics.slice(0, 4)" :key="metric.key" role="article" class="metric-card gap-0 py-0 ring-0"><span
               class="metric-icon" :class="`metric-icon-${index}`">
-              <component :is="metricIcons[index] || FileText" :size="27" />
+              <component :is="metricIcon(metric.key)" :size="27" />
             </span>
             <div class="metric-copy">
               <p>{{ metric.label }}</p>
@@ -110,20 +369,87 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
           </UiCard>
         </section>
 
+        <section v-if="data.priorities.length" class="panel priority-panel" aria-labelledby="priority-title">
+          <div class="panel-heading">
+            <div>
+              <h2 id="priority-title">Atención prioritaria</h2>
+              <p>Casos que conviene resolver o revisar cuanto antes.</p>
+            </div>
+          </div>
+          <div class="priority-list">
+            <NuxtLink v-for="item in data.priorities" :key="item.key" :to="item.href" class="priority-item">
+              <span>{{ item.label }}</span>
+              <strong>{{ nf.format(item.value) }}</strong>
+              <ArrowRight :size="15" aria-hidden="true" />
+            </NuxtLink>
+          </div>
+        </section>
+
+        <section v-if="data.financeSummary" class="finance-panel panel" aria-labelledby="finance-title">
+          <div class="panel-heading">
+            <div>
+              <h2 id="finance-title">Cobros y saldos</h2>
+              <p>Recibos registrados en los últimos {{ data.period }} días y saldo contractual activo al día de hoy.</p>
+            </div>
+            <NuxtLink to="/recibos">Ver recibos <ArrowRight :size="14" /></NuxtLink>
+          </div>
+          <div class="finance-grid">
+            <div><span>Cobrado en el periodo</span><strong>{{ money(data.financeSummary.collected) }}</strong><small>{{ nf.format(data.financeSummary.receiptCount) }} recibos</small></div>
+            <div><span>Periodo anterior</span><strong>{{ money(data.financeSummary.previousCollected) }}</strong><small>{{ data.financeSummary.collectionChange === null ? 'Sin base comparable' : `${data.financeSummary.collectionChange > 0 ? '+' : ''}${data.financeSummary.collectionChange}% frente al periodo anterior` }}</small></div>
+            <div><span>Saldo pendiente</span><strong>{{ money(data.financeSummary.outstandingBalance) }}</strong><small>En {{ nf.format(data.financeSummary.contractsWithBalance) }} contratos activos</small></div>
+          </div>
+        </section>
+
+        <section v-if="data.organization" class="organization-panel panel" aria-labelledby="organization-title">
+          <div class="panel-heading">
+            <div>
+              <h2 id="organization-title">Actividad por sede y equipo</h2>
+              <p>Registros y firmas del periodo; el supervisor ve únicamente sus equipos asignados.</p>
+            </div>
+            <span class="organization-count">{{ nf.format(data.organization.activeSites) }} sedes · {{ nf.format(data.organization.activeTeams) }} equipos</span>
+          </div>
+          <div class="organization-grid">
+            <div class="organization-section">
+              <h3>Sedes</h3>
+              <div class="organization-scroll">
+                <table class="organization-table">
+                  <thead><tr><th>Sede</th><th>Equipos</th><th>Asesores</th><th>Matrículas</th><th>Firmas</th></tr></thead>
+                  <tbody>
+                    <tr v-for="site in data.organization.siteBreakdown" :key="site.id"><td>{{ site.name }}</td><td>{{ site.teams }}</td><td>{{ site.advisors }}</td><td>{{ site.registrations }}</td><td>{{ site.signatures }}</td></tr>
+                    <tr v-if="!data.organization.siteBreakdown.length"><td colspan="5">No hay sedes con equipos activos asignados.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="organization-section">
+              <h3>Equipos</h3>
+              <div class="organization-scroll">
+                <table class="organization-table">
+                  <thead><tr><th>Equipo</th><th>Sede</th><th>Asesores</th><th>Matrículas</th><th>Firmas</th></tr></thead>
+                  <tbody>
+                    <tr v-for="team in data.organization.teamBreakdown" :key="team.id"><td>{{ team.name }}</td><td>{{ team.site }}</td><td>{{ team.advisors }}</td><td>{{ team.registrations }}</td><td>{{ team.signatures }}</td></tr>
+                    <tr v-if="!data.organization.teamBreakdown.length"><td colspan="5">No hay equipos activos asignados.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <p class="organization-note">Un asesor que pertenece a varios equipos aparece en la actividad de cada equipo asignado.</p>
+        </section>
+
         <section class="dashboard-middle">
           <UiCard role="article" class="panel trend-panel gap-0 py-0 ring-0">
             <div class="panel-heading">
               <div>
-                <h2>Evolución de matrículas y firmas</h2>
-                <p>Comparativo mensual del número de matrículas vs. contratos firmados.</p>
+                <h2>{{ chartTitle }}</h2>
+                <p>{{ chartDescription }}</p>
               </div>
               <UiSelect v-model="chartGrouping">
                 <UiSelectTrigger class="chart-grouping-trigger h-[34px]" aria-label="Agrupación de la gráfica">
                   <UiSelectValue />
                 </UiSelectTrigger>
                 <UiSelectContent>
-                  <UiSelectItem value="monthly">Mensual</UiSelectItem>
-                  <UiSelectItem value="weekly">Semanal</UiSelectItem>
+                  <UiSelectItem v-for="grouping in groupingOptions" :key="grouping" :value="grouping">{{ groupingLabel(grouping) }}</UiSelectItem>
                 </UiSelectContent>
               </UiSelect>
             </div>
@@ -135,8 +461,7 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
                 <span>{{ Math.round(chartMax * .25)}}</span>
                 <span>0</span>
               </div>
-              <svg class="trend-chart" viewBox="0 0 720 250" role="img"
-                aria-label="Evolución de matrículas y firmas">
+              <svg class="trend-chart" viewBox="0 0 720 250" role="img" :aria-label="chartTitle">
                 <defs>
                   <linearGradient id="blueArea" x1="0" x2="0" y1="0" y2="1">
                     <stop offset="0" stop-color="var(--secondary)" stop-opacity=".12" />
@@ -161,22 +486,31 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
                 <i :style="{ background: series.color }" />{{ series.label }}
               </span>
             </div>
+            <details class="chart-data-details">
+              <summary>Consultar valores por periodo</summary>
+              <div class="organization-scroll">
+                <table class="organization-table">
+                  <thead><tr><th>Periodo</th><th v-for="series in chartSeries" :key="series.key">{{ series.label }}</th></tr></thead>
+                  <tbody><tr v-for="point in chartPoints" :key="`data-${point.x}`"><th scope="row">{{ point.label }}</th><td v-for="series in point.values" :key="series.key">{{ nf.format(series.value) }}</td></tr></tbody>
+                </table>
+              </div>
+            </details>
           </UiCard>
 
           <UiCard role="article" class="panel status-panel gap-0 py-0 ring-0">
             <div class="panel-heading">
               <div>
-                <h2>Estado de contratos</h2>
-                <p>Distribución por estado actual.</p>
+                <h2>{{ statusHeading }}</h2>
+                <p>Distribución actual por estado.</p>
               </div>
             </div>
             <div class="donut-wrap">
               <div class="donut" :style="{ background: `conic-gradient(${doughnutStyle})` }">
-                <div><strong>{{ nf.format(doughnutTotal) }}</strong><span>contratos<br />totales</span></div>
+                <div><strong>{{ nf.format(doughnutTotal) }}</strong><span>{{ statusTotalLabel }}<br />totales</span></div>
               </div>
             </div>
             <div class="status-list">
-              <div v-for="(segment, index) in data.contractStatusBreakdown" :key="segment.key">
+              <div v-for="(segment, index) in statusBreakdown" :key="segment.key">
                 <span><i class="status-dot" :class="`dot-${index}`" />{{ fmtStatus(segment.key) }}</span>
                 <b>{{nf.format(segment.value) }}</b>
                 <small>{{doughnutTotal ? Math.round(segment.value / doughnutTotal * 100) : 0 }}%</small>
@@ -188,8 +522,8 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
             <UiCard role="article" class="panel stages-panel gap-0 py-0 ring-0">
               <div class="panel-heading">
                 <div>
-                  <h2>Expedientes por etapa responsable</h2>
-                  <p>Número de expedientes en cada etapa del proceso.</p>
+                  <h2>{{ stageHeading }}</h2>
+                  <p>{{ stageDescription }}</p>
                 </div>
               </div>
               <div class="stage-list">
@@ -203,11 +537,11 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
                 <p v-if="!stageGroups.length" class="empty-copy">Sin expedientes registrados.</p>
               </div>
             </UiCard>
-            <UiCard role="article" class="panel advisors-panel gap-0 py-0 ring-0">
+            <UiCard v-if="canSeeAdvisorPerformance" role="article" class="panel advisors-panel gap-0 py-0 ring-0">
               <div class="panel-heading">
                 <div>
                   <h2>Rendimiento de asesores</h2>
-                  <p>Matrículas, firmas, tasa de conversión y valor contratado.</p>
+              <p>Matrículas, firmas, anulaciones, tasa de conversión y valor contratado.</p>
                 </div>
                 <button v-if="data.advisors.length > 5" type="button" class="panel-more-button" :aria-expanded="showAllAdvisors" @click="showAllAdvisors = !showAllAdvisors">
                   {{ showAllAdvisors ? 'Ver menos' : 'Ver todos' }}
@@ -215,12 +549,13 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
                 </button>
               </div>
               <div class="advisor-table">
-                <UiTable class="advisor-data-table min-w-[520px] text-xs">
+                <UiTable class="advisor-data-table min-w-[620px] text-xs">
                   <UiTableHeader>
                     <UiTableRow class="advisor-head">
                       <UiTableHead>Asesor</UiTableHead>
                       <UiTableHead class="text-right">Matrículas</UiTableHead>
                       <UiTableHead class="text-right">Firmas</UiTableHead>
+                      <UiTableHead class="text-right">Anuladas</UiTableHead>
                       <UiTableHead class="text-right">Conversión</UiTableHead>
                       <UiTableHead class="text-right">Valor contratado</UiTableHead>
                     </UiTableRow>
@@ -235,6 +570,7 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
                       </UiTableCell>
                       <UiTableCell class="text-right tabular-nums">{{ advisor.total }}</UiTableCell>
                       <UiTableCell class="text-right tabular-nums">{{ advisor.signed}}</UiTableCell>
+                      <UiTableCell class="text-right tabular-nums">{{ advisor.cancelled }}</UiTableCell>
                       <UiTableCell class="text-right tabular-nums">{{ advisor.signingRate }}%</UiTableCell>
                       <UiTableCell class="whitespace-nowrap text-right tabular-nums">{{ money(advisor.contracted) }}</UiTableCell>
                     </UiTableRow>
@@ -249,34 +585,45 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
         <UiCard role="article" class="panel queue-panel gap-0 py-0 ring-0">
           <div class="queue-heading">
             <div>
-              <h2>Cola de trabajo</h2>
-              <p>Matrículas con contrato pendiente o en proceso, ordenadas por mayor tiempo de espera.</p>
+              <h2>{{ queueTitle }}</h2>
+              <p>{{ queueDescription }} {{ queueCountSummary }}</p>
+              <p v-if="data.workQueueTotal > data.workQueue.length" class="queue-cap-note">Vista previa de {{ data.workQueue.length }} casos; abre la lista completa para revisar toda la cola.</p>
             </div>
             <div class="queue-actions">
-              <UiSelect v-model="queueStatus">
-                <UiSelectTrigger class="min-w-40 max-w-full" aria-label="Filtrar cola por estado">
-                  <UiSelectValue />
-                </UiSelectTrigger>
-                <UiSelectContent>
-                  <UiSelectItem :value="ALL_QUEUE_STATUSES">Todos los estados</UiSelectItem>
-                  <UiSelectItem v-for="status in queueStatuses" :key="status" :value="status">{{ fmtStatus(status) }}</UiSelectItem>
-                </UiSelectContent>
-              </UiSelect>
-              <button v-if="queueItems.length > 5" type="button" class="queue-more-button" :aria-expanded="showAllQueue" @click="showAllQueue = !showAllQueue">
-                {{ showAllQueue ? 'Ver menos casos' : 'Ver más casos' }}
-                <ArrowRight v-if="!showAllQueue" :size="15" />
-              </button>
+              <div class="queue-controls">
+                <UiSelect v-model="queueStatus">
+                  <UiSelectTrigger class="w-full min-w-0" aria-label="Filtrar cola por estado">
+                    <UiSelectValue />
+                  </UiSelectTrigger>
+                  <UiSelectContent>
+                    <UiSelectItem :value="ALL_QUEUE_STATUSES">Todos los estados</UiSelectItem>
+                    <UiSelectItem v-for="status in queueStatuses" :key="status" :value="status">{{ fmtStatus(status) }}</UiSelectItem>
+                  </UiSelectContent>
+                </UiSelect>
+                <div class="queue-more-slot">
+                  <button v-if="queueItems.length > 5" type="button" class="queue-more-button" :aria-expanded="showAllQueue" aria-controls="dashboard-queue-results" @click="showAllQueue = !showAllQueue">
+                    {{ showAllQueue ? 'Ver menos casos' : 'Ver más casos' }}
+                    <ArrowRight v-if="!showAllQueue" :size="15" />
+                  </button>
+                </div>
+              </div>
+              <div class="queue-links">
+                <NuxtLink :to="queueHref">{{ queueModuleLabel }} <ArrowRight :size="14" /></NuxtLink>
+                <NuxtLink v-if="['admin', 'asesor'].includes(data.role)" to="/expedientes">Abrir expedientes <ArrowRight :size="14" /></NuxtLink>
+              </div>
             </div>
           </div>
-          <div class="queue-scroll">
-            <UiTable class="queue-data-table min-w-[990px] text-xs">
+          <div id="dashboard-queue-results" class="queue-scroll">
+            <UiTable class="queue-data-table min-w-[900px] text-xs">
               <UiTableHeader>
                 <UiTableRow>
                   <UiTableHead>Estudiante / titular</UiTableHead>
                   <UiTableHead>Programa</UiTableHead>
-                  <UiTableHead>Asesor asignado</UiTableHead>
+                  <UiTableHead v-if="canSeeAdvisorPerformance">Asesor asignado</UiTableHead>
+                  <UiTableHead v-else-if="data.role === 'asistente_comercial'">Documentación</UiTableHead>
+                  <UiTableHead v-else-if="data.role === 'verificador'">Cita</UiTableHead>
                   <UiTableHead>Estado actual</UiTableHead>
-                  <UiTableHead>Días en espera</UiTableHead>
+                  <UiTableHead>{{ data.role === 'verificador' ? 'Tiempo para la cita' : 'Antigüedad' }}</UiTableHead>
                   <UiTableHead>Última actividad</UiTableHead>
                   <UiTableHead>Acciones</UiTableHead>
                 </UiTableRow>
@@ -288,10 +635,24 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
                     <div class="text-xs text-muted-foreground">DNI:{{ item.holderDni }}</div>
                   </UiTableCell>
                   <UiTableCell>{{ item.program }}</UiTableCell>
-                  <UiTableCell>{{ item.advisorName }}</UiTableCell>
-                  <UiTableCell><span class="status-pill" :class="statusTone[item.status] || 'neutral'">{{ fmtStatus(item.status) }}</span></UiTableCell>
-                  <UiTableCell class="tabular-nums">{{ ageDays(item) }}</UiTableCell>
-                  <UiTableCell>{{ new Date(item.updatedAt).toLocaleDateString('es-PE', {day: '2-digit', month: 'short', year: 'numeric'}) }}</UiTableCell>
+                  <UiTableCell v-if="canSeeAdvisorPerformance">{{ item.advisorName }}</UiTableCell>
+                  <UiTableCell v-else-if="data.role === 'asistente_comercial'">
+                    <strong>{{ nf.format(item.documentCount) }} documentos</strong>
+                    <div class="text-xs text-muted-foreground">{{ item.missingDocuments.length ? `Falta ${item.missingDocuments.map((type) => type === 'DNI' ? 'DNI' : 'voucher').join(' y ')}` : 'Documentación requerida completa' }}</div>
+                  </UiTableCell>
+                  <UiTableCell v-else-if="data.role === 'verificador'">
+                    <strong>{{ dateTime(item.appointmentAt) }}</strong>
+                    <div class="text-xs text-muted-foreground">{{ appointmentTypeLabel(item.appointmentType) }}</div>
+                  </UiTableCell>
+                  <UiTableCell>
+                    <span class="status-pill" :class="statusTone[item.status] || 'neutral'">{{ fmtStatus(item.status) }}</span>
+                    <div v-if="data.role !== 'asistente_comercial' && item.missingDocuments.length" class="queue-observation">Falta {{ item.missingDocuments.map((type) => type === 'DNI' ? 'DNI' : 'voucher').join(' y ') }}</div>
+                  </UiTableCell>
+                  <UiTableCell class="tabular-nums">{{ queueTiming(item) }}</UiTableCell>
+                  <UiTableCell>
+                    <span>{{ dateTime(item.updatedAt) }}</span>
+                    <div v-if="item.observation || item.queueReason" class="queue-observation">{{ item.observation || item.queueReason }}</div>
+                  </UiTableCell>
                   <UiTableCell>
                     <NuxtLink :to="item.location === 'ASESOR' ? `/matricula/${item.contractId}` : `/expedientes/${item.id}`">
                       Ver detalle <ArrowRight :size="14" />
@@ -365,6 +726,14 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
   font-size: var(--text-sm);
 }
 
+.scope-caption {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--dashboard-subtle);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
 .period-control {
   position: relative;
   display: flex;
@@ -372,6 +741,43 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
   gap: 10px;
   color: var(--dashboard-subtle);
   font-size: var(--text-sm);
+}
+
+.dashboard-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.dashboard-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0;
+  border: 0;
+  color: var(--primary);
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.dashboard-refresh:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+
+.dashboard-refresh:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+.dashboard-updated {
+  color: var(--dashboard-subtle);
+  font-size: var(--text-xs);
 }
 
 .period-select-wrap {
@@ -545,6 +951,88 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
   overflow: hidden;
 }
 
+.priority-panel,
+.finance-panel,
+.organization-panel {
+  margin-bottom: 13px;
+}
+
+.priority-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
+  padding: 10px 16px 16px;
+}
+
+.priority-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--dashboard-line);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  color: var(--dashboard-text) !important;
+  text-decoration: none;
+}
+
+.priority-item span { flex: 1; min-width: 0; }
+.priority-item strong { font-variant-numeric: tabular-nums; }
+
+.finance-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 8px 16px 17px;
+}
+
+.finance-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 14px;
+}
+
+.finance-grid > div + div { border-left: 1px solid var(--dashboard-line); }
+.finance-grid span { color: var(--dashboard-subtle); font-size: var(--text-sm); }
+.finance-grid strong { font-size: var(--text-2xl); font-variant-numeric: tabular-nums; }
+.finance-grid small { color: var(--dashboard-subtle); font-size: var(--text-xs); }
+
+.organization-count {
+  color: var(--dashboard-subtle);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.organization-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  padding: 8px 16px 0;
+}
+
+.organization-section { min-width: 0; }
+.organization-section h3 { margin: 3px 0 8px; font-size: var(--text-sm); }
+.organization-scroll { max-width: 100%; overflow-x: auto; }
+
+.organization-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.organization-table th,
+.organization-table td {
+  border-bottom: 1px solid var(--dashboard-line);
+  padding: 8px 9px;
+  text-align: left;
+}
+
+.organization-table thead th { background: var(--dashboard-surface-muted); font-weight: 700; }
+.organization-table tbody td:not(:first-child), .organization-table tbody th:not(:first-child) { font-variant-numeric: tabular-nums; }
+.organization-note { margin: 9px 16px 14px; color: var(--dashboard-subtle); font-size: var(--text-xs); }
+
 .panel-heading {
   padding: 15px 16px 7px;
   min-width: 0;
@@ -655,6 +1143,19 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
   width: 10px;
   height: 10px;
   border-radius: 50%;
+}
+
+.chart-data-details {
+  border-top: 1px solid var(--dashboard-line);
+  padding: 0 16px 12px;
+}
+
+.chart-data-details summary {
+  padding: 10px 0;
+  color: var(--dashboard-link);
+  cursor: pointer;
+  font-size: var(--text-xs);
+  font-weight: 600;
 }
 
 .status-panel {
@@ -896,11 +1397,39 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
 }
 
 .queue-heading > div:first-child { min-width: 0; }
+.queue-cap-note { font-size: var(--text-xs) !important; }
 
 .queue-actions {
   display: flex;
+  flex: 0 0 350px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.queue-controls {
+  display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.queue-more-slot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 138px;
+  min-height: 32px;
+}
+
+.queue-links {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .queue-scroll {
@@ -934,6 +1463,14 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
 .queue-scroll :deep(td strong) {
   color: var(--dashboard-text);
   font-weight: 600;
+}
+
+.queue-observation {
+  max-width: 250px;
+  overflow: hidden;
+  color: var(--dashboard-subtle);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
 }
 
 .queue-scroll :deep(td:last-child a) {
@@ -1016,6 +1553,10 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
 }
 
 @media (max-width: 850px) {
+  .queue-heading { align-items: flex-start; flex-direction: column; }
+  .queue-actions { width: 100%; flex-basis: auto; align-items: flex-start; }
+  .queue-links { justify-content: flex-start; }
+
   .dashboard-content {
     padding: 18px 16px 28px;
   }
@@ -1023,6 +1564,10 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
   .dashboard-intro {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .dashboard-controls {
+    align-items: flex-start;
   }
 
   .metric-grid {
@@ -1037,15 +1582,7 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
     grid-template-columns: 1fr;
   }
 
-  .queue-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .queue-actions {
-    width: 100%;
-    justify-content: space-between;
-  }
+  .organization-grid { grid-template-columns: 1fr; gap: 14px; }
 }
 
 @media (max-width: 520px) {
@@ -1074,6 +1611,11 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
     grid-column: auto;
   }
 
+  .finance-grid { grid-template-columns: 1fr; }
+  .finance-grid > div { padding: 10px 4px; }
+  .finance-grid > div + div { border-left: 0; border-top: 1px solid var(--dashboard-line); }
+  .organization-count { white-space: normal; text-align: right; }
+
   .chart-wrap {
     padding-left: 39px;
     padding-right: 8px;
@@ -1089,12 +1631,6 @@ onMounted(async () => { if (!user.value) await verifyToken(); await loadDashboar
   }
 
   .chart-x-labels span:nth-child(even) { display: none; }
-
-  .queue-actions {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 11px;
-  }
 }
 
 @media (max-width: 380px) {

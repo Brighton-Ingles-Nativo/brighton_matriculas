@@ -16,11 +16,10 @@ export default defineEventHandler(async (event) => {
   const limit = Number.isInteger(requestedLimit) && requestedLimit > 0
     ? Math.min(requestedLimit, 50)
     : 15
-  const holderName = typeof query.holderName === 'string' ? query.holderName.trim() : ''
-  const holderDni = typeof query.holderDni === 'string' ? query.holderDni.trim() : ''
-  const advisorName = typeof query.advisorName === 'string' ? query.advisorName.trim() : ''
+  const search = typeof query.search === 'string' ? query.search.trim() : ''
   const status = typeof query.status === 'string' ? query.status.trim() : ''
   const signature = typeof query.signature === 'string' ? query.signature.trim() : ''
+  const cancellationStatus = typeof query.cancellationStatus === 'string' ? query.cancellationStatus.trim() : ''
   const missingExpedient = query.expedientStatus === 'sin_expediente'
   const includeAdvisorOrganization = ['admin', 'verificador'].includes(user.role?.name ?? '')
 
@@ -38,16 +37,16 @@ export default defineEventHandler(async (event) => {
       : null
 
   const clauses: Prisma.ContractWhereInput[] = [contractAccessWhere(user)]
-  if (holderName || holderDni) clauses.push({
-      customer: {
-        ...(holderName ? { name: { contains: holderName, mode: 'insensitive' as const } } : {}),
-        ...(holderDni ? { dni: { contains: holderDni, mode: 'insensitive' as const } } : {})
-      }
-  })
-  if (advisorName) clauses.push({ user: { name: { contains: advisorName, mode: 'insensitive' } } })
+  if (search) clauses.push({ OR: [
+    { contractNumber: { contains: search, mode: 'insensitive' as const } },
+    { customer: { name: { contains: search, mode: 'insensitive' as const } } },
+    { customer: { dni: { contains: search, mode: 'insensitive' as const } } },
+    ...(user.role?.name !== 'asesor' ? [{ user: { name: { contains: search, mode: 'insensitive' as const } } }] : [])
+  ] })
   if (missingExpedient) clauses.push({ expedient: { is: null } })
   if (statusFilter) clauses.push(statusFilter)
   if (signatureFilter) clauses.push(signatureFilter)
+  if (cancellationStatus === 'PENDIENTE') clauses.push({ cancellationRequest: { is: { status: 'PENDIENTE' } } })
   const where: Prisma.ContractWhereInput = { AND: clauses }
 
   const [total, contracts] = await Promise.all([

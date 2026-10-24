@@ -4,7 +4,7 @@ export const TERMS_HTML = `
     <strong>TÉRMINOS Y CONDICIONES DE LICENCIA DE USO<br />DE CURSO EDUCATIVO Y COMPRAVENTA DE LIBROS</strong>
 </h5>
 <br>
-<div class="text-xs">
+<div class="text-justify">
     <p class="text-justify pb-2">BRIGHTON INGLéS NATIVO S.A.C., identificada con R.U.C. N.º 20612939765, con domicilio en Calle Gonzales Prada 110, Urbanización Magisterial, Umacollo, distrito, provincia y departamento de Arequipa, a quien en adelante se denominará la licenciante o BRIGHTON; establece los presentes Términos y Condiciones de Licencia de Uso de Curso Educativo y Compraventa de Libros, los cuales regulan la relación contractual con el usuario identificado como el licenciatario o EL CLIENTE, conforme a lo siguiente:</p>
     <p class="text-justify pb-2">Cláusula Primera: Objeto</p>
     <p class="text-justify pb-2">Por el presente contrato, BRIGHTON otorga a EL CLIENTE una licencia de uso personal, limitada, intransferible y exclusiva sobre el Curso Integral de inglés, desarrollado y titularizado por BRIGHTON, que comprende el acceso a materiales educativos digitales, libros electrónicos, videos, plataforma virtual, recursos audiovisuales y clases en vivo (presenciales o virtuales), con una duración de catorce (14) meses aproximadamente.</p>
