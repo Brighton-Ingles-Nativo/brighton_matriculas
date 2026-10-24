@@ -2,7 +2,12 @@
 import { ArrowLeft, Save } from '@lucide/vue'
 import { ubigeoPeru } from '~/shared/ubigeo'
 import { listarDepartamentosInei, listarDistritosInei, listarProvinciasInei } from '~/shared/ubigeo-inei'
-import { calculateMatriculaAmounts, MATRICULA_INSTALLMENT_OPTIONS } from '~/utils/matricula-pricing'
+import {
+  calculateMatriculaAmounts,
+  getMatriculaProgramPrice,
+  isPlanBasedMatriculaProgram,
+  MATRICULA_FINANCED_INSTALLMENT_OPTIONS,
+} from '~/utils/matricula-pricing'
 
 definePageMeta({ middleware: 'auth', ssr: false })
 
@@ -18,6 +23,9 @@ const cancellationReason = ref('')
 const cancellationRequest = ref<any>(null)
 const cancellationLoading = ref(false)
 const cancellationError = ref('')
+const pricingReady = ref(false)
+const cashInitialManuallyEdited = ref(false)
+const initialPaymentManuallyEdited = ref(false)
 const canRequestCancellation = computed(() => [ 'supervisor', 'admin'].includes(user.value?.role?.name || ''))
 const canReviewCancellation = computed(() => ['supervisor', 'admin'].includes(user.value?.role?.name || ''))
 
@@ -30,8 +38,10 @@ const teamAssignmentMessage = ref('')
 const strategies = ref<{ id: string; code: string | null; name: string; description: string | null }[]>([])
 type Beneficiary = { name: string; birthDate: string; dni: string; email: string; phone: string }
 const emptyBeneficiary = (): Beneficiary => ({ name: '', birthDate: '', dni: '', email: '', phone: '' })
+const modalities = ['Presencial', 'Virtual', 'Híbrido'] as const
+const programs = ['Paquete Integral', 'Nivel Básico', 'Nivel Intermedio', 'Nivel Avanzado'] as const
+const plans = ['Light', 'Elite', 'Premium'] as const
 
-const installments = MATRICULA_INSTALLMENT_OPTIONS
 const form = reactive<{ students: Beneficiary[]; [key: string]: any }>({
   contractDepartment: 'Arequipa', 
   contractProvince: 'Arequipa', 
@@ -71,7 +81,10 @@ const holderDistricts = computed(() => listarDistritosInei(form.holderDepartment
 const contractNumber = ref(''); 
 const isCash = computed(() => form.paymentMode === 'contado'); 
 const isFinanced = computed(() => form.paymentMode === 'financiado'); 
-const showPlan = computed(() => form.program && form.program !== 'Kids')
+const isPlanBasedPricing = computed(() => isPlanBasedMatriculaProgram(form.program))
+const installments = MATRICULA_FINANCED_INSTALLMENT_OPTIONS
+const programValueIsReadonly = true
+const showPlan = computed(() => form.program !== '')
 
 const applyDniLookup = async (target: 'holder' | number, data: { nombres: string; apellidoPaterno: string; apellidoMaterno: string; fechaNacimiento?: string; ubigeoRuc?: string; departamento?: string; provincia?: string; distrito?: string }) => {
   const name = `${data.nombres} ${data.apellidoPaterno} ${data.apellidoMaterno}`.replace(/\s+/g, ' ').trim()
@@ -151,6 +164,25 @@ const loadContract = async () => {
       installmentCount: String(contract.installmentCount || 0), 
       otherPayment: contract.otherPayment || '' 
     }) 
+    cashInitialManuallyEdited.value = Boolean(contract.cashPayment)
+    initialPaymentManuallyEdited.value = false
+    if (!isLocked.value) {
+      if (!modalities.includes(form.modality as typeof modalities[number])) form.modality = ''
+      if (!programs.includes(form.program as typeof programs[number])) form.program = ''
+      if (!plans.includes(form.plan as typeof plans[number])) form.plan = ''
+    }
+    if (!isLocked.value && isPlanBasedPricing.value) {
+      if (isFinanced.value
+        && !MATRICULA_FINANCED_INSTALLMENT_OPTIONS.includes(Number(form.installmentCount) as 3 | 7 | 14)) {
+        form.installmentCount = '0'
+      }
+      calculatePrice()
+    } else if (!isLocked.value) {
+      form.plan = ''
+      form.programValue = ''
+    }
+    await nextTick()
+    pricingReady.value = true
   } catch (err: any) { 
     error.value = err?.data?.message || err?.data?.statusMessage || 'No pudimos cargar la matrícula.'
   } finally { 
@@ -190,18 +222,53 @@ const calculateAmounts = () => {
     initialPayment: form.initialPayment,
     installmentCount: form.installmentCount,
     otherPayment: form.otherPayment,
+    applyCashDiscountToInitial: isCash.value && !cashInitialManuallyEdited.value,
     treatUnknownPaymentModeAsFinanced: true,
   })
   if (amounts) Object.assign(form, amounts)
 }
 
-watch(() => [
-  form.paymentMode, 
-  form.programValue, 
-  form.initialPayment, 
-  form.installmentCount], 
-  calculateAmounts
-)
+const calculatePrice = () => {
+  const price = getMatriculaProgramPrice(
+    form.program,
+    form.plan,
+    form.modality,
+    form.paymentMode,
+    form.installmentCount,
+  )
+  if (price !== null) form.programValue = price
+  calculateAmounts()
+}
+
+const handleInitialPaymentInput = () => {
+  initialPaymentManuallyEdited.value = true
+  if (isCash.value) cashInitialManuallyEdited.value = true
+  calculateAmounts()
+}
+
+const handleDiscountInput = () => {
+  if (!initialPaymentManuallyEdited.value) cashInitialManuallyEdited.value = false
+  calculateAmounts()
+}
+
+watch(() => [form.modality, form.program, form.plan, form.paymentMode, form.installmentCount], () => {
+  if (!pricingReady.value) return
+  cashInitialManuallyEdited.value = false
+  initialPaymentManuallyEdited.value = false
+
+  if (isFinanced.value && isPlanBasedPricing.value
+    && !MATRICULA_FINANCED_INSTALLMENT_OPTIONS.includes(Number(form.installmentCount) as 3 | 7 | 14)) {
+    form.installmentCount = '0'
+  }
+
+  if (isPlanBasedPricing.value) calculatePrice()
+  else {
+    form.plan = ''
+    form.programValue = ''
+    calculateAmounts()
+  }
+})
+watch(() => [form.programValue, form.initialPayment, form.installmentCount, form.otherPayment], calculateAmounts)
 watch(() => form.holderDepartment, () => {
   if (!holderProvinces.value.includes(form.holderProvince)) {
     form.holderProvince = ''
@@ -215,6 +282,14 @@ watch(() => form.holderProvince, () => {
 const submit = async () => { 
   if (isLocked.value) {
     error.value = 'No se puede editar una matrícula firmada.'
+    return
+  }
+  if (!isPlanBasedPricing.value || !form.modality || !form.plan || !form.paymentMode || !form.programValue) {
+    error.value = 'Selecciona una modalidad, un programa con plan, un plan y un tipo de pago válidos.'
+    return
+  }
+  if (isFinanced.value && !MATRICULA_FINANCED_INSTALLMENT_OPTIONS.includes(Number(form.installmentCount) as 3 | 7 | 14)) {
+    error.value = 'Selecciona 3, 7 o 14 cuotas para usar la tarifa vigente.'
     return
   }
   saving.value = true; 
@@ -378,15 +453,30 @@ onMounted(async () => {
             </div>
             <div class="space-y-2">
               <UiLabel>Modalidad</UiLabel>
-              <UiInput v-model="form.modality" required />
+              <UiSelect v-model="form.modality" required>
+                <UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger>
+                <UiSelectContent>
+                  <UiSelectItem v-for="item in modalities" :key="item" :value="item">{{ item }}</UiSelectItem>
+                </UiSelectContent>
+              </UiSelect>
             </div>
             <div class="space-y-2">
               <UiLabel>Programa</UiLabel>
-              <UiInput v-model="form.program" required />
+              <UiSelect v-model="form.program" required>
+                <UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger>
+                <UiSelectContent>
+                  <UiSelectItem v-for="item in programs" :key="item" :value="item">{{ item }}</UiSelectItem>
+                </UiSelectContent>
+              </UiSelect>
             </div>
             <div class="space-y-2">
               <UiLabel>Plan</UiLabel>
-              <UiInput v-model="form.plan" :disabled="!showPlan" />
+              <UiSelect v-model="form.plan" :disabled="!showPlan" :required="showPlan">
+                <UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger>
+                <UiSelectContent>
+                  <UiSelectItem v-for="item in plans" :key="item" :value="item">{{ item }}</UiSelectItem>
+                </UiSelectContent>
+              </UiSelect>
             </div>
             <div class="space-y-2">
               <UiLabel>Inicio de pago</UiLabel>
@@ -440,22 +530,32 @@ onMounted(async () => {
           <UiCardContent class="grid gap-5 p-6 sm:grid-cols-2 lg:grid-cols-4">
             <div class="space-y-2">
               <UiLabel>Valor programa</UiLabel>
-              <UiInput v-model="form.programValue" type="number" min="0" step="0.01" required />
+              <UiInput v-model="form.programValue" type="number" min="0" step="0.01" required :readonly="programValueIsReadonly" />
             </div>
             <div class="space-y-2">
               <UiLabel>Cuota inicial</UiLabel>
-              <UiInput v-model="form.initialPayment" type="number" min="0" step="0.01" />
+              <UiInput v-model="form.initialPayment" type="number" min="0" step="0.01" @input="handleInitialPaymentInput" />
             </div>
             <div class="space-y-2">
               <UiLabel>Saldo</UiLabel>
               <UiInput v-model="form.balance" type="number" readonly />
             </div>
             <div v-if="isFinanced" class="space-y-2">
-              <UiLabel>Nro. cuotas</UiLabel><UiSelect v-model="form.installmentCount"><UiSelectTrigger class="w-full"><UiSelectValue /></UiSelectTrigger><UiSelectContent><UiSelectItem value="0">0</UiSelectItem><UiSelectItem v-for="item in installments" :key="item" :value="String(item)">{{ item }}</UiSelectItem></UiSelectContent></UiSelect>
+              <UiLabel>Nro. cuotas</UiLabel>
+              <UiSelect v-model="form.installmentCount">
+                <UiSelectTrigger class="w-full"><UiSelectValue placeholder="Seleccione..." /></UiSelectTrigger>
+                <UiSelectContent>
+                  <UiSelectItem v-for="item in installments" :key="item" :value="String(item)">{{ item }} cuotas</UiSelectItem>
+                </UiSelectContent>
+              </UiSelect>
             </div>
             <div v-if="isFinanced" class="space-y-2">
               <UiLabel>Valor cuota</UiLabel>
               <UiInput v-model="form.installmentValue" readonly />
+            </div>
+            <div v-if="isCash" class="space-y-2">
+              <UiLabel>Descuento</UiLabel>
+              <UiInput v-model="form.otherPayment" type="number" min="0" step="0.01" @input="handleDiscountInput" />
             </div>
             <div class="space-y-2 sm:col-span-2 lg:col-span-4">
               <UiLabel>Observaciones</UiLabel>

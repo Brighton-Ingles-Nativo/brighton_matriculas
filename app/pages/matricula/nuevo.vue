@@ -2,7 +2,12 @@
 import { ArrowLeft, Save } from '@lucide/vue'
 import { ubigeoPeru } from '~/shared/ubigeo'
 import { listarDepartamentosInei, listarDistritosInei, listarProvinciasInei } from '~/shared/ubigeo-inei'
-import { calculateMatriculaAmounts, getMatriculaProgramPrice, MATRICULA_INSTALLMENT_OPTIONS } from '~/utils/matricula-pricing'
+import {
+  calculateMatriculaAmounts,
+  getMatriculaProgramPrice,
+  isPlanBasedMatriculaProgram,
+  MATRICULA_FINANCED_INSTALLMENT_OPTIONS,
+} from '~/utils/matricula-pricing'
 
 definePageMeta({ middleware: 'auth', ssr: false })
 
@@ -12,7 +17,6 @@ const holderDepartments = listarDepartamentosInei()
 const teams = ref<{ id: string; name: string; site: { id: string; name: string } }[]>([])
 const teamAutoAssigned = ref(false)
 const teamAssignmentMessage = ref('')
-const installments = MATRICULA_INSTALLMENT_OPTIONS
 type Beneficiary = { name: string; birthDate: string; dni: string; email: string; phone: string }
 const emptyBeneficiary = (): Beneficiary => ({ name: '', birthDate: '', dni: '', email: '', phone: '' })
 const students = ref<Beneficiary[]>([emptyBeneficiary()])
@@ -52,12 +56,16 @@ const form = reactive({
 
 const saving = ref(false)
 const formError = ref('')
+const cashInitialManuallyEdited = ref(false)
 const fieldErrors = reactive<Record<string, string>>({})
 const { csrfHeaders } = useAuth()
 const today = new Intl.DateTimeFormat('es-PE', { dateStyle: 'long' }).format(new Date())
 const isCash = computed(() => form.paymentMode === 'contado')
 const isFinanced = computed(() => form.paymentMode === 'financiado')
-const showPlan = computed(() => form.program !== '' && form.program !== 'Kids')
+const isPlanBasedPricing = computed(() => isPlanBasedMatriculaProgram(form.program))
+const installments = MATRICULA_FINANCED_INSTALLMENT_OPTIONS
+const programValueIsReadonly = computed(() => isPlanBasedPricing.value)
+const showPlan = computed(() => form.program !== '')
 const holderProvinces = computed(() => listarProvinciasInei(form.holderDepartment))
 const holderDistricts = computed(() => listarDistritosInei(form.holderDepartment, form.holderProvince))
 
@@ -127,22 +135,35 @@ const calculateAmounts = () => {
     initialPayment: form.initialPayment,
     installmentCount: form.installmentCount,
     otherPayment: form.otherPayment,
-    applyCashDiscountToInitial: true,
+    applyCashDiscountToInitial: isCash.value && !cashInitialManuallyEdited.value,
   })
   if (amounts) Object.assign(form, amounts)
 }
 
+const handleInitialPaymentInput = () => {
+  if (isCash.value) cashInitialManuallyEdited.value = true
+  calculateAmounts()
+}
+
 const calculatePrice = () => {
-  if (!isCash.value) return
-  const price = getMatriculaProgramPrice(form.program, form.plan, form.modality)
+  const price = getMatriculaProgramPrice(
+    form.program,
+    form.plan,
+    form.modality,
+    form.paymentMode,
+    form.installmentCount,
+  )
   if (price !== null) form.programValue = price
   calculateAmounts()
 }
 
-watch(() => [form.paymentMode, form.program, form.plan, form.modality], () => {
-  if (form.program === 'Kids') form.plan = ''
-  if (isCash.value) calculatePrice()
-  else if (isFinanced.value) calculateAmounts()
+watch(() => [form.paymentMode, form.program, form.plan, form.modality, form.installmentCount], () => {
+  cashInitialManuallyEdited.value = false
+  if (isFinanced.value && isPlanBasedPricing.value
+    && !MATRICULA_FINANCED_INSTALLMENT_OPTIONS.includes(Number(form.installmentCount) as 3 | 7 | 14)) {
+    form.installmentCount = '0'
+  }
+  if (isCash.value || isFinanced.value) calculatePrice()
 })
 watch(() => [form.programValue, form.initialPayment, form.installmentCount, form.otherPayment], calculateAmounts)
 watch(() => form.holderDepartment, () => {
@@ -173,14 +194,21 @@ const validateForm = () => {
     ['modality', 'Modalidad', 'modality'],
     ['program', 'Programa', 'program'],
     ['paymentMode', 'Modalidad de pago', 'paymentMode'],
-    ['programValue', 'Valor del programa', 'programValue'],
   ]
-  if (form.program !== 'Kids') requiredFields.push(['plan', 'Plan', 'plan'])
+  requiredFields.push(['plan', 'Plan', 'plan'])
   if (isFinanced.value) requiredFields.push(['paymentStartDate', 'Fecha de inicio de pago', 'paymentStartDate'])
+  if (isFinanced.value && isPlanBasedPricing.value) {
+    requiredFields.push(['installmentCount', 'Número de cuotas', 'installmentCount'])
+  }
+  requiredFields.push(['programValue', 'Valor del programa', 'programValue'])
 
   for (const [field, label, id] of requiredFields) {
-    if (form[field as keyof typeof form] === null || form[field as keyof typeof form] === undefined || String(form[field as keyof typeof form]).trim() === '') {
-      fieldErrors[field] = `Completa ${label.toLowerCase()}.`
+    const value = form[field as keyof typeof form]
+    if (value === null || value === undefined || String(value).trim() === ''
+      || (field === 'installmentCount' && Number(value) === 0)) {
+      fieldErrors[field] = field === 'installmentCount'
+        ? 'Selecciona el número de cuotas.'
+        : `Completa ${label.toLowerCase()}.`
     }
   }
   const firstError = requiredFields.find(([field]) => fieldErrors[field])
@@ -453,7 +481,7 @@ const handleSubmit = async () => {
         <UiCard>
           <UiCardHeader>
             <UiCardTitle>Información del programa</UiCardTitle>
-            <UiCardDescription>Las opciones y el plan siguen la lógica del formulario anterior.</UiCardDescription>
+          <UiCardDescription>Selecciona la modalidad, el programa, el plan y el tipo de pago.</UiCardDescription>
           </UiCardHeader>
           <UiCardContent class="grid gap-5 p-6 sm:grid-cols-2 lg:grid-cols-4">
             <div class="space-y-2">
@@ -480,7 +508,6 @@ const handleSubmit = async () => {
                   <UiSelectItem value="Nivel Básico">Nivel Básico</UiSelectItem>
                   <UiSelectItem value="Nivel Intermedio">Nivel Intermedio</UiSelectItem>
                   <UiSelectItem value="Nivel Avanzado">Nivel Avanzado</UiSelectItem>
-                  <UiSelectItem value="Kids">Kids</UiSelectItem>
                 </UiSelectContent>
               </UiSelect>
             </div>
@@ -529,26 +556,25 @@ const handleSubmit = async () => {
             <div class="space-y-2 lg:col-span-2">
               <UiLabel for="programValue">Valor programa (S/) *</UiLabel>
               <UiInput id="programValue" v-model="form.programValue" :class="{ 'border-destructive': fieldErrors.programValue }" required type="number" min="0" step="0.01"
-                :readonly="isCash" @input="calculateAmounts" />
+                :readonly="programValueIsReadonly" @input="calculateAmounts" />
               <p v-if="fieldErrors.programValue" class="text-xs text-destructive">{{ fieldErrors.programValue }}</p>
             </div>
             <div class="space-y-2 lg:col-span-2">
               <UiLabel for="initialPayment">Cuota inicial (S/)</UiLabel>
               <UiInput id="initialPayment" v-model="form.initialPayment" type="number" min="0" step="0.01"
-                :readonly="isCash" @input="calculateAmounts" />
+                @input="handleInitialPaymentInput" />
             </div>
             <div class="space-y-2 lg:col-span-2">
               <UiLabel for="balance">Saldo (S/)</UiLabel>
               <UiInput id="balance" v-model="form.balance" type="number" min="0" step="0.01" readonly />
             </div>
             <div v-if="isFinanced" class="space-y-2 lg:col-span-2">
-              <UiLabel for="installmentCount">Nro. cuotas</UiLabel>
+              <UiLabel for="installmentCount">Nro. cuotas{{ isPlanBasedPricing ? ' *' : '' }}</UiLabel>
               <UiSelect v-model="form.installmentCount">
                 <UiSelectTrigger id="installmentCount" class="w-full">
                   <UiSelectValue />
                 </UiSelectTrigger>
                 <UiSelectContent>
-                  <UiSelectItem value="0">0 cuotas</UiSelectItem>
                   <UiSelectItem v-for="item in installments" :key="item" :value="String(item)">{{ item }} cuotas
                   </UiSelectItem>
                 </UiSelectContent>

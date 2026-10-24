@@ -1,51 +1,62 @@
-export const MATRICULA_INSTALLMENT_OPTIONS = Array.from({ length: 13 }, (_, index) => index + 2)
+export const MATRICULA_FINANCED_INSTALLMENT_OPTIONS = [3, 7, 14] as const
 
-const standardLevelPrices = {
-  Virtual: { 
-    Light: 2250, 
-    Elite: 2520, 
-    Premium: 2700 },
-  Presencial: { 
-    Light: 2500, 
-    Elite: 2800, 
-    Premium: 3000 },
-}
-
-const matriculaPrices = {
-  'Paquete Integral': {
-    Virtual: { 
-      Light: 5310, 
-      Elite: 6210, 
-      Premium: 7110 
+const planPrices = {
+  Virtual: {
+    Light: {
+      contado: 5600,
+      financiado: { 3: 6150, 7: 6720, 14: 7700 },
     },
-    Presencial: { 
-      Light: 5900, 
-      Elite: 6900, 
-      Premium: 7900 
+    Elite: {
+      contado: 6600,
+      financiado: { 3: 7200, 7: 7700, 14: 8680 },
+    },
+    Premium: {
+      contado: 7600,
+      financiado: { 3: 8100, 7: 8750, 14: 9660 },
     },
   },
-  'Nivel Básico': standardLevelPrices,
-  'Nivel Intermedio': standardLevelPrices,
-  'Nivel Avanzado': standardLevelPrices,
+  Presencial: {
+    Light: {
+      contado: 5900,
+      financiado: { 3: 6450, 7: 7000, 14: 7980 },
+    },
+    Elite: {
+      contado: 6900,
+      financiado: { 3: 7500, 7: 8050, 14: 8960 },
+    },
+    Premium: {
+      contado: 7900,
+      financiado: { 3: 8400, 7: 9030, 14: 9940 },
+    },
+  },
 } as const
 
-type MatriculaProgram = keyof typeof matriculaPrices | 'Kids'
-type MatriculaPlan = 'Light' | 'Elite' | 'Premium' | ''
+const planBasedMatriculaPrograms = new Set(['Paquete Integral', 'Nivel Básico', 'Nivel Intermedio', 'Nivel Avanzado'])
+
+export function isPlanBasedMatriculaProgram(program: string): boolean {
+  return planBasedMatriculaPrograms.has(program)
+}
 
 export function getMatriculaProgramPrice(
   program: string,
   plan: string,
   modality: string,
+  paymentMode: string,
+  installmentCount: string | number,
 ): string | null {
-  if (program === 'Kids') return '5900.00'
+  if (!isPlanBasedMatriculaProgram(program)) return null
+  if (paymentMode !== 'contado' && paymentMode !== 'financiado') return null
+  if (!['Virtual', 'Presencial', 'Híbrido'].includes(modality)) return ''
 
-  if (!Object.hasOwn(matriculaPrices, program)) return null
+  const modalityPrices = modality === 'Virtual' ? planPrices.Virtual : planPrices.Presencial
+  if (!Object.hasOwn(modalityPrices, plan)) return ''
 
-  const programPrices = matriculaPrices[program as Exclude<MatriculaProgram, 'Kids'>]
-  const modalityPrices = modality === 'Virtual' ? programPrices.Virtual : programPrices.Presencial
-  const price = modalityPrices[plan as MatriculaPlan]
+  const planPrice = modalityPrices[plan as keyof typeof modalityPrices]
+  if (paymentMode === 'contado') return planPrice.contado.toFixed(2)
 
-  return price === undefined ? '' : String(price)
+  const count = Number(installmentCount)
+  const financedPrice = planPrice.financiado[count as keyof typeof planPrice.financiado]
+  return financedPrice === undefined ? '' : financedPrice.toFixed(2)
 }
 
 type EnrollmentAmountsInput = {
