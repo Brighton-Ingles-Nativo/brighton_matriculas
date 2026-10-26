@@ -9,6 +9,13 @@ import { MATRICULA_PROGRAM } from '../../../app/utils/matricula-pricing'
 
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 const optionalText = (value: unknown) => text(value) || null
+const optionalAmountText = (value: unknown) => {
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'string' && typeof value !== 'number') return null
+  const raw = String(value).trim()
+  const amount = Number(raw)
+  return raw && Number.isFinite(amount) && amount >= 0 ? raw : null
+}
 const dateValue = (value: unknown) => { const raw = text(value); if (!raw) return null; const date = new Date(`${raw}T00:00:00.000Z`); return Number.isNaN(date.getTime()) ? null : date }
 const money = (value: unknown) => { const result = Number(value); return Number.isFinite(result) && result >= 0 ? result : 0 }
 
@@ -65,7 +72,7 @@ export default defineEventHandler(async (event) => {
       plan: optionalText(body.plan), cashPayment: paymentMode === 'contado',
       financedPayment: paymentMode === 'financiado', programValue: money(body.programValue), initialPayment: money(body.initialPayment),
       balance: money(body.balance), installmentCount: Math.max(0, Math.trunc(Number(body.installmentCount) || 0)),
-      installmentValue: money(body.installmentValue), otherPayment: optionalText(body.otherPayment),
+      installmentValue: money(body.installmentValue), otherPayment: optionalAmountText(body.otherPayment),
       ...(strategyIdProvided ? { strategyId: selectedStrategy?.id, strategyNameSnapshot: strategyName } : {}),
       students: { deleteMany: {} }
     }, select: { status: true, updatedAt: true } })
