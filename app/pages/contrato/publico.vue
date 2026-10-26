@@ -15,17 +15,23 @@ interface Contract {
   holderEmail: string; 
   holderPhone: string; 
   holderAddress: string
+  holderDepartment: string | null;
+  holderProvince: string | null;
+  holderDistrict: string | null;
   contractDepartment: string | null; 
   contractProvince: string | null; 
   contractDistrict: string | null
   program: string; 
   plan: string | null; 
   modality: string | null; 
+  cashPayment: boolean;
+  financedPayment: boolean;
   programValue: string; 
   initialPayment: string | null; 
   balance: string | null; 
   installmentCount: number | null; 
   installmentValue: string | null
+  otherPayment: string | null;
   strategy: string; 
   currentSituation: string; 
   housingType: string; 
@@ -149,6 +155,22 @@ onMounted(load)
               <dd>{{ contract.holderAddress }}</dd>
             </div>
             <div>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Estrategia</dt>
+              <dd>{{ contract.strategy }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Situación laboral</dt>
+              <dd>{{ contract.currentSituation }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Tipo de vivienda</dt>
+              <dd>{{ contract.housingType }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Residencia</dt>
+              <dd>{{ display(contract.holderDistrict) }}, {{ display(contract.holderProvince) }}, {{ display(contract.holderDepartment) }}</dd>
+            </div>
+            <div>
               <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Lugar de suscripción</dt>
               <dd>{{ display(contract.contractDistrict) }}, {{ display(contract.contractProvince) }}, {{
                 display(contract.contractDepartment) }}</dd>
@@ -158,7 +180,8 @@ onMounted(load)
             <h2 class="mb-3 text-lg font-semibold">Beneficiarios</h2>
             <div v-for="(student, index) in contract.students" :key="index" class="border-b py-2 last:border-0">
               <p>{{ index + 1 }}. {{ student.name }}</p>
-              <p class="text-sm text-muted-foreground">DNI: {{ display(student.dni) }} · {{ display(student.phone) }}
+              <p class="text-sm text-muted-foreground">Fecha de nacimiento: {{ displayBirthDate(student.birthDate) }} · DNI / CE: {{ display(student.dni) }}</p>
+              <p class="text-sm text-muted-foreground">Correo: {{ display(student.email) }} · Celular: {{ display(student.phone) }}
               </p>
             </div>
           </div>
@@ -179,8 +202,16 @@ onMounted(load)
               <dd>{{ display(contract.modality) }}</dd>
             </div>
             <div>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Modalidad de pago</dt>
+              <dd>{{ contract.cashPayment ? 'CONTADO' : contract.financedPayment ? 'FINANCIADO' : '—' }}</dd>
+            </div>
+            <div>
               <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Valor del programa</dt>
               <dd>{{ money(contract.programValue) }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Descuento / otro pago</dt>
+              <dd>{{ display(contract.otherPayment) }}</dd>
             </div>
             <div>
               <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Cuota inicial</dt>
@@ -203,7 +234,7 @@ onMounted(load)
               <dd>{{ display(contract.paymentStartDate) }}</dd>
             </div>
           </dl>
-          <p v-if="contract.notes" class="mt-4 whitespace-pre-line text-sm text-muted-foreground">{{ contract.notes }}
+          <p v-if="contract.notes" class="mt-4 whitespace-pre-line text-sm text-muted-foreground"><strong>Observaciones:</strong> {{ contract.notes }}
           </p>
         </section>
         <section class="rounded-lg border bg-card p-6 shadow-sm">
