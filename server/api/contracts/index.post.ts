@@ -30,7 +30,7 @@ type ContractPayload = {
   balance?: string
   installmentCount?: string
   installmentValue?: string
-  otherPayment?: string
+  otherPayment?: string | number
   notes?: string
   dataAuthorization?: boolean
   testimonials?: boolean
@@ -46,6 +46,13 @@ type ContractPayload = {
 
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 const optionalText = (value: unknown) => text(value) || null
+const optionalAmountText = (value: unknown) => {
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'string' && typeof value !== 'number') return null
+  const raw = String(value).trim()
+  const amount = Number(raw)
+  return raw && Number.isFinite(amount) && amount >= 0 ? raw : null
+}
 const money = (value: unknown, fallback = 0) => {
   const parsed = Number(value)
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
@@ -166,7 +173,7 @@ export default defineEventHandler(async (event) => {
           balance: money(body.balance),
           installmentCount: Math.max(0, Math.trunc(Number(body.installmentCount) || 0)),
           installmentValue: money(body.installmentValue),
-          otherPayment: optionalText(body.otherPayment),
+          otherPayment: optionalAmountText(body.otherPayment),
           status: 'REVISION',
           accessToken: token,
           tokenExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
