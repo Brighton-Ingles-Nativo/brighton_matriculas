@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Download, Printer } from '@lucide/vue'
 import ContractTermsContent from '@/components/contracts/ContractTermsContent.vue'
+import { displayBirthDate } from '~/utils/birth-date'
 
 definePageMeta({ middleware: 'auth', layout: false, ssr: false })
 
@@ -54,7 +55,6 @@ const loading = ref(true)
 const error = ref('')
 
 const display = (value: unknown) => value === null || value === undefined || value === '' ? '—' : String(value)
-const formatDate = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' }).format(new Date(value)) : '—'
 const formatDateTime = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : '—'
 const money = (value: string | null | undefined) => value ? new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(value)) : '—'
 const location = (district: string | null, province: string | null, department: string | null) => [district, province, department].filter(Boolean).join(', ') || '—'
@@ -112,7 +112,7 @@ onMounted(async () => {
         <div class="data-grid">
           <div class="span-4"><label>Nombre completo</label><strong>{{ contract.holderName }}</strong></div>
           <div class="span-2"><label>DNI / CE</label><strong>{{ contract.holderDni }}</strong></div>
-          <div class="span-2"><label>Fecha de nacimiento</label><strong>{{ formatDate(contract.holderBirthDate) }}</strong></div>
+          <div class="span-2"><label>Fecha de nacimiento</label><strong>{{ displayBirthDate(contract.holderBirthDate) }}</strong></div>
           <div class="span-2"><label>Estrategia</label><strong>{{ display(contract.strategy) }}</strong></div>
           <div class="span-3"><label>Situación laboral</label><strong>{{ display(contract.currentSituation) }}</strong></div>
           <div class="span-3"><label>Tipo de vivienda</label><strong>{{ display(contract.housingType) }}</strong></div>
@@ -127,7 +127,7 @@ onMounted(async () => {
         <h2>Beneficiario {{ index + 1 }}</h2>
         <div class="data-grid">
           <div class="span-4"><label>Nombre completo</label><strong>{{ student.name }}</strong></div>
-          <div class="span-2"><label>Fecha de nacimiento</label><strong>{{ formatDate(student.birthDate) }}</strong></div>
+          <div class="span-2"><label>Fecha de nacimiento</label><strong>{{ displayBirthDate(student.birthDate) }}</strong></div>
           <div class="span-2"><label>DNI / CE</label><strong>{{ display(student.dni) }}</strong></div>
           <div class="span-2"><label>Correo</label><strong>{{ display(student.email) }}</strong></div>
           <div class="span-2"><label>Celular</label><strong>{{ display(student.phone) }}</strong></div>

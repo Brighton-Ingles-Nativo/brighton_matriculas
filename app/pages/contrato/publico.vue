@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { displayBirthDate } from '~/utils/birth-date'
 import { CheckCircle2, LoaderCircle } from '@lucide/vue'
 import ContractTermsContent from '@/components/contracts/ContractTermsContent.vue'
 
@@ -133,7 +134,7 @@ onMounted(load)
             </div>
             <div>
               <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Fecha de nacimiento</dt>
-              <dd>{{ formatDate(contract.holderBirthDate) }}</dd>
+              <dd>{{ displayBirthDate(contract.holderBirthDate) }}</dd>
             </div>
             <div>
               <dt class="text-xs font-bold uppercase tracking-wide text-muted-foreground">Correo</dt>
