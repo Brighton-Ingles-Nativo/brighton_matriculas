@@ -5,6 +5,7 @@ import { getUserBySession } from '../../../utils/auth'
 import { assertContractAccess } from '../../../utils/contract-access'
 import { prisma } from '../../../utils/prisma'
 import { TERMS_HTML } from '../../../utils/terms'
+import { displayBirthDate } from '../../../../app/utils/birth-date'
 
 type PdfContract = {
   contractNumber: string
@@ -12,8 +13,8 @@ type PdfContract = {
   contractDepartment: string | null
   contractProvince: string | null
   contractDistrict: string | null
-  customer: { name: string; birthDate: Date; dni: string; email: string; address: string; department: string | null; province: string | null; district: string | null; phone: string }
-  students: Array<{ student: { name: string; birthDate: Date | null; dni: string | null; email: string | null; phone: string | null } }>
+  customer: { name: string; birthDate: string; dni: string; email: string; address: string; department: string | null; province: string | null; district: string | null; phone: string }
+  students: Array<{ student: { name: string; birthDate: string; dni: string | null; email: string | null; phone: string | null } }>
   otherData: { currentSituation: string; housingType: string; dataAuthorization: boolean; strategy: string; notes: string | null; testimonials: boolean; dataUsage: boolean | null } | null
   signedAccept: boolean
   signedAt: Date | null
@@ -45,7 +46,6 @@ const pdfText = (value: unknown) => String(value ?? '—')
   .replace(/[€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—™š›œžŸ]/g, character => winAnsiMap[character] || character)
   .replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
 
-const date = (value: Date | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' }).format(value) : '—'
 const dateTime = (value: Date | null | undefined) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'short', timeStyle: 'short' }).format(value) : '—'
 const money = (value: { toString(): string } | null) => value ? new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(value.toString())) : '—'
 const location = (district: string | null, province: string | null, department: string | null) => [district, province, department].filter(Boolean).join(', ') || '—'
@@ -150,7 +150,7 @@ function buildPdf(contract: PdfContract, signatureImage: Buffer): Buffer {
   section('Datos del titular')
   fields([
     ['Nombre completo', contract.customer.name], ['DNI / CE', contract.customer.dni],
-    ['Fecha de nacimiento', date(contract.customer.birthDate)], ['Estrategia', contract.otherData?.strategy],
+    ['Fecha de nacimiento', contract.customer.birthDate], ['Estrategia', contract.otherData?.strategy],
     ['Situación laboral', contract.otherData?.currentSituation], ['Tipo de vivienda', contract.otherData?.housingType],
     ['Correo', contract.customer.email], ['Celular', contract.customer.phone],
     ['Dirección', contract.customer.address], ['Residencia', location(contract.customer.district, contract.customer.province, contract.customer.department)],
@@ -158,7 +158,7 @@ function buildPdf(contract: PdfContract, signatureImage: Buffer): Buffer {
   for (const [index, { student }] of contract.students.entries()) {
     section(`Beneficiario ${index + 1}`)
     fields([
-      ['Nombre completo', student.name], ['Fecha de nacimiento', date(student.birthDate)],
+      ['Nombre completo', student.name], ['Fecha de nacimiento', student.birthDate],
       ['DNI / CE', student.dni], ['Correo', student.email], ['Celular', student.phone],
     ])
   }
@@ -254,7 +254,7 @@ export default defineEventHandler(async (event) => {
   if (!user) throw createError({ statusCode: 401, message: 'Sesión no válida' })
   const id = getRouterParam(event, 'id')
   if (!id || !/^[0-9a-f-]{36}$/i.test(id)) throw createError({ statusCode: 400, message: 'ID de contrato inválido' })
-  const contract = await prisma.contract.findUnique({
+  const contractRecord = await prisma.contract.findUnique({
     where: { id },
     include: {
       user: { select: { name: true } },
@@ -262,9 +262,44 @@ export default defineEventHandler(async (event) => {
       students: { include: { student: true }, orderBy: { id: 'asc' } },
       otherData: true,
     },
-  }) as PdfContract | null
-  if (!contract) throw createError({ statusCode: 404, message: 'Contrato no encontrado' })
+  })
+  if (!contractRecord) throw createError({ statusCode: 404, message: 'Contrato no encontrado' })
   await assertContractAccess(user, id)
+
+  const [customerBirthDateRows, studentBirthDateRows] = await Promise.all([
+    prisma.$queryRaw<Array<{ birthDate: string }>>`
+      SELECT TO_CHAR(customer.titular_fecha_nacimiento, 'YYYY-MM-DD') AS "birthDate"
+      FROM contratos AS enrollment
+      JOIN clientes AS customer ON customer.id = enrollment.cliente_id
+      WHERE enrollment.id = ${id}::uuid
+    `,
+    prisma.$queryRaw<Array<{ studentId: string; birthDate: string | null }>>`
+      SELECT enrollment_student.alumno_id AS "studentId",
+             TO_CHAR(student.fecha_nacimiento, 'YYYY-MM-DD') AS "birthDate"
+      FROM contratos_alumnos AS enrollment_student
+      JOIN alumnos AS student ON student.id = enrollment_student.alumno_id
+      WHERE enrollment_student.contrato_id = ${id}::uuid
+      ORDER BY enrollment_student.id ASC
+    `,
+  ])
+  const studentBirthDates = new Map<string, string>()
+  for (const { studentId, birthDate } of studentBirthDateRows) {
+    studentBirthDates.set(studentId, displayBirthDate(birthDate))
+  }
+  const contract: PdfContract = {
+    ...contractRecord,
+    customer: {
+      ...contractRecord.customer,
+      birthDate: displayBirthDate(customerBirthDateRows[0]?.birthDate),
+    },
+    students: contractRecord.students.map(({ student }) => ({
+      student: {
+        ...student,
+        birthDate: studentBirthDates.get(student.id) ?? '—',
+      },
+    })),
+  }
+
   const publicDir = process.env.NODE_ENV === 'production' ? '.output/public' : 'public'
   const signatureImage = await readFile(resolve(process.cwd(), publicDir, 'assets/images/firma_gerencia-brighton.jpg'))
   setHeader(event, 'Content-Type', 'application/pdf')
